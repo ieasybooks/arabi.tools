@@ -3,15 +3,21 @@
 
 mod job;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use topcoat::{
     Result,
     context::{Cx, app_context},
-    router::{StatusCode, content::Json, href, request::client_ip, route},
+    router::{
+        StatusCode,
+        content::{Form, Json},
+        href,
+        request::client_ip,
+        route,
+    },
 };
 
 use crate::i18n::Locale;
-use crate::queue::Rejection;
+use crate::queue::{Attempt, Rejection};
 use crate::tools::transcription::Transcription;
 
 /// What the upload page's script receives from the job routes.
@@ -26,10 +32,23 @@ enum Reply {
     Error(String),
 }
 
+/// A reservation request from the upload page.
+#[derive(Deserialize)]
+struct Reservation {
+    /// The browser tab's upload attempt, which lets it replace a reservation it lost.
+    attempt: Option<String>,
+}
+
 #[route(POST)]
-pub(super) async fn reserve(cx: &Cx) -> Result<(StatusCode, Json<Reply>)> {
+pub(super) async fn reserve(
+    cx: &Cx,
+    reservation: Option<Form<Reservation>>,
+) -> Result<(StatusCode, Json<Reply>)> {
     let transcription = app_context::<Transcription>(cx);
-    Ok(match transcription.queue.reserve(client_ip(cx)) {
+    let attempt = reservation
+        .and_then(|Form(reservation)| reservation.attempt)
+        .and_then(|attempt| Attempt::parse(&attempt));
+    Ok(match transcription.queue.reserve(client_ip(cx), attempt) {
         Ok(id) => {
             let upload = href!(job::upload, job::Id(id)).resolve(cx);
             (StatusCode::OK, Json(Reply::Upload(upload)))

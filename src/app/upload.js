@@ -14,6 +14,36 @@ if (form) {
   const extensions = form.dataset.extensions.split(",");
   const maxBytes = Number(form.dataset.maxBytes);
 
+  const randomId = () =>
+    Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+  // This tab's upload attempt, which lets it replace a reservation it lost. It is made when a
+  // file is sent and dropped once the upload arrives. A duplicated tab, or one this page opens,
+  // starts with a copy of the session storage, so the attempt is kept there only while the
+  // page is away, for a reload or the Back button to pick up.
+  let attempt = null;
+  const takeStoredAttempt = () => {
+    try {
+      attempt = sessionStorage.getItem("attempt") || attempt;
+      sessionStorage.removeItem("attempt");
+    } catch {
+      // Storage is blocked, so the attempt ends with the page.
+    }
+  };
+  takeStoredAttempt();
+  window.addEventListener("pagehide", () => {
+    try {
+      if (attempt) sessionStorage.setItem("attempt", attempt);
+    } catch {
+      // Storage is blocked.
+    }
+  });
+  // The Back button can restore this page from the browser's cache.
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) takeStoredAttempt();
+  });
+
   const problemWith = (file) => {
     if (!file) return form.dataset.missing;
     const dot = file.name.lastIndexOf(".");
@@ -71,7 +101,8 @@ if (form) {
     bar.value = 0;
     progress.hidden = false;
     try {
-      const reservation = await post(form.dataset.reserve, null);
+      attempt ??= randomId();
+      const reservation = await post(form.dataset.reserve, new URLSearchParams({ attempt }));
       const data = new FormData();
       if (form.elements.language) data.append("language", form.elements.language.value);
       data.append("file", file);
@@ -79,6 +110,7 @@ if (form) {
       const result = await post(reservation.upload, data, (done) => {
         bar.value = Math.round(done * 100);
       });
+      attempt = null; // Its reservation is used, so there is nothing left to replace.
       window.location.assign(result.next);
     } catch (message) {
       showError(typeof message === "string" ? message : form.dataset.failed);
