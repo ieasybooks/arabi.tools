@@ -9,7 +9,7 @@ use topcoat::{
     asset::{Asset, AssetBundle, RouterBuilderAssetExt, asset},
     context::Cx,
     cookie::RouterBuilderCookieExt,
-    font::{Font, fontsource::fontsource_font},
+    font::{Font, font},
     router::{
         BodyLimit, ForwardedHeader, Router, RouterBuilderDiscoverExt, Slot, StatusCode,
         TrustedProxies, error::NotFoundError, href, layout, module_router, not_found, page,
@@ -54,21 +54,54 @@ pub fn router(
 
 not_found!();
 
-/// Inter for Latin text and IBM Plex Sans Arabic for Arabic, served from the asset bundle.
-const LATIN_FONT: Font = fontsource_font!(
-    INTER,
-    weight: [400, 500, 600],
-    style: Normal,
-    subset: Latin,
-    host: Asset,
-);
-const ARABIC_FONT: Font = fontsource_font!(
-    IBM_PLEX_SANS_ARABIC,
-    weight: [400, 500, 600],
-    style: Normal,
-    subset: Arabic,
-    host: Asset,
-);
+/// Inter for Latin text and IBM Plex Sans Arabic for Arabic, bundled from `app/fonts/`. Each
+/// file holds only its own script, and the stylesheet lists Inter first, so the browser takes
+/// every character from the font that has it.
+const LATIN_FONT: Font = font! {
+    "Inter",
+    @font-face {
+        font-weight: 400;
+        font-display: swap;
+        src: url(asset!("./app/fonts/inter/inter-latin-400-normal.woff2")) format(
+            "woff2");
+    }
+    @font-face {
+        font-weight: 500;
+        font-display: swap;
+        src: url(asset!("./app/fonts/inter/inter-latin-500-normal.woff2")) format(
+            "woff2");
+    }
+    @font-face {
+        font-weight: 600;
+        font-display: swap;
+        src: url(asset!("./app/fonts/inter/inter-latin-600-normal.woff2")) format(
+            "woff2");
+    }
+};
+const ARABIC_FONT: Font = font! {
+    "IBM Plex Sans Arabic",
+    @font-face {
+        font-weight: 400;
+        font-display: swap;
+        src: url(asset!(
+                "./app/fonts/ibm-plex-sans-arabic/ibm-plex-sans-arabic-arabic-400-normal.woff2",
+            )) format("woff2");
+    }
+    @font-face {
+        font-weight: 500;
+        font-display: swap;
+        src: url(asset!(
+                "./app/fonts/ibm-plex-sans-arabic/ibm-plex-sans-arabic-arabic-500-normal.woff2",
+            )) format("woff2");
+    }
+    @font-face {
+        font-weight: 600;
+        font-display: swap;
+        src: url(asset!(
+                "./app/fonts/ibm-plex-sans-arabic/ibm-plex-sans-arabic-arabic-600-normal.woff2",
+            )) format("woff2");
+    }
+};
 
 #[layout]
 async fn layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
