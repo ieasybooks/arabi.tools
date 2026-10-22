@@ -6,7 +6,6 @@ const form = document.getElementById("upload-form");
 
 if (form) {
   const input = form.elements.file;
-  const language = form.elements.language;
   const fileName = form.querySelector(".file-name");
   const button = form.querySelector("button[type=submit]");
   const progress = form.querySelector(".upload-progress");
@@ -20,7 +19,6 @@ if (form) {
   const setInProgress = (value) => {
     inProgress = value;
     input.disabled = value;
-    if (language) language.disabled = value;
     button.disabled = value;
   };
 
@@ -112,7 +110,6 @@ if (form) {
     event.preventDefault();
     if (inProgress) return;
     const file = input.files[0];
-    const languageCode = language?.value;
     const problem = problemWith(file);
     if (problem) return showError(problem);
 
@@ -125,7 +122,6 @@ if (form) {
       attempt ??= randomId();
       const reservation = await post(form.dataset.reserve, new URLSearchParams({ attempt }));
       const data = new FormData();
-      if (languageCode) data.append("language", languageCode);
       data.append("file", file);
       const result = await post(reservation.upload, data, (done) => {
         bar.value = Math.round(done * 100);

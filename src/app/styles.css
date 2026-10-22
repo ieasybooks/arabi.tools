@@ -178,16 +178,22 @@ svg {
   line-height: 1;
 }
 
-/* The name is Latin in both languages. */
 .brand-name {
-  direction: ltr;
-  unicode-bidi: isolate;
-  font-family: "Gilroy", sans-serif;
+  font-family: var(--font-display);
   font-weight: 700;
 }
 
 .brand .brand-name {
   font-size: 1.1875rem;
+}
+
+/* Thmanyah has one weight, and Arabic reads larger at it. */
+:lang(ar) .brand-name {
+  font-weight: 500;
+}
+
+:lang(ar) .brand .brand-name {
+  font-size: 1.375rem;
 }
 
 .language-switch button {
@@ -311,15 +317,13 @@ svg {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
   gap: 0.5rem;
   margin-block-start: 0.25rem;
   color: var(--faint);
 }
 
-/* The formats read left to right, but sit at the start of the row. */
-:root[dir="ltr"] .tool-formats {
-  justify-content: flex-start;
+.tool-formats .forward {
+  display: flex;
 }
 
 .badge {
@@ -591,49 +595,6 @@ svg {
   font-weight: 500;
 }
 
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.field label {
-  font-weight: 500;
-}
-
-.select {
-  display: inline-grid;
-  grid-template-columns: 1fr 2.5rem;
-  align-items: center;
-  max-width: 20rem;
-}
-
-.select select {
-  grid-column: 1 / -1;
-  grid-row: 1;
-  min-height: 2.875rem;
-  padding-block: 0.5rem;
-  padding-inline: 1rem 2.5rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  appearance: none;
-}
-
-.select select:focus-visible {
-  outline-offset: 0;
-}
-
-.select svg {
-  grid-column: 2;
-  grid-row: 1;
-  justify-self: center;
-  color: var(--faint);
-  pointer-events: none;
-}
-
 .form-actions {
   display: flex;
   justify-content: center;
@@ -839,7 +800,8 @@ progress::-moz-progress-bar {
   gap: 0.75rem;
 }
 
-/* The transcript reads like a printed page. */
+/* The transcript shows the SRT cues, each like a line of a printed page under its number and
+   time range. */
 
 .transcript-title {
   padding-block-end: 0.75rem;
@@ -847,18 +809,42 @@ progress::-moz-progress-bar {
   text-align: center;
 }
 
-.transcript {
-  display: flex;
-  flex-direction: column;
+.cues {
   max-height: 36rem;
   overflow-y: auto;
-  padding: 1.5rem 2rem;
+  padding: 0.5rem 1.75rem;
   border-radius: 1rem;
   background: var(--paper);
   box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+
+.cue {
+  padding-block: 0.875rem;
+}
+
+.cue + .cue {
+  border-block-start: 1px solid var(--line-soft);
+}
+
+.cue-time {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cue-number {
+  display: inline-block;
+  min-width: 2rem;
+  color: var(--gold);
+  font-weight: 600;
+}
+
+.cue-text {
+  margin-block-start: 0.25rem;
   font-family: var(--font-transcript);
-  font-size: 1.375rem;
-  line-height: 2;
+  font-size: 1.3125rem;
+  line-height: 1.9;
 }
 
 .another {
@@ -910,6 +896,29 @@ progress::-moz-progress-bar {
   color: var(--text);
 }
 
+.social {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.social a {
+  display: inline-grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--green);
+}
+
+.social a:hover {
+  border-color: var(--gold);
+  color: var(--green-strong);
+}
+
 .footer-link {
   display: inline-flex;
   align-items: center;
@@ -958,13 +967,12 @@ progress::-moz-progress-bar {
     padding: 1.25rem;
   }
 
-  .transcript {
-    padding: 1.25rem;
-    font-size: 1.25rem;
+  .cues {
+    padding-inline: 1rem;
   }
 
-  .select {
-    max-width: none;
+  .cue-text {
+    font-size: 1.1875rem;
   }
 
   .form-actions .button,

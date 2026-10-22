@@ -54,17 +54,6 @@ impl Locale {
         }
     }
 
-    /// The name of the transcription language `code`, for the language picker.
-    pub fn language_name(self, code: &str) -> &str {
-        match (self, code) {
-            (Self::Ar, "ar") => "العربية",
-            (Self::Ar, "en") => "الإنجليزية",
-            (Self::En, "ar") => "Arabic",
-            (Self::En, "en") => "English",
-            _ => code,
-        }
-    }
-
     pub fn rejection(self, rejection: Rejection) -> &'static str {
         let text = &self.text().transcription;
         match rejection {
@@ -179,6 +168,8 @@ fn keep_minutes() -> u64 {
 pub struct Text {
     /// This language's name, written in it, for the language switch.
     pub name: &'static str,
+    /// The site's name in this language.
+    pub site_name: &'static str,
     /// The logo link's accessible name.
     pub home_label: &'static str,
     pub tagline: &'static str,
@@ -194,10 +185,23 @@ pub struct Text {
     pub initiative_before: &'static str,
     pub initiative_name: &'static str,
     pub initiative_after: &'static str,
+    pub social: SocialText,
     pub not_found_title: &'static str,
     pub not_found: &'static str,
     pub back_home: &'static str,
     pub transcription: TranscriptionText,
+}
+
+/// Names of the initiative's accounts, linked from the footer.
+pub struct SocialText {
+    /// The list's accessible name.
+    pub label: &'static str,
+    pub telegram: &'static str,
+    pub youtube: &'static str,
+    pub x: &'static str,
+    pub facebook: &'static str,
+    pub github: &'static str,
+    pub email: &'static str,
 }
 
 /// Fixed text of the transcription tool.
@@ -214,7 +218,6 @@ pub struct TranscriptionText {
     pub file_label: &'static str,
     pub choose_file: &'static str,
     pub no_file: &'static str,
-    pub language_label: &'static str,
     pub submit: &'static str,
     pub uploading: &'static str,
     pub upload_failed: &'static str,
@@ -242,6 +245,7 @@ pub struct TranscriptionText {
 
 static AR: Text = Text {
     name: "العربية",
+    site_name: "أدوات العربية",
     home_label: "الصفحة الرئيسية",
     tagline: "أدوات مجانية للغة العربية",
     lead: "أدوات بسيطة لمن يعمل بالعربية: ارفع ملفك واحصل على النتيجة، دون حساب أو تثبيت.",
@@ -254,7 +258,16 @@ static AR: Text = Text {
     source_code: "الشيفرة المصدرية",
     initiative_before: " مشروع من مبادرة ",
     initiative_name: "الكتب الميسّرة",
-    initiative_after: " غير الربحية.",
+    initiative_after: ".",
+    social: SocialText {
+        label: "روابط التواصل",
+        telegram: "قناتنا على تيليجرام",
+        youtube: "قناتنا على يوتيوب",
+        x: "حسابنا على إكس",
+        facebook: "صفحتنا على فيسبوك",
+        github: "حسابنا على GitHub للمبرمجين",
+        email: "بريدنا الإلكتروني",
+    },
     not_found_title: "الصفحة غير موجودة",
     not_found: "هذه الصفحة غير موجودة، أو انتهت صلاحيتها.",
     back_home: "العودة إلى الرئيسية",
@@ -271,7 +284,6 @@ static AR: Text = Text {
         file_label: "الملف الصوتي",
         choose_file: "اختر ملفًا صوتيًا، أو اسحبه وأفلته هنا",
         no_file: "لم تختر ملفًا بعد.",
-        language_label: "لغة التسجيل",
         submit: "ابدأ التفريغ",
         uploading: "جارٍ رفع الملف…",
         upload_failed: "تعذّر رفع الملف. تحقّق من اتصالك وحاول مرة أخرى.",
@@ -300,6 +312,7 @@ static AR: Text = Text {
 
 static EN: Text = Text {
     name: "English",
+    site_name: "arabi.tools",
     home_label: "Homepage",
     tagline: "Free tools for the Arabic language",
     lead: "Simple tools for working in Arabic. Upload a file and get the result, with no account and nothing to install.",
@@ -310,9 +323,18 @@ static EN: Text = Text {
     open_tool: "Open tool",
     more_tools: "More tools are on the way.",
     source_code: "Source code",
-    initiative_before: " is a project of the nonprofit ",
+    initiative_before: " is a project of the ",
     initiative_name: "iEasyBooks",
     initiative_after: " initiative.",
+    social: SocialText {
+        label: "Social links",
+        telegram: "Our Telegram channel",
+        youtube: "Our YouTube channel",
+        x: "Our X account",
+        facebook: "Our Facebook page",
+        github: "Our GitHub account for developers",
+        email: "Our email",
+    },
     not_found_title: "Page not found",
     not_found: "This page doesn't exist, or it has expired.",
     back_home: "Back to home",
@@ -329,7 +351,6 @@ static EN: Text = Text {
         file_label: "Audio file",
         choose_file: "Choose an audio file, or drop it here",
         no_file: "No file chosen yet.",
-        language_label: "Recording language",
         submit: "Start transcription",
         uploading: "Uploading…",
         upload_failed: "The upload failed. Check your connection and try again.",

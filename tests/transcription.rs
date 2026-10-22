@@ -88,6 +88,16 @@ async fn transcribe_fixture(
             assert!(body.lines().all(|line| line == ARABIC_TEXT), "{body}");
         } else {
             assert_subtitles(&body)?;
+            // The page lists the same cues, each with its number and time range.
+            for (number, cue) in (1..).zip(body.trim().split("\n\n")) {
+                let mut lines = cue.lines().skip(1);
+                let times = lines.next().context("missing cue times")?;
+                let shown = format!(
+                    "<span class=\"cue-number\">{number}</span>{}",
+                    times.replace(" --> ", " → ")
+                );
+                assert!(page.contains(&shown), "missing {shown:?}: {page}");
+            }
         }
     }
     let requests = app
@@ -355,7 +365,7 @@ async fn silence_finishes_with_localized_no_speech_and_empty_downloads() -> anyh
 }
 
 #[tokio::test]
-async fn recording_language_picker_uses_the_selected_tokens_and_transcript() -> anyhow::Result<()> {
+async fn uploads_in_each_language_use_its_tokens_and_transcript() -> anyhow::Result<()> {
     let app = TestApp::start_with(Setup {
         languages: &[
             ("ar", "dev-ar", ARABIC_TEXT),
@@ -364,34 +374,6 @@ async fn recording_language_picker_uses_the_selected_tokens_and_transcript() -> 
         ..Setup::default()
     })
     .await?;
-    for (locale, label, arabic, english) in [
-        ("ar", "لغة التسجيل", "العربية", "الإنجليزية"),
-        ("en", "Recording language", "Arabic", "English"),
-    ] {
-        let page = app
-            .client
-            .post(app.url("/language"))
-            .form(&[("lang", locale), ("back", "/transcribe")])
-            .send()
-            .await?
-            .error_for_status()?
-            .text()
-            .await?;
-        assert!(
-            page.contains(&format!("<label for=\"language\">{label}</label>")),
-            "{page}"
-        );
-        assert!(
-            page.contains("<select id=\"language\" name=\"language\">"),
-            "{page}"
-        );
-        for (code, name) in [("ar", arabic), ("en", english)] {
-            assert!(
-                page.contains(&format!("<option value=\"{code}\">{name}</option>")),
-                "{page}"
-            );
-        }
-    }
     for (language, expected, unexpected) in [
         ("en", ENGLISH_TEXT, ARABIC_TEXT),
         ("ar", ARABIC_TEXT, ENGLISH_TEXT),
