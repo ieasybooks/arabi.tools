@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/ieasybooks/arlang.tools/compare/v0.3.0...v0.4.0) (2026-10-22)
+
+
+### Features
+
+* redesign the site as arabi.tools ([154568e](https://github.com/ieasybooks/arlang.tools/commit/154568eba5cd71264d8b1341a552a66a19dd6884))
+* show the transcript as SRT cues and name the site in Arabic ([ebb44ac](https://github.com/ieasybooks/arlang.tools/commit/ebb44aca91a127d478d5f6add8e7f5f9b31c3e36))
+
 ## [0.3.0](https://github.com/ieasybooks/arlang.tools/compare/v0.2.0...v0.3.0) (2026-10-22)
 
 
