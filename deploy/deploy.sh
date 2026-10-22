@@ -12,7 +12,7 @@ if ! printf '%s\n' "$version" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|
     exit 1
 fi
 if [ ! -f .env ]; then
-    echo 'Create .env with WIT_TOKENS_AR and TUNNEL_TOKEN first.' >&2
+    echo 'Missing .env; the Deploy workflow writes it from the production secrets.' >&2
     exit 1
 fi
 

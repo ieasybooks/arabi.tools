@@ -2,36 +2,31 @@
 
 The production stack runs the app and Cloudflare Tunnel with Docker Compose. The app has no published host ports; Cloudflare forwards the chosen public hostname to `http://app:3000`. Releases publish `ghcr.io/ieasybooks/arlang.tools:<version>` and `:latest`, then deploy the versioned image over SSH. The image currently targets Linux x86-64 servers.
 
-## Set up the server once
+## Set up once
 
-1. Install [Docker Engine and the Compose plugin](https://docs.docker.com/engine/install/) on a Linux x86-64 server. Give the deploy user access to Docker and verify `docker version` and `docker compose version` as that user. Docker access gives the user control of the host.
-2. Choose an absolute deployment directory owned by that user, for example `/home/deploy/arlang.tools`. Create it with `install -d -m 700 /home/deploy/arlang.tools`. Keep at least 10 GB of disk space available for temporary uploads, plus room for images and audio processing. Uploads live in the container's disk-backed `/tmp`, not a RAM-backed tmpfs or a persistent host volume.
-3. In the Cloudflare dashboard, create a named Cloudflare Tunnel using the Docker connector. Copy its tunnel token. Add a public hostname of your choice with service type **HTTP** and URL **app:3000** (`http://app:3000`). Cloudflare manages the hostname's DNS and HTTPS; no domain is embedded in the repository.
-4. Create `/home/deploy/arlang.tools/.env` with mode `600`, owned by the deploy user. The app checks that each Wit token belongs to an app in the corresponding language at startup. Keep the real values on the server; the deploy workflow preserves this file.
+The server only needs Docker. Everything else lives in the repository's **production** environment on GitHub, and every deploy writes the server's `.env` from it, so changing a setting means editing a secret and running the Deploy workflow again.
 
-   ```dotenv
-   WIT_TOKENS_AR=first-arabic-wit-token,second-arabic-wit-token
-   TUNNEL_TOKEN=cloudflare-tunnel-token
-   RUST_LOG=info
-   ```
-
-   Add another `WIT_TOKENS_<LANG>` variable for each additional transcription language, for example `WIT_TOKENS_EN`. Compose fixes `HOST=0.0.0.0`, `PORT=3000`, `TMPDIR=/tmp`, and `CLIENT_IP_HEADER=CF-Connecting-IP`. The app trusts the nearest proxy for that visitor-IP header, so keep the app reachable only through the tunnel.
-
-5. Allow SSH on the server's chosen port and restrict it as appropriate for your GitHub Actions runners and administrators. No inbound HTTP or HTTPS ports are needed. Allow outbound DNS and HTTPS for image pulls and Wit, and Cloudflare Tunnel's outbound port `7844` over UDP (QUIC) or TCP (HTTP/2). See [Cloudflare's tunnel firewall requirements](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/tunnel-with-firewall/).
-6. On a trusted administrator machine, generate a new key specifically for deployments: `ssh-keygen -t ed25519 -f ./arlang-deploy -C arlang-deploy`. For unattended Actions access, leave the passphrase empty. Add the public key to the deploy user's `~/.ssh/authorized_keys` with `~/.ssh` mode `700` and `authorized_keys` mode `600`. The private key goes only into the GitHub environment secret below.
-7. Obtain the server's SSH host-key fingerprint from its console or administrator. Use `ssh-keyscan -p PORT HOST` to collect the known-hosts entry, verify its fingerprint against that trusted value, and save the verified entry as `DEPLOY_KNOWN_HOSTS`. For a nonstandard SSH port, retain the `[HOST]:PORT` form. The workflow requires strict host-key checking.
-8. Create the repository's **production** environment in GitHub and configure the following secrets and variable. Apply any desired deployment approval rules there. Moving servers only requires updating these settings and copying the server's `.env` securely.
+1. Install [Docker Engine and the Compose plugin](https://docs.docker.com/engine/install/) on a Linux x86-64 server, and keep at least 10 GB free for uploads in progress. Uploads live in the container's disk-backed `/tmp`. The deploy user needs Docker access, which gives it control of the host.
+2. In the Cloudflare dashboard, create a named Cloudflare Tunnel with the Docker connector and copy its token. Its wizard waits for a connector: run the `docker run …` command it shows on any machine until the tunnel shows as healthy, then stop it. Add a published application route from your hostname to service URL `http://app:3000`. Cloudflare manages the hostname's DNS and HTTPS; no domain is stored in the repository.
+3. Generate a key for deployments only, with no passphrase, and add its public half to the deploy user's `~/.ssh/authorized_keys`: `ssh-keygen -t ed25519 -N "" -C arlang-deploy -f ./arlang-deploy`. Collect the server's SSH host keys with `ssh-keyscan -p PORT HOST` and check them against a fingerprint you trust; keep the `[HOST]:PORT` form for a nonstandard port.
+4. In the repository's **production** environment, limit deployments to the `main` branch and `v*` tags, and add:
 
    | Kind | Name | Value |
    | --- | --- | --- |
    | Secret | `DEPLOY_HOST` | Server hostname or IP address |
-   | Secret | `DEPLOY_USER` | SSH user with Docker and directory access |
+   | Secret | `DEPLOY_USER` | SSH user with Docker access |
    | Secret | `DEPLOY_PORT` | SSH port, usually `22` |
-   | Secret | `DEPLOY_SSH_KEY` | Complete private key generated above |
-   | Secret | `DEPLOY_KNOWN_HOSTS` | Verified SSH known-hosts entry |
-   | Variable | `DEPLOY_DIRECTORY` | Absolute directory, such as `/home/deploy/arlang.tools`; use only letters, numbers, dots, dashes, underscores, and slashes |
+   | Secret | `DEPLOY_SSH_KEY` | The private key from step 3 |
+   | Secret | `DEPLOY_KNOWN_HOSTS` | The checked host-key lines from step 3 |
+   | Secret | `WIT_TOKENS_AR` | Comma-separated Wit tokens of Arabic apps |
+   | Secret | `TUNNEL_TOKEN` | The tunnel token from step 2 |
+   | Variable | `DEPLOY_DIRECTORY` | Absolute directory for the deployment, such as `/opt/arlang.tools`; letters, numbers, dots, dashes, underscores and slashes only |
 
-9. Enable **Settings → Actions → General → Allow GitHub Actions to create and approve pull requests** for release-please. The image workflow uses `GITHUB_TOKEN` to push to GHCR, and the deploy job logs in on the server using its own short-lived token with package read permission. No permanent registry token is needed for automated deployments. If the GHCR package already exists, grant this repository Actions access to it in the package settings.
+5. Enable **Settings → Actions → General → Allow GitHub Actions to create and approve pull requests** for release-please. The image job pushes to GHCR with the workflow's own token, and the server logs in with a short-lived token for each deploy, so no registry credentials are stored anywhere.
+
+No inbound HTTP or HTTPS ports are needed. The server needs outbound DNS and HTTPS for image pulls and Wit, and Cloudflare Tunnel's outbound port `7844` over UDP or TCP; see [Cloudflare's tunnel firewall requirements](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/tunnel-with-firewall/). The app reads the visitor's address from `CF-Connecting-IP`, which it trusts only because the tunnel is the only way in.
+
+To change a token, update its secret and run **Actions → Deploy → Run workflow** with the current release tag. A new transcription language needs its own `WIT_TOKENS_<LANG>` secret and a line in `deploy.yml` that writes it, alongside the code change adding the language. To move servers, change the `DEPLOY_*` secrets and deploy again; the workflow creates the directory.
 
 ## Cut a release
 
@@ -47,7 +42,7 @@ To retry a release, run **Actions → Deploy → Run workflow** with its `vX.Y.Z
 gh workflow run deploy.yml --ref main -f tag=v0.1.0
 ```
 
-Release builds and deployments are serialized. The server script stores the selected version in `.env.image`, leaving `.env` intact. It pulls before stopping the running app, so a failed pull leaves the current service and selection unchanged. If startup or health fails after replacement, the workflow fails; inspect the server and choose an older version explicitly. There is no automatic rollback.
+Release builds and deployments are serialized. The workflow rewrites `.env` from the environment's secrets, and the server script stores the selected version in `.env.image`. It pulls before stopping the running app, so a failed pull leaves the current service and selection unchanged. If startup or health fails after replacement, the workflow fails; inspect the server and choose an older version explicitly. There is no automatic rollback.
 
 For server diagnostics, run these commands from the deployment directory. Avoid printing the rendered Compose configuration because it includes credentials.
 

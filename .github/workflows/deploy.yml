@@ -107,11 +107,19 @@ jobs:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           DEPLOY_DIRECTORY: ${{ vars.DEPLOY_DIRECTORY }}
+          WIT_TOKENS_AR: ${{ secrets.WIT_TOKENS_AR }}
+          TUNNEL_TOKEN: ${{ secrets.TUNNEL_TOKEN }}
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_PORT DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS DEPLOY_DIRECTORY; do
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_PORT DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS DEPLOY_DIRECTORY WIT_TOKENS_AR TUNNEL_TOKEN; do
             if [ -z "${!name}" ]; then
               echo "::error::Set $name in the production environment."
+              exit 1
+            fi
+          done
+          for name in WIT_TOKENS_AR TUNNEL_TOKEN; do
+            if [[ ${!name} == *$'\n'* ]]; then
+              echo "::error::$name must be a single line."
               exit 1
             fi
           done
@@ -139,7 +147,12 @@ jobs:
           EOF
           # The directory is validated above before it reaches the remote shell.
           # shellcheck disable=SC2029
-          ssh arlang "mkdir -p '$DEPLOY_DIRECTORY/deploy'"
+          ssh arlang "install -d -m 700 '$DEPLOY_DIRECTORY' '$DEPLOY_DIRECTORY/deploy'"
+          # The server's .env is rebuilt from the environment's secrets on every deploy, sent on
+          # stdin so the values never appear in a command line or log.
+          # shellcheck disable=SC2029
+          printf 'WIT_TOKENS_AR=%s\nTUNNEL_TOKEN=%s\n' "$WIT_TOKENS_AR" "$TUNNEL_TOKEN" |
+            ssh arlang "umask 077 && cat > '$DEPLOY_DIRECTORY/.env.next' && mv '$DEPLOY_DIRECTORY/.env.next' '$DEPLOY_DIRECTORY/.env'"
           scp compose.yaml "arlang:$DEPLOY_DIRECTORY/compose.yaml"
           scp deploy/deploy.sh "arlang:$DEPLOY_DIRECTORY/deploy/deploy.sh"
           # Pass the short-lived registry token on stdin, never as an argument.
