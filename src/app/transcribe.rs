@@ -40,14 +40,20 @@ pub async fn page(cx: &Cx) -> Result<impl View> {
                     data-too-large=(locale.too_large())
                     data-failed=(text.upload_failed)
                 >
-                    <label for="audio">(text.file_label)</label>
-                    <input
-                        id="audio"
-                        type="file"
-                        name="file"
-                        accept=".mp3,.m4a,audio/mpeg,audio/mp4,audio/x-m4a"
-                        required=(true)
-                    >
+                    // The input covers the drop zone, invisible, so clicking and dropping a
+                    // file both reach it; the text around it follows the page's language.
+                    <div class="dropzone">
+                        <input
+                            id="audio"
+                            type="file"
+                            name="file"
+                            accept=".mp3,.m4a,audio/mpeg,audio/mp4,audio/x-m4a"
+                            aria-label=(text.file_label)
+                            required=(true)
+                        >
+                        <p class="dropzone-title">(text.choose_file)</p>
+                        <p class="file-name">(text.no_file)</p>
+                    </div>
                     <p class="hint">(locale.upload_limits())</p>
                     if languages.len() > 1 {
                         <label for="language">(text.language_label)</label>

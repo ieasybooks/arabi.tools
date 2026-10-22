@@ -6,6 +6,7 @@ const form = document.getElementById("upload-form");
 
 if (form) {
   const input = form.elements.file;
+  const fileName = form.querySelector(".file-name");
   const button = form.querySelector("button[type=submit]");
   const progress = form.querySelector(".upload-progress");
   const bar = progress.querySelector("progress");
@@ -53,6 +54,7 @@ if (form) {
     });
 
   input.addEventListener("change", () => {
+    if (input.files[0]) fileName.textContent = input.files[0].name;
     const problem = problemWith(input.files[0]);
     if (problem) showError(problem);
     else error.hidden = true;

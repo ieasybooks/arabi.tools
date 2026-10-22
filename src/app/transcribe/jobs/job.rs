@@ -100,7 +100,7 @@ async fn job_status(locale: Locale, id: JobId, status: Status<Transcript>) -> Re
                             (text.download_text)
                         </a>
                         <a
-                            class="button"
+                            class="button secondary"
                             href=(href!(download_srt, Id(id.clone())))
                             download=(true)
                         >
@@ -111,9 +111,11 @@ async fn job_status(locale: Locale, id: JobId, status: Status<Transcript>) -> Re
                     if transcript.text.trim().is_empty() {
                         <p>(text.no_speech)</p>
                     } else {
-                        <pre class="transcript" dir="auto">
-                            (transcript.text.as_str())
-                        </pre>
+                        <div class="transcript" dir="auto">
+                            for line in transcript.text.lines() {
+                                <p>(line)</p>
+                            }
+                        </div>
                     }
                 }
                 Status::Failed => {
