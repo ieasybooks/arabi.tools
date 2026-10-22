@@ -532,9 +532,9 @@ pub struct Watch<R: Send + Sync + 'static> {
 }
 
 impl<R: Send + Sync + 'static> Watch<R> {
-    /// The current status.
-    pub fn status(&self) -> Status<R> {
-        self.status.borrow().clone()
+    /// The current status. [`changed`](Self::changed) then waits for a newer one.
+    pub fn status(&mut self) -> Status<R> {
+        self.status.borrow_and_update().clone()
     }
 
     /// Waits for the status to change. Returns `false` once the job is forgotten.
@@ -551,5 +551,247 @@ impl<R: Send + Sync + 'static> Drop for Watch<R> {
                 job.idle_since = Instant::now();
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::Ipv4Addr;
+
+    use tokio::sync::oneshot;
+
+    use super::*;
+
+    type Outcome = anyhow::Result<&'static str>;
+
+    fn queue() -> Queue<&'static str> {
+        Queue::new(Limits {
+            jobs: 3,
+            running: 1,
+            upload_start: Duration::from_secs(60),
+            unwatched: Duration::from_secs(30),
+            keep_finished: Duration::from_secs(600),
+        })
+    }
+
+    /// A client address in the optional form `client_ip` gives.
+    #[allow(clippy::unnecessary_wraps)]
+    fn client(n: u8) -> Option<IpAddr> {
+        Some(IpAddr::V4(Ipv4Addr::new(10, 0, 0, n)))
+    }
+
+    /// Reserves and uploads a job for client `n`; its work ends with what the sender sends.
+    fn submit(queue: &Queue<&'static str>, n: u8) -> (JobId, oneshot::Sender<Outcome>) {
+        let id = queue.reserve(client(n)).unwrap();
+        let (finish, finished) = oneshot::channel::<Outcome>();
+        queue
+            .begin_upload(&id, client(n))
+            .unwrap()
+            .submit(|_progress| async move { finished.await.unwrap() })
+            .unwrap();
+        (id, finish)
+    }
+
+    fn status(queue: &Queue<&'static str>, id: &JobId) -> String {
+        queue.lock().jobs.get(id).map_or_else(
+            || "forgotten".to_owned(),
+            |job| format!("{:?}", *job.status.borrow()),
+        )
+    }
+
+    /// Lets spawned jobs run until they wait again.
+    async fn settle() {
+        for _ in 0..10 {
+            tokio::task::yield_now().await;
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn runs_jobs_one_at_a_time_in_upload_order() {
+        let queue = queue();
+        let (a, finish_a) = submit(&queue, 1);
+        let (b, _finish_b) = submit(&queue, 2);
+        let (c, _finish_c) = submit(&queue, 3);
+        settle().await;
+        assert_eq!(status(&queue, &a), "Running { percent: 0 }");
+        assert_eq!(status(&queue, &b), "Waiting { position: 1 }");
+        assert_eq!(status(&queue, &c), "Waiting { position: 2 }");
+
+        finish_a.send(Ok("a")).unwrap();
+        settle().await;
+        assert_eq!(status(&queue, &a), "Done(\"a\")");
+        assert_eq!(status(&queue, &b), "Running { percent: 0 }");
+        assert_eq!(status(&queue, &c), "Waiting { position: 1 }");
+        assert_eq!(queue.result(&a).as_deref(), Some(&"a"));
+        assert!(queue.result(&b).is_none());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn reports_progress_and_failures() {
+        let queue = queue();
+        let id = queue.reserve(client(1)).unwrap();
+        let (fail, failed) = oneshot::channel::<()>();
+        queue
+            .begin_upload(&id, client(1))
+            .unwrap()
+            .submit(|progress| async move {
+                progress.set(40);
+                failed.await.unwrap();
+                anyhow::bail!("Wit is down")
+            })
+            .unwrap();
+        settle().await;
+        assert_eq!(status(&queue, &id), "Running { percent: 40 }");
+        fail.send(()).unwrap();
+        settle().await;
+        assert_eq!(status(&queue, &id), "Failed");
+        assert_eq!(queue.availability(client(1)), Ok(()));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn limits_jobs_in_total_and_per_client() {
+        let queue = queue();
+        let first = queue.reserve(client(1)).unwrap();
+        assert_eq!(queue.reserve(client(1)), Err(Rejection::ActiveJob));
+        queue.reserve(client(2)).unwrap();
+        queue.reserve(client(3)).unwrap();
+        assert_eq!(queue.availability(client(4)), Err(Rejection::Full));
+        assert_eq!(queue.reserve(client(4)), Err(Rejection::Full));
+
+        // An upload that fails releases its reservation.
+        drop(queue.begin_upload(&first, client(1)).unwrap());
+        assert_eq!(status(&queue, &first), "forgotten");
+        queue.reserve(client(4)).unwrap();
+        assert_eq!(queue.availability(client(1)), Err(Rejection::Full));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn uploads_fill_only_their_own_reservation_once() {
+        let queue = queue();
+        let id = queue.reserve(client(1)).unwrap();
+        let other: JobId = "0123456789abcdef0123456789abcdef".parse().unwrap();
+        assert!(matches!(
+            queue.begin_upload(&id, client(2)),
+            Err(Rejection::NoReservation)
+        ));
+        assert!(matches!(
+            queue.begin_upload(&other, client(1)),
+            Err(Rejection::NoReservation)
+        ));
+        let upload = queue.begin_upload(&id, client(1)).unwrap();
+        assert!(matches!(
+            queue.begin_upload(&id, client(1)),
+            Err(Rejection::NoReservation)
+        ));
+        drop(upload);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn forgets_reservations_whose_upload_never_starts() {
+        let queue = queue();
+        let idle = queue.reserve(client(1)).unwrap();
+        let uploading = queue.reserve(client(2)).unwrap();
+        let _upload = queue.begin_upload(&uploading, client(2)).unwrap();
+        tokio::time::advance(Duration::from_secs(61)).await;
+        queue.sweep();
+        assert_eq!(status(&queue, &idle), "forgotten");
+        assert_eq!(status(&queue, &uploading), "Reserved");
+        assert_eq!(queue.availability(client(1)), Ok(()));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn cancels_jobs_nobody_watches() {
+        let queue = queue();
+        let (a, finish_a) = submit(&queue, 1);
+        let (b, _finish_b) = submit(&queue, 2);
+        let watch_b = queue.watch(&b).unwrap();
+        settle().await;
+
+        tokio::time::advance(Duration::from_secs(31)).await;
+        queue.sweep();
+        settle().await;
+        assert_eq!(status(&queue, &a), "Cancelled(Unwatched)");
+        assert!(finish_a.is_closed(), "the cancelled work is dropped");
+        assert_eq!(status(&queue, &b), "Running { percent: 0 }");
+
+        // Closing the last page starts the clock again.
+        drop(watch_b);
+        tokio::time::advance(Duration::from_secs(29)).await;
+        queue.sweep();
+        assert_eq!(status(&queue, &b), "Running { percent: 0 }");
+        tokio::time::advance(Duration::from_secs(1)).await;
+        queue.sweep();
+        assert_eq!(status(&queue, &b), "Cancelled(Unwatched)");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn forgets_finished_jobs_after_a_while() {
+        let queue = queue();
+        let (id, finish) = submit(&queue, 1);
+        finish.send(Ok("done")).unwrap();
+        settle().await;
+        tokio::time::advance(Duration::from_secs(599)).await;
+        queue.sweep();
+        assert!(queue.result(&id).is_some());
+        tokio::time::advance(Duration::from_secs(1)).await;
+        queue.sweep();
+        assert!(queue.result(&id).is_none());
+        assert!(queue.watch(&id).is_none());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn watchers_learn_about_changes_until_the_job_is_forgotten() {
+        let queue = queue();
+        let (id, finish) = submit(&queue, 1);
+        let mut watch = queue.watch(&id).unwrap();
+        settle().await;
+        assert!(matches!(watch.status(), Status::Running { .. }));
+        finish.send(Ok("done")).unwrap();
+        assert!(watch.changed().await);
+        assert!(matches!(watch.status(), Status::Done(_)));
+        tokio::time::advance(Duration::from_secs(600)).await;
+        queue.sweep();
+        assert!(!watch.changed().await);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn shutdown_cancels_waiting_jobs_and_lets_running_ones_finish() {
+        let queue = queue();
+        let (a, finish_a) = submit(&queue, 1);
+        let (b, _finish_b) = submit(&queue, 2);
+        let reserved = queue.reserve(client(3)).unwrap();
+        settle().await;
+
+        let shutdown = tokio::spawn({
+            let queue = queue.clone();
+            async move { queue.shutdown(Duration::from_secs(100)).await }
+        });
+        settle().await;
+        assert_eq!(status(&queue, &b), "Cancelled(Shutdown)");
+        assert_eq!(status(&queue, &reserved), "Cancelled(Shutdown)");
+        assert_eq!(queue.reserve(client(4)), Err(Rejection::Closed));
+        assert!(!shutdown.is_finished());
+
+        finish_a.send(Ok("a")).unwrap();
+        shutdown.await.unwrap();
+        assert_eq!(status(&queue, &a), "Done(\"a\")");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn shutdown_cancels_running_jobs_after_the_grace_period() {
+        let queue = queue();
+        let (id, _finish) = submit(&queue, 1);
+        settle().await;
+        queue.shutdown(Duration::from_secs(10)).await;
+        assert_eq!(status(&queue, &id), "Cancelled(Shutdown)");
+    }
+
+    #[test]
+    fn job_ids_are_32_lowercase_hex_digits() {
+        let id = JobId::random();
+        assert_eq!(id.to_string().parse::<JobId>().unwrap(), id);
+        assert!("0123456789ABCDEF0123456789abcdef".parse::<JobId>().is_err());
+        assert!("0123".parse::<JobId>().is_err());
+        assert!("../etc/passwd".parse::<JobId>().is_err());
     }
 }
