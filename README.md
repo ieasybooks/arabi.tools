@@ -8,6 +8,8 @@ Install the pinned Rust toolchain and development tools with `mise install`, set
 
 Without Wit tokens, run a local stand-in for Wit with `cargo run --example mock_wit`, then start the site with `WIT_API_URL=http://127.0.0.1:9876 WIT_TOKENS_AR=dev topcoat dev`.
 
+Inter and IBM Plex Sans Arabic are [vendored with their licenses](src/app/fonts/README.md), so asset bundling needs no font downloads.
+
 Run the checks listed in [AGENTS.md](AGENTS.md#verification) before sending changes; [tests/README.md](tests/README.md) describes the integration tests.
 
 ## Deploy
