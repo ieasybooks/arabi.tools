@@ -376,6 +376,19 @@ progress::-moz-progress-bar {
   font-variant-numeric: tabular-nums;
 }
 
+.job-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.percent {
+  color: var(--muted);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
 .status.success {
   color: var(--brand-strong);
 }

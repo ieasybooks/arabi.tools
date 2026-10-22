@@ -11,6 +11,7 @@ use topcoat::{
 };
 
 use crate::i18n::Locale;
+use crate::queue::Rejection;
 use crate::tools::transcription::{EXTENSIONS, MAX_UPLOAD_BYTES, Transcription};
 
 const UPLOAD_SCRIPT: Asset = asset!("./upload.js");
@@ -27,6 +28,11 @@ pub async fn page(cx: &Cx) -> Result<impl View> {
         match transcription.queue.availability(client_ip(cx)) {
             Err(rejection) => {
                 <p class="notice">(locale.rejection(rejection))</p>
+                if rejection == Rejection::ActiveJob {
+                    if let Some(job) = jobs::unfinished_job(cx) {
+                        <p><a href=(job)>(text.back_to_job)</a></p>
+                    }
+                }
             }
             Ok(()) => {
                 <form
@@ -67,10 +73,11 @@ pub async fn page(cx: &Cx) -> Result<impl View> {
                     }
                     <button type="submit">(text.submit)</button>
                     <div class="upload-progress" hidden=(true)>
-                        <progress max="100" value="0"></progress>
+                        <progress max="100" value="0" aria-label=(text.uploading)></progress>
                         <span>(text.uploading)</span>
                     </div>
                     <p class="error" role="alert" hidden=(true)></p>
+                    <a class="return-to-job" hidden=(true)>(text.back_to_job)</a>
                 </form>
                 <noscript><p class="notice">(text.needs_javascript)</p></noscript>
                 <script src=(UPLOAD_SCRIPT) defer=(true)></script>
