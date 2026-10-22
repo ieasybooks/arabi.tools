@@ -47,3 +47,64 @@ jobs:
       - run: topcoat fmt --check src
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
+
+  browser:
+    name: browser (Arabic and English)
+    # The quick check job covers pushes to main; the browser flow is checked before merging.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Use a disk-backed temporary directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/arlang"
+          echo "TMPDIR=$RUNNER_TEMP/arlang" >> "$GITHUB_ENV"
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2.9.3
+        with:
+          add-rust-environment-hash-key: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24.22.1'
+          cache: npm
+          cache-dependency-path: tests/browser/package-lock.json
+      - name: Install ffmpeg and ffprobe
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Cache Topcoat CLI
+        id: topcoat
+        uses: actions/cache@v6.1.0
+        with:
+          path: ~/.cargo/bin/topcoat
+          key: topcoat-${{ runner.os }}-${{ runner.arch }}-0.10.0-${{ hashFiles('rust-toolchain.toml') }}
+      - name: Install Topcoat CLI
+        if: steps.topcoat.outputs.cache-hit != 'true'
+        run: cargo install --locked --version 0.10.0 topcoat-cli
+      - name: Install browser test dependencies
+        run: npm ci --prefix tests/browser
+      - name: Cache Playwright Chromium
+        uses: actions/cache@v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tests/browser/package-lock.json') }}
+      - name: Install Chromium and its system dependencies
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_GC: '1'
+        run: node tests/browser/node_modules/@playwright/test/cli.js install --with-deps --only-shell chromium
+      - name: Build the app, mock, and assets
+        run: |
+          cargo build --locked --bin arlang-tools --example mock_wit
+          topcoat asset bundle --bin arlang-tools
+      - name: Test the live transcription flow
+        run: npm test --prefix tests/browser
+      - name: Save browser failure traces and screenshots
+        if: failure()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: browser-failures
+          path: tests/browser/test-results/
+          if-no-files-found: ignore
+          retention-days: 7

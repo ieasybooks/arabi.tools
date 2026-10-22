@@ -5,7 +5,7 @@ use std::time::Duration;
 use anyhow::{Context, bail};
 use arlang_tools::app;
 use arlang_tools::config::Config;
-use arlang_tools::queue::{JobId, Limits, Queue, Upload};
+use arlang_tools::queue::{JobId, Limits, Queue, Status, Upload};
 use arlang_tools::tools::transcription::{self, Transcript, Transcription};
 use reqwest::{Client, Response, StatusCode, multipart};
 use serde_json::{Value, json};
@@ -20,7 +20,10 @@ use topcoat::router::RouterService;
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+/// The default Arabic app of [`TestApp::start`].
+const ARABIC: (&str, &str, &str) = ("ar", "dev", ARABIC_TEXT);
 pub const ARABIC_TEXT: &str = "مرحبا بالعالم";
+pub const ENGLISH_TEXT: &str = "Hello world";
 pub const MP3: &[u8] = include_bytes!("../fixtures/speech.mp3");
 pub const M4A: &[u8] = include_bytes!("../fixtures/speech.m4a");
 pub const UNKNOWN_JOB: &str = "/transcribe/jobs/00000000000000000000000000000000";
@@ -66,49 +69,45 @@ pub struct TestApp {
 
 impl TestApp {
     pub async fn start() -> anyhow::Result<Self> {
-        Self::start_with_limits(transcription::limits()).await
+        Self::start_with(&[ARABIC], transcription::limits()).await
     }
 
     pub async fn start_with_limits(limits: Limits) -> anyhow::Result<Self> {
-        let wit = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path("/apps"))
-            .and(header("authorization", "Bearer dev"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!([
-                {"name": "Arabic test app", "lang": "ar", "is_app_for_token": true}
-            ])))
-            .expect(1)
-            .mount(&wit)
-            .await;
-        // Word timings start after tafrigh's 500 ms of leading silence.
-        Mock::given(method("POST"))
-            .and(path("/dictation"))
-            .and(header("authorization", "Bearer dev"))
-            .and(header("content-type", "audio/wav"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(json!({
-                        "type": "FINAL_TRANSCRIPTION",
-                        "is_final": true,
-                        "text": ARABIC_TEXT,
-                        "speech": {"confidence": 0.99, "tokens": [
-                            {"token": "مرحبا", "start": 500, "end": 600, "confidence": 0.99},
-                            {"token": "بالعالم", "start": 600, "end": 700, "confidence": 0.99}
-                        ]}
-                    }))
-                    .set_delay(Duration::from_millis(25)),
-            )
-            .mount(&wit)
-            .await;
+        Self::start_with(&[ARABIC], limits).await
+    }
 
-        let mut wit_config = WitConfig::new(["dev"]);
-        wit_config.api_url = wit.uri();
-        wit_config.requests_per_second = 1000.0;
-        wit_config.max_attempts = 2;
-        wit_config.retry_base_delay = Duration::from_millis(5);
-        wit_config.retry_max_delay = Duration::from_millis(20);
-        wit_config.request_timeout = Duration::from_secs(5);
-        let mut transcription = Transcription::new(vec![("ar".into(), wit_config)]).await?;
+    pub async fn start_with_languages(languages: &[(&str, &str, &str)]) -> anyhow::Result<Self> {
+        Self::start_with(languages, transcription::limits()).await
+    }
+
+    /// Starts the site against a Wit mock with one app per `(language, token, text)`, where
+    /// `text` is what every dictation request with that token returns.
+    async fn start_with(languages: &[(&str, &str, &str)], limits: Limits) -> anyhow::Result<Self> {
+        let wit = MockServer::start().await;
+        let mut configured = Vec::new();
+        for &(code, token, text) in languages {
+            let authorization = format!("Bearer {token}");
+            Mock::given(method("GET"))
+                .and(path("/apps"))
+                .and(header("authorization", authorization.as_str()))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+                    {"name": format!("{code} test app"), "lang": code, "is_app_for_token": true}
+                ])))
+                .expect(1)
+                .mount(&wit)
+                .await;
+            successful_dictation(token, text).mount(&wit).await;
+
+            let mut wit_config = WitConfig::new([token]);
+            wit_config.api_url = wit.uri();
+            wit_config.requests_per_second = 1000.0;
+            wit_config.max_attempts = 2;
+            wit_config.retry_base_delay = Duration::from_millis(5);
+            wit_config.retry_max_delay = Duration::from_millis(20);
+            wit_config.request_timeout = Duration::from_secs(5);
+            configured.push((code.to_owned(), wit_config));
+        }
+        let mut transcription = Transcription::new(configured).await?;
         transcription.queue = Queue::new(limits);
         let config = Config {
             host: "127.0.0.1".into(),
@@ -196,15 +195,21 @@ impl TestApp {
     }
 
     pub async fn wait_until_done(&self, job: &str) -> anyhow::Result<()> {
+        if matches!(self.wait_until_finished(job).await?, Status::Done(_)) {
+            Ok(())
+        } else {
+            bail!("job {job} failed or was cancelled")
+        }
+    }
+
+    pub async fn wait_until_finished(&self, job: &str) -> anyhow::Result<Status<Transcript>> {
         let id: JobId = job.rsplit('/').next().context("missing job id")?.parse()?;
         let mut watch = self.transcription.queue.watch(&id).context("missing job")?;
         tokio::time::timeout(Duration::from_secs(60), async {
             loop {
-                if watch.status().is_finished() {
-                    if self.transcription.queue.result(&id).is_some() {
-                        return Ok(());
-                    }
-                    bail!("job {id} failed or was cancelled");
+                let status = watch.status();
+                if status.is_finished() {
+                    return Ok(status);
                 }
                 if !watch.changed().await {
                     bail!("job {id} disappeared before finishing");
@@ -226,6 +231,38 @@ impl TestApp {
     }
 }
 
+pub fn successful_dictation(token: &str, text: &str) -> Mock {
+    // Word timings start after tafrigh's 500 ms of leading silence.
+    let tokens: Vec<_> = text
+        .split_whitespace()
+        .enumerate()
+        .map(|(index, word)| {
+            json!({
+                "token": word,
+                "start": 500 + index * 100,
+                "end": 600 + index * 100,
+                "confidence": 0.99
+            })
+        })
+        .collect();
+    Mock::given(method("POST"))
+        .and(path("/dictation"))
+        .and(header("authorization", format!("Bearer {token}").as_str()))
+        .and(header("content-type", "audio/wav"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({
+                    "type": "FINAL_TRANSCRIPTION",
+                    "is_final": true,
+                    "text": text,
+                    "speech": {"confidence": 0.99, "tokens": tokens}
+                }))
+                .set_delay(Duration::from_millis(25)),
+        )
+}
+
+// Optional fixed ports let a developer share a machine without leaving their allocation.
+// Run with RUST_TEST_THREADS=1 when using them; CI uses ephemeral ports by default.
 impl Drop for TestApp {
     fn drop(&mut self) {
         // Also stop the listener if an assertion fails before normal teardown.
