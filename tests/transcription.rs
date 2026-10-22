@@ -5,10 +5,15 @@ use std::time::Duration;
 
 use anyhow::Context;
 use arlang_tools::queue::{JobId, Limits, Status};
-use arlang_tools::tools::transcription::limits;
+use arlang_tools::tools::transcription::{MAX_UPLOAD_BYTES, limits};
 use reqwest::{StatusCode, multipart};
 use serde_json::json;
-use support::{ARABIC_TEXT, M4A, MP3, TestApp, UNKNOWN_JOB, assert_error, json_reply};
+use support::{
+    ARABIC_TEXT, ENGLISH_TEXT, M4A, MP3, TestApp, UNKNOWN_JOB, assert_error, json_reply,
+    successful_dictation,
+};
+use wiremock::matchers::{header, method, path};
+use wiremock::{Mock, ResponseTemplate};
 
 #[tokio::test]
 async fn mp3_upload_finishes_with_arabic_text_and_named_downloads() -> anyhow::Result<()> {
@@ -171,8 +176,14 @@ async fn refuses_non_audio_with_an_accepted_extension_and_allows_retry() -> anyh
 
 #[tokio::test]
 async fn refuses_a_recording_over_three_hours_and_allows_retry() -> anyhow::Result<()> {
+    let audio = silent_mp3(10801).await?;
+    assert!(audio.len() < 12_000_000, "keep the generated fixture small");
+    refused_upload("too-long.mp3", &audio, "مدة التسجيل أطول من 3 ساعات.").await
+}
+
+async fn silent_mp3(seconds: u32) -> anyhow::Result<Vec<u8>> {
     let directory = tempfile::tempdir()?;
-    let path = directory.path().join("too-long.mp3");
+    let path = directory.path().join("silence.mp3");
     let output = tokio::time::timeout(
         Duration::from_secs(60),
         tokio::process::Command::new("ffmpeg")
@@ -185,8 +196,10 @@ async fn refuses_a_recording_over_three_hours_and_allows_retry() -> anyhow::Resu
                 "lavfi",
                 "-i",
                 "anullsrc=r=8000:cl=mono",
+            ])
+            .args([
                 "-t",
-                "10801",
+                &seconds.to_string(),
                 "-c:a",
                 "libmp3lame",
                 "-b:a",
@@ -202,9 +215,280 @@ async fn refuses_a_recording_over_three_hours_and_allows_retry() -> anyhow::Resu
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let audio = tokio::fs::read(path).await?;
-    assert!(audio.len() < 12_000_000, "keep the generated fixture small");
-    refused_upload("too-long.mp3", &audio, "مدة التسجيل أطول من 3 ساعات.").await
+    Ok(tokio::fs::read(path).await?)
+}
+
+#[tokio::test]
+async fn upstream_failure_releases_capacity_for_a_successful_retry() -> anyhow::Result<()> {
+    let app = TestApp::start().await?;
+    app.wit.verify().await;
+    app.wit.reset().await;
+    Mock::given(method("POST"))
+        .and(path("/dictation"))
+        .and(header("authorization", "Bearer dev"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(2..)
+        .mount(&app.wit)
+        .await;
+    let upload = app.reserve().await?;
+    let reply = json_reply(
+        app.upload(&upload, "speech.mp3", MP3, None).await?,
+        StatusCode::OK,
+    )
+    .await?;
+    let job = reply["next"].as_str().context("missing job page URL")?;
+    assert!(matches!(
+        app.wait_until_finished(job).await?,
+        Status::Failed
+    ));
+    let page = app
+        .client
+        .get(app.url(job))
+        .send()
+        .await?
+        .error_for_status()?
+        .text()
+        .await?;
+    assert!(
+        page.contains("تعذّر إكمال التفريغ. حاول مرة أخرى لاحقًا."),
+        "{page}"
+    );
+    assert!(
+        !page.contains("/transcript.txt") && !page.contains("/transcript.srt"),
+        "{page}"
+    );
+    assert_missing_downloads(&app, job).await?;
+
+    // Restore successful dictation on this same app and client, without restarting the queue.
+    app.wit.verify().await;
+    app.wit.reset().await;
+    successful_dictation("dev", ARABIC_TEXT)
+        .mount(&app.wit)
+        .await;
+    let retry = app.reserve().await?;
+    assert_ne!(upload, retry);
+    let reply = json_reply(
+        app.upload(&retry, "retry.mp3", MP3, None).await?,
+        StatusCode::OK,
+    )
+    .await?;
+    let job = reply["next"]
+        .as_str()
+        .context("missing retry job page URL")?;
+    app.wait_until_done(job).await?;
+    let text = app
+        .client
+        .get(app.url(&format!("{job}/transcript.txt")))
+        .send()
+        .await?
+        .error_for_status()?
+        .text()
+        .await?;
+    assert!(text.contains(ARABIC_TEXT), "{text}");
+    app.stop().await
+}
+
+#[tokio::test]
+async fn silence_finishes_with_localized_no_speech_and_empty_downloads() -> anyhow::Result<()> {
+    let audio = silent_mp3(3).await?;
+    let app = TestApp::start().await?;
+    let upload = app.reserve().await?;
+    let reply = json_reply(
+        app.upload(&upload, "silence.mp3", &audio, None).await?,
+        StatusCode::OK,
+    )
+    .await?;
+    let job = reply["next"].as_str().context("missing job page URL")?;
+    app.wait_until_done(job).await?;
+    for (locale, direction, done, no_speech) in [
+        ("ar", "rtl", "اكتمل التفريغ.", "لم نجد كلامًا في هذا التسجيل."),
+        (
+            "en",
+            "ltr",
+            "Transcription complete.",
+            "We didn't find any speech in this recording.",
+        ),
+    ] {
+        let page = app
+            .client
+            .post(app.url("/language"))
+            .form(&[("lang", locale), ("back", job)])
+            .send()
+            .await?
+            .error_for_status()?
+            .text()
+            .await?;
+        assert!(
+            page.contains(&format!("<html lang=\"{locale}\" dir=\"{direction}\">")),
+            "{page}"
+        );
+        assert!(page.contains(done), "{page}");
+        assert!(page.contains(no_speech), "{page}");
+        for (extension, content_type) in [
+            ("txt", "text/plain; charset=utf-8"),
+            ("srt", "application/x-subrip; charset=utf-8"),
+        ] {
+            let download = format!("{job}/transcript.{extension}");
+            assert!(page.contains(&download), "{page}");
+            let response = app.client.get(app.url(&download)).send().await?;
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(response.headers()["content-type"], content_type);
+            assert_eq!(
+                response.headers()["content-disposition"],
+                format!(
+                    "attachment; filename=\"silence.{extension}\"; filename*=UTF-8''silence.{extension}"
+                )
+            );
+            assert!(
+                response.bytes().await?.is_empty(),
+                "silent recordings have empty transcripts"
+            );
+        }
+    }
+    assert!(
+        app.wit
+            .received_requests()
+            .await
+            .context("missing recorded requests")?
+            .iter()
+            .all(|request| request.url.path() == "/apps"),
+        "silence must not reach dictation"
+    );
+    app.stop().await
+}
+
+#[tokio::test]
+async fn recording_language_picker_uses_the_selected_tokens_and_transcript() -> anyhow::Result<()> {
+    let app = TestApp::start_with_languages(&[
+        ("ar", "dev-ar", ARABIC_TEXT),
+        ("en", "dev-en", ENGLISH_TEXT),
+    ])
+    .await?;
+    for (locale, label, arabic, english) in [
+        ("ar", "لغة التسجيل", "العربية", "الإنجليزية"),
+        ("en", "Recording language", "Arabic", "English"),
+    ] {
+        let page = app
+            .client
+            .post(app.url("/language"))
+            .form(&[("lang", locale), ("back", "/transcribe")])
+            .send()
+            .await?
+            .error_for_status()?
+            .text()
+            .await?;
+        assert!(
+            page.contains(&format!("<label for=\"language\">{label}</label>")),
+            "{page}"
+        );
+        assert!(
+            page.contains("<select id=\"language\" name=\"language\">"),
+            "{page}"
+        );
+        for (code, name) in [("ar", arabic), ("en", english)] {
+            assert!(
+                page.contains(&format!("<option value=\"{code}\">{name}</option>")),
+                "{page}"
+            );
+        }
+    }
+    for (language, expected, unexpected) in [
+        ("en", ENGLISH_TEXT, ARABIC_TEXT),
+        ("ar", ARABIC_TEXT, ENGLISH_TEXT),
+    ] {
+        let upload = app.reserve().await?;
+        let reply = json_reply(
+            app.upload(&upload, "speech.mp3", MP3, Some(language))
+                .await?,
+            StatusCode::OK,
+        )
+        .await?;
+        let job = reply["next"].as_str().context("missing job page URL")?;
+        app.wait_until_done(job).await?;
+        let page = app
+            .client
+            .get(app.url(job))
+            .send()
+            .await?
+            .error_for_status()?
+            .text()
+            .await?;
+        assert!(
+            page.contains(&format!("lang=\"{language}\" dir=\"auto\"")),
+            "{page}"
+        );
+        assert!(
+            page.contains(expected) && !page.contains(unexpected),
+            "{page}"
+        );
+        for extension in ["txt", "srt"] {
+            let body = app
+                .client
+                .get(app.url(&format!("{job}/transcript.{extension}")))
+                .send()
+                .await?
+                .error_for_status()?
+                .text()
+                .await?;
+            assert!(
+                body.contains(expected) && !body.contains(unexpected),
+                "{body}"
+            );
+        }
+    }
+    let requests = app
+        .wit
+        .received_requests()
+        .await
+        .context("missing recorded requests")?;
+    for token in ["Bearer dev-ar", "Bearer dev-en"] {
+        assert!(requests.iter().any(|request| {
+            request.url.path() == "/dictation"
+                && request
+                    .headers
+                    .get("authorization")
+                    .is_some_and(|value| value == token)
+        }));
+    }
+    app.stop().await
+}
+
+#[tokio::test]
+async fn refuses_uploads_only_past_the_size_limit() -> anyhow::Result<()> {
+    let app = TestApp::start().await?;
+    for (size, error) in [
+        // Exactly at the limit passes the size check and fails as unreadable audio instead.
+        (
+            MAX_UPLOAD_BYTES,
+            "لم نتمكن من قراءة الملف تسجيلًا صوتيًا بصيغة MP3 أو M4A.".to_owned(),
+        ),
+        (
+            MAX_UPLOAD_BYTES + 1,
+            format!(
+                "حجم الملف أكبر من {} ميغابايت.",
+                MAX_UPLOAD_BYTES / 1_000_000
+            ),
+        ),
+    ] {
+        let upload = app.reserve().await?;
+        let bytes = vec![0; usize::try_from(size)?];
+        assert_error(
+            app.upload(&upload, "boundary.mp3", &bytes, None).await?,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            &error,
+        )
+        .await?;
+    }
+    assert!(
+        app.wit
+            .received_requests()
+            .await
+            .context("missing recorded requests")?
+            .iter()
+            .all(|request| request.url.path() == "/apps"),
+        "refused files must not reach dictation"
+    );
+    app.stop().await
 }
 
 async fn refused_upload(name: &str, audio: &[u8], message: &str) -> anyhow::Result<()> {
