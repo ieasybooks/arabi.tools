@@ -1,0 +1,6 @@
+[settings]
+idiomatic_version_file_enable_tools = ["rust"]
+
+[tools]
+ffmpeg = "latest"
+"cargo:topcoat-cli" = "0.10.0"

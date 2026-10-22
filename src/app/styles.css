@@ -1,0 +1,11 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, "Segoe UI", Tahoma, sans-serif;
+  line-height: 1.6;
+}
+
+body {
+  margin: 0 auto;
+  max-width: 44rem;
+  padding: 1rem;
+}
