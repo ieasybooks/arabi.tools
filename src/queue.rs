@@ -290,6 +290,14 @@ impl<R: Send + Sync + 'static> Queue<R> {
         })
     }
 
+    /// Whether a job still exists and has not ended, without watching or refreshing it.
+    pub fn is_unfinished(&self, id: &JobId) -> bool {
+        self.lock()
+            .jobs
+            .get(id)
+            .is_some_and(|job| !job.status.borrow().is_finished())
+    }
+
     /// The result of job `id`, if it finished with one.
     pub fn result(&self, id: &JobId) -> Option<Arc<R>> {
         match &*self.lock().jobs.get(id)?.status.borrow() {

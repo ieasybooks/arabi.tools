@@ -8,6 +8,7 @@ use tokio::io::AsyncWriteExt;
 use topcoat::{
     Result,
     context::{Cx, app_context},
+    cookie::{Cookies, cookie, cookies, time},
     router::{
         Body, StatusCode,
         content::{
@@ -24,7 +25,7 @@ use topcoat::{
     view::{View, component, emit, live, view},
 };
 
-use super::{Reply, rejected};
+use super::{COOKIE, Reply, rejected};
 use crate::app::transcribe;
 use crate::i18n::Locale;
 use crate::queue::{CancelReason, JobId, Status};
@@ -39,7 +40,7 @@ module_param!(pub id: JobId, error = not_found);
 const HEARTBEAT: Duration = Duration::from_secs(30);
 
 #[page]
-async fn page(cx: &Cx) -> Result<impl View> {
+pub(super) async fn page(cx: &Cx) -> Result<impl View> {
     let id = path_param::<Id>(cx)?.clone();
     let locale = Locale::of(cx);
     let mut watch = app_context::<Transcription>(cx)
@@ -73,62 +74,75 @@ async fn page(cx: &Cx) -> Result<impl View> {
 async fn job_status(locale: Locale, id: JobId, status: Status<Transcript>) -> Result<impl View> {
     let text = &locale.text().transcription;
     let finished = status.is_finished();
+    let message = match &status {
+        Status::Reserved => text.reserved.to_owned(),
+        Status::Waiting { position } => locale.waiting(*position),
+        Status::Running { .. } => text.running.to_owned(),
+        Status::Done(_) => text.done.to_owned(),
+        Status::Failed => text.failed.to_owned(),
+        Status::Cancelled(CancelReason::Unwatched) => text.cancelled_unwatched.to_owned(),
+        Status::Cancelled(CancelReason::Shutdown) => text.cancelled_shutdown.to_owned(),
+    };
+    let class = match &status {
+        Status::Done(_) => "status success",
+        Status::Failed | Status::Cancelled(_) => "status error",
+        _ => "status",
+    };
+    let percent = match status {
+        Status::Running { percent } => Some(percent),
+        _ => None,
+    };
+    let keep_open = matches!(status, Status::Waiting { .. } | Status::Running { .. });
+    let transcript = match status {
+        Status::Done(transcript) => Some(transcript),
+        _ => None,
+    };
     Ok(view! {
         <div class="card job">
-            match status {
-                Status::Reserved => {
-                    <p class="status">(text.reserved)</p>
+            // Topcoat preserves this node across live updates. Only status text belongs
+            // here, so percentage updates do not repeat the polite announcement.
+            <div class="job-heading">
+                <p id="job-status" class=(class) role="status">(message)</p>
+                if let Some(percent) = percent {
+                    <p class="percent">(locale.percent(percent))</p>
                 }
-                Status::Waiting { position } => {
-                    <p class="status">(locale.waiting(position))</p>
-                    <p class="hint">(text.keep_open)</p>
-                }
-                Status::Running { percent } => {
-                    <p class="status">(locale.running(percent))</p>
-                    <progress max="100" value=(percent)></progress>
-                    <p class="hint">(text.keep_open)</p>
-                }
-                Status::Done(transcript) => {
-                    <p class="status success">(text.done)</p>
-                    <div class="downloads">
-                        <a
-                            class="button"
-                            href=(href!(download_text, Id(id.clone())))
-                            download=(true)
-                        >
-                            (text.download_text)
-                        </a>
-                        <a
-                            class="button secondary"
-                            href=(href!(download_srt, Id(id.clone())))
-                            download=(true)
-                        >
-                            (text.download_srt)
-                        </a>
+            </div>
+            if let Some(percent) = percent {
+                <progress max="100" value=(percent) aria-labelledby="job-status"></progress>
+            }
+            if keep_open {
+                <p class="hint">(text.keep_open)</p>
+            }
+            if let Some(transcript) = transcript {
+                <div class="downloads">
+                    <a
+                        class="button"
+                        href=(href!(download_text, Id(id.clone())))
+                        download=(true)
+                    >
+                        (text.download_text)
+                    </a>
+                    <a
+                        class="button secondary"
+                        href=(href!(download_srt, Id(id.clone())))
+                        download=(true)
+                    >
+                        (text.download_srt)
+                    </a>
+                </div>
+                <p class="hint">(locale.kept_for())</p>
+                if transcript.text.trim().is_empty() {
+                    <p>(text.no_speech)</p>
+                } else {
+                    <div
+                        class="transcript"
+                        lang=(transcript.language.as_str())
+                        dir="auto"
+                    >
+                        for line in transcript.text.lines() {
+                            <p>(line)</p>
+                        }
                     </div>
-                    <p class="hint">(locale.kept_for())</p>
-                    if transcript.text.trim().is_empty() {
-                        <p>(text.no_speech)</p>
-                    } else {
-                        <div
-                            class="transcript"
-                            lang=(transcript.language.as_str())
-                            dir="auto"
-                        >
-                            for line in transcript.text.lines() {
-                                <p>(line)</p>
-                            }
-                        </div>
-                    }
-                }
-                Status::Failed => {
-                    <p class="status error">(text.failed)</p>
-                }
-                Status::Cancelled(CancelReason::Unwatched) => {
-                    <p class="status error">(text.cancelled_unwatched)</p>
-                }
-                Status::Cancelled(CancelReason::Shutdown) => {
-                    <p class="status error">(text.cancelled_shutdown)</p>
                 }
             }
         </div>
@@ -146,12 +160,15 @@ pub(super) async fn upload(cx: &Cx, mut form: Multipart) -> Result<(StatusCode, 
     let id = path_param::<Id>(cx)?;
     let upload = match transcription.queue.begin_upload(id) {
         Ok(upload) => upload,
-        Err(rejection) => return Ok(rejected(locale, rejection)),
+        Err(rejection) => return Ok(rejected(cx, rejection)),
     };
     let refused = |problem| {
         (
             StatusCode::UNPROCESSABLE_ENTITY,
-            Json(Reply::Error(locale.audio_problem(problem))),
+            Json(Reply::Error {
+                error: locale.audio_problem(problem),
+                job: None,
+            }),
         )
     };
     let (audio, file_name, language) = match receive(&mut form).await? {
@@ -166,11 +183,22 @@ pub(super) async fn upload(cx: &Cx, mut form: Multipart) -> Result<(StatusCode, 
     };
     Ok(
         match language.submit(upload, audio, download_name(&file_name)) {
-            Ok(()) => (
-                StatusCode::OK,
-                Json(Reply::Next(href!(page, Id(id.clone())).resolve(cx))),
-            ),
-            Err(rejection) => rejected(locale, rejection),
+            Ok(()) => {
+                cookies(cx).add(cookie! {
+                    COOKIE = id.to_string();
+                    HttpOnly;
+                    SameSite = Lax;
+                    Path = "/";
+                    MaxAge = time::Duration::hours(4)
+                });
+                (
+                    StatusCode::OK,
+                    Json(Reply::Next {
+                        next: href!(page, Id(id.clone())).resolve(cx),
+                    }),
+                )
+            }
+            Err(rejection) => rejected(cx, rejection),
         },
     )
 }

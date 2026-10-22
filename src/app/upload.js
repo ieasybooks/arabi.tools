@@ -6,13 +6,23 @@ const form = document.getElementById("upload-form");
 
 if (form) {
   const input = form.elements.file;
+  const language = form.elements.language;
   const fileName = form.querySelector(".file-name");
   const button = form.querySelector("button[type=submit]");
   const progress = form.querySelector(".upload-progress");
   const bar = progress.querySelector("progress");
   const error = form.querySelector(".error");
+  const back = form.querySelector(".return-to-job");
   const extensions = form.dataset.extensions.split(",");
   const maxBytes = Number(form.dataset.maxBytes);
+  let inProgress = false;
+
+  const setInProgress = (value) => {
+    inProgress = value;
+    input.disabled = value;
+    if (language) language.disabled = value;
+    button.disabled = value;
+  };
 
   const randomId = () =>
     Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
@@ -39,10 +49,6 @@ if (form) {
       // Storage is blocked.
     }
   });
-  // The Back button can restore this page from the browser's cache.
-  window.addEventListener("pageshow", (event) => {
-    if (event.persisted) takeStoredAttempt();
-  });
 
   const problemWith = (file) => {
     if (!file) return form.dataset.missing;
@@ -53,15 +59,15 @@ if (form) {
     return null;
   };
 
-  const showError = (message) => {
+  const showError = (message, job) => {
     error.textContent = message;
     error.hidden = false;
     progress.hidden = true;
-    button.disabled = false;
-    input.disabled = false;
+    back.hidden = !job;
+    if (job) back.href = job;
   };
 
-  // Sends a POST and resolves with its JSON reply, or rejects with a message to show.
+  // Sends a POST and resolves with its JSON reply, or rejects with an error to show.
   const post = (url, body, onProgress) =>
     new Promise((resolve, reject) => {
       const request = new XMLHttpRequest();
@@ -74,46 +80,61 @@ if (form) {
       }
       request.onload = () => {
         const reply = request.response;
-        if (reply && reply.error) reject(reply.error);
-        else if (request.status === 413) reject(form.dataset.tooLarge);
+        if (reply && reply.error) reject(reply);
+        else if (request.status === 413) reject({ error: form.dataset.tooLarge });
         else if (request.status < 300 && reply) resolve(reply);
-        else reject(form.dataset.failed);
+        else reject({ error: form.dataset.failed });
       };
-      request.onerror = () => reject(form.dataset.failed);
+      request.onerror = () => reject({ error: form.dataset.failed });
       request.send(body);
     });
 
+  // The Back button can restore this page from the browser's cache, even mid-submission.
+  window.addEventListener("pageshow", (event) => {
+    if (!event.persisted) return;
+    takeStoredAttempt();
+    setInProgress(false);
+    progress.hidden = true;
+  });
+
   input.addEventListener("change", () => {
+    if (inProgress) return;
     if (input.files[0]) fileName.textContent = input.files[0].name;
     const problem = problemWith(input.files[0]);
     if (problem) showError(problem);
-    else error.hidden = true;
+    else {
+      error.hidden = true;
+      back.hidden = true;
+    }
   });
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (inProgress) return;
     const file = input.files[0];
+    const languageCode = language?.value;
     const problem = problemWith(file);
     if (problem) return showError(problem);
 
     error.hidden = true;
-    button.disabled = true;
+    back.hidden = true;
+    setInProgress(true);
     bar.value = 0;
     progress.hidden = false;
     try {
       attempt ??= randomId();
       const reservation = await post(form.dataset.reserve, new URLSearchParams({ attempt }));
       const data = new FormData();
-      if (form.elements.language) data.append("language", form.elements.language.value);
+      if (languageCode) data.append("language", languageCode);
       data.append("file", file);
-      input.disabled = true;
       const result = await post(reservation.upload, data, (done) => {
         bar.value = Math.round(done * 100);
       });
       attempt = null; // Its reservation is used, so there is nothing left to replace.
       window.location.assign(result.next);
-    } catch (message) {
-      showError(typeof message === "string" ? message : form.dataset.failed);
+    } catch (failure) {
+      setInProgress(false);
+      showError(failure?.error || form.dataset.failed, failure?.job);
     }
   });
 }

@@ -145,10 +145,10 @@ impl Locale {
         }
     }
 
-    pub fn running(self, percent: u8) -> String {
+    pub fn percent(self, percent: u8) -> String {
         match self {
-            Self::Ar => format!("جارٍ التفريغ… {percent}٪"),
-            Self::En => format!("Transcribing… {percent}%"),
+            Self::Ar => format!("{percent}٪"),
+            Self::En => format!("{percent}%"),
         }
     }
 
@@ -201,6 +201,7 @@ pub struct TranscriptionText {
     pub needs_javascript: &'static str,
     pub keep_open: &'static str,
     pub reserved: &'static str,
+    pub running: &'static str,
     pub done: &'static str,
     pub download_text: &'static str,
     pub download_srt: &'static str,
@@ -212,6 +213,7 @@ pub struct TranscriptionText {
     pub closed: &'static str,
     pub full: &'static str,
     pub active_job: &'static str,
+    pub back_to_job: &'static str,
     pub no_reservation: &'static str,
     pub missing: &'static str,
     pub wrong_type: &'static str,
@@ -238,6 +240,7 @@ static AR: Text = Text {
         needs_javascript: "تحتاج هذه الصفحة إلى JavaScript.",
         keep_open: "أبقِ هذه الصفحة مفتوحة حتى ينتهي التفريغ، فإغلاقها يلغيه.",
         reserved: "ننتظر وصول الملف…",
+        running: "جارٍ التفريغ…",
         done: "اكتمل التفريغ.",
         download_text: "تنزيل النص (TXT)",
         download_srt: "تنزيل الترجمة (SRT)",
@@ -248,7 +251,8 @@ static AR: Text = Text {
         another: "تفريغ ملف آخر",
         closed: "نحدّث الموقع الآن. حاول مرة أخرى بعد بضع دقائق.",
         full: "الطابور ممتلئ الآن. حاول مرة أخرى بعد بضع دقائق.",
-        active_job: "لديك تفريغ لم ينتهِ بعد. انتظر حتى ينتهي، ثم ارفع ملفًا آخر.",
+        active_job: "يوجد تفريغ قيد التنفيذ من اتصالك بالإنترنت. انتظر حتى ينتهي، ثم ارفع ملفًا آخر.",
+        back_to_job: "العودة إلى تفريغك",
         no_reservation: "انتهت مهلة هذا الرفع. حاول مرة أخرى.",
         missing: "اختر ملفًا صوتيًا أولًا.",
         wrong_type: "نقبل ملفات MP3 وM4A فقط.",
@@ -276,6 +280,7 @@ static EN: Text = Text {
         needs_javascript: "This page needs JavaScript.",
         keep_open: "Keep this page open until the transcription is done. Closing it cancels it.",
         reserved: "Waiting for your file…",
+        running: "Transcribing…",
         done: "Transcription complete.",
         download_text: "Download text (.txt)",
         download_srt: "Download subtitles (.srt)",
@@ -286,7 +291,8 @@ static EN: Text = Text {
         another: "Transcribe another file",
         closed: "We're updating the site. Please try again in a few minutes.",
         full: "The queue is full right now. Please try again in a few minutes.",
-        active_job: "You already have a transcription in progress. Wait for it to finish, then upload another file.",
+        active_job: "A transcription from your connection is already in progress. Wait for it to finish, then upload another file.",
+        back_to_job: "Back to your transcription",
         no_reservation: "This upload expired. Please try again.",
         missing: "Choose an audio file first.",
         wrong_type: "Only MP3 and M4A files are accepted.",

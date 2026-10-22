@@ -1,11 +1,12 @@
+use std::net::{IpAddr, Ipv4Addr};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 use anyhow::{Context, bail};
 use arlang_tools::app;
 use arlang_tools::config::Config;
-use arlang_tools::queue::JobId;
-use arlang_tools::tools::transcription::Transcription;
+use arlang_tools::queue::{JobId, Limits, Queue, Upload};
+use arlang_tools::tools::transcription::{self, Transcript, Transcription};
 use reqwest::{Client, Response, StatusCode, multipart};
 use serde_json::{Value, json};
 use tafrigh_wit::WitConfig;
@@ -65,6 +66,10 @@ pub struct TestApp {
 
 impl TestApp {
     pub async fn start() -> anyhow::Result<Self> {
+        Self::start_with_limits(transcription::limits()).await
+    }
+
+    pub async fn start_with_limits(limits: Limits) -> anyhow::Result<Self> {
         let wit = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/apps"))
@@ -103,7 +108,8 @@ impl TestApp {
         wit_config.retry_base_delay = Duration::from_millis(5);
         wit_config.retry_max_delay = Duration::from_millis(20);
         wit_config.request_timeout = Duration::from_secs(5);
-        let transcription = Transcription::new(vec![("ar".into(), wit_config)]).await?;
+        let mut transcription = Transcription::new(vec![("ar".into(), wit_config)]).await?;
+        transcription.queue = Queue::new(limits);
         let config = Config {
             host: "127.0.0.1".into(),
             port: 0,
@@ -139,6 +145,19 @@ impl TestApp {
     pub fn url(&self, path: &str) -> String {
         assert!(path.starts_with('/') && !path.starts_with("//"), "{path}");
         format!("{}{path}", self.base_url)
+    }
+
+    /// Starts an upload from the test client's address and holds it open, so that address
+    /// has a job in progress until the returned upload is dropped.
+    pub fn hold_upload(&self) -> (JobId, Upload<Transcript>) {
+        let queue = &self.transcription.queue;
+        let id = queue
+            .reserve(Some(IpAddr::V4(Ipv4Addr::LOCALHOST)), None)
+            .expect("the queue has room for a reservation");
+        let upload = queue
+            .begin_upload(&id)
+            .expect("a new reservation takes an upload");
+        (id, upload)
     }
 
     /// Reserves a job like a browser tab whose upload attempt is [`ATTEMPT`].

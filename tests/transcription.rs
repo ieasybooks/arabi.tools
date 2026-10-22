@@ -4,6 +4,8 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::time::Duration;
 
 use anyhow::Context;
+use arlang_tools::queue::{JobId, Limits, Status};
+use arlang_tools::tools::transcription::limits;
 use reqwest::{StatusCode, multipart};
 use serde_json::json;
 use support::{ARABIC_TEXT, M4A, MP3, TestApp, UNKNOWN_JOB, assert_error, json_reply};
@@ -58,6 +60,10 @@ async fn transcribe_fixture(
         .text()
         .await?;
     assert!(page.contains("اكتمل التفريغ."), "{page}");
+    assert!(
+        page.contains("class=\"status success\" role=\"status\""),
+        "{page}"
+    );
     assert!(page.contains(ARABIC_TEXT), "{page}");
     for (extension, content_type) in [
         ("txt", "text/plain; charset=utf-8"),
@@ -102,6 +108,20 @@ async fn transcribe_fixture(
         );
         assert!(chunk.body.len() > 44, "Wit should receive actual samples");
     }
+    // A completed job's cookie must not point to a different job on the same connection.
+    let another = app.reserve().await?;
+    let page = app
+        .client
+        .get(app.url("/transcribe"))
+        .send()
+        .await?
+        .text()
+        .await?;
+    assert!(!page.contains(&format!("href=\"{job}\"")), "{page}");
+    assert!(
+        !page.contains(another.strip_suffix("/audio").unwrap()),
+        "{page}"
+    );
     app.stop().await
 }
 
@@ -190,12 +210,9 @@ async fn refuses_a_recording_over_three_hours_and_allows_retry() -> anyhow::Resu
 async fn refused_upload(name: &str, audio: &[u8], message: &str) -> anyhow::Result<()> {
     let app = TestApp::start().await?;
     let upload = app.reserve().await?;
-    assert_error(
-        app.upload(&upload, name, audio, None).await?,
-        StatusCode::UNPROCESSABLE_ENTITY,
-        message,
-    )
-    .await?;
+    let response = app.upload(&upload, name, audio, None).await?;
+    assert!(!response.headers().contains_key("set-cookie"));
+    assert_error(response, StatusCode::UNPROCESSABLE_ENTITY, message).await?;
     let retry = app.reserve().await?;
     assert_ne!(
         upload, retry,
@@ -284,7 +301,7 @@ async fn another_attempt_from_the_same_ip_cannot_replace_a_reservation() -> anyh
         assert_error(
             response,
             StatusCode::TOO_MANY_REQUESTS,
-            "لديك تفريغ لم ينتهِ بعد. انتظر حتى ينتهي، ثم ارفع ملفًا آخر.",
+            "يوجد تفريغ قيد التنفيذ من اتصالك بالإنترنت. انتظر حتى ينتهي، ثم ارفع ملفًا آخر.",
         )
         .await?;
     }
@@ -299,11 +316,7 @@ async fn another_attempt_from_the_same_ip_cannot_replace_a_reservation() -> anyh
 #[tokio::test]
 async fn reserving_while_the_same_ip_uploads_returns_too_many_requests() -> anyhow::Result<()> {
     let app = TestApp::start().await?;
-    let queue = &app.transcription.queue;
-    let id = queue
-        .reserve(Some(IpAddr::V4(Ipv4Addr::LOCALHOST)), None)
-        .expect("an empty queue takes a reservation");
-    let upload = queue.begin_upload(&id).expect("the reservation is unused");
+    let (_id, upload) = app.hold_upload();
     // A separate connection with no cookies must still count as the same client IP.
     let client = reqwest::Client::builder()
         .no_proxy()
@@ -313,10 +326,257 @@ async fn reserving_while_the_same_ip_uploads_returns_too_many_requests() -> anyh
     assert_error(
         response,
         StatusCode::TOO_MANY_REQUESTS,
-        "لديك تفريغ لم ينتهِ بعد. انتظر حتى ينتهي، ثم ارفع ملفًا آخر.",
+        "يوجد تفريغ قيد التنفيذ من اتصالك بالإنترنت. انتظر حتى ينتهي، ثم ارفع ملفًا آخر.",
     )
     .await?;
     drop(upload);
+    app.stop().await
+}
+
+#[tokio::test]
+async fn accepted_upload_links_only_to_the_browsers_unfinished_job() -> anyhow::Result<()> {
+    let app = TestApp::start_with_limits(Limits {
+        running: 0,
+        unwatched: Duration::ZERO,
+        ..limits()
+    })
+    .await?;
+    let response = app.client.post(app.url("/transcribe/jobs")).send().await?;
+    assert!(!response.headers().contains_key("set-cookie"));
+    let reply = json_reply(response, StatusCode::OK).await?;
+    let upload = reply["upload"].as_str().context("missing upload URL")?;
+    let response = app.upload(upload, "speech.mp3", MP3, None).await?;
+    let cookie = response.headers()["set-cookie"].to_str()?.to_owned();
+    let reply = json_reply(response, StatusCode::OK).await?;
+    let job = reply["next"].as_str().context("missing job URL")?;
+    let id = job.rsplit('/').next().unwrap();
+    assert!(
+        cookie.starts_with(&format!("transcription_job={id};")),
+        "{cookie}"
+    );
+    for attribute in ["HttpOnly", "SameSite=Lax", "Path=/", "Max-Age=14400"] {
+        assert!(cookie.split("; ").any(|part| part == attribute), "{cookie}");
+    }
+
+    assert_private_return_links(&app, job).await?;
+    let page = app.client.get(app.url(job)).send().await?.text().await?;
+    assert!(
+        page.contains("id=\"job-status\" class=\"status\" role=\"status\""),
+        "{page}"
+    );
+    assert!(page.contains("Your file is in the queue"), "{page}");
+
+    // Once the cookie's job is cancelled, another visitor can reserve on this IP.
+    // The old cookie must not reveal that visitor's job.
+    app.transcription.queue.sweep();
+    let page = app.client.get(app.url(job)).send().await?.text().await?;
+    assert!(
+        page.contains("class=\"status error\" role=\"status\""),
+        "{page}"
+    );
+    assert!(page.contains("The transcription was cancelled"), "{page}");
+    let _busy = app.hold_upload();
+    let page = app
+        .client
+        .get(app.url("/transcribe"))
+        .send()
+        .await?
+        .text()
+        .await?;
+    assert!(
+        page.contains("A transcription from your connection"),
+        "{page}"
+    );
+    assert!(!page.contains("Back to your transcription"), "{page}");
+    let reply = json_reply(
+        app.client.post(app.url("/transcribe/jobs")).send().await?,
+        StatusCode::TOO_MANY_REQUESTS,
+    )
+    .await?;
+    assert!(reply.get("job").is_none(), "{reply}");
+    app.stop().await
+}
+
+async fn assert_private_return_links(app: &TestApp, job: &str) -> anyhow::Result<()> {
+    let visitor = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(30))
+        .build()?;
+    for (language, message, label) in [
+        (
+            "ar",
+            "يوجد تفريغ قيد التنفيذ من اتصالك بالإنترنت. انتظر حتى ينتهي، ثم ارفع ملفًا آخر.",
+            "العودة إلى تفريغك",
+        ),
+        (
+            "en",
+            "A transcription from your connection is already in progress. Wait for it to finish, then upload another file.",
+            "Back to your transcription",
+        ),
+    ] {
+        let page = app
+            .client
+            .post(app.url("/language"))
+            .form(&[("lang", language), ("back", "/transcribe")])
+            .send()
+            .await?
+            .error_for_status()?
+            .text()
+            .await?;
+        assert!(page.contains(message), "{page}");
+        assert!(page.contains(&format!("href=\"{job}\"")), "{page}");
+        assert!(page.contains(label), "{page}");
+        let reply = json_reply(
+            app.client.post(app.url("/transcribe/jobs")).send().await?,
+            StatusCode::TOO_MANY_REQUESTS,
+        )
+        .await?;
+        assert_eq!(reply, json!({"error": message, "job": job}));
+
+        // Sharing the IP gives no access to the cookie owner's link. Bad and stale
+        // cookie values must not fall back to a job found by IP either.
+        for job_cookie in [
+            "",
+            "; transcription_job=invalid",
+            "; transcription_job=00000000000000000000000000000000",
+        ] {
+            let cookie = format!("lang={language}{job_cookie}");
+            let page = visitor
+                .get(app.url("/transcribe"))
+                .header("cookie", &cookie)
+                .send()
+                .await?
+                .text()
+                .await?;
+            assert!(page.contains(message), "{page}");
+            assert!(!page.contains(job), "{page}");
+            assert!(!page.contains(label), "{page}");
+            assert_error(
+                visitor
+                    .post(app.url("/transcribe/jobs"))
+                    .header("cookie", &cookie)
+                    .send()
+                    .await?,
+                StatusCode::TOO_MANY_REQUESTS,
+                message,
+            )
+            .await?;
+        }
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn return_link_follows_the_cookie_across_connections_only_when_refused() -> anyhow::Result<()>
+{
+    let app = TestApp::start().await?;
+    let id = app
+        .transcription
+        .queue
+        .reserve(Some(IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1))), None)
+        .expect("queue should accept another connection");
+    let cookie = format!("transcription_job={id}");
+    let page = app
+        .client
+        .get(app.url("/transcribe"))
+        .header("cookie", &cookie)
+        .send()
+        .await?
+        .text()
+        .await?;
+    assert!(page.contains("id=\"upload-form\""), "{page}");
+    assert!(!page.contains(&id.to_string()), "{page}");
+
+    let (other, _busy) = app.hold_upload();
+    let page = app
+        .client
+        .get(app.url("/transcribe"))
+        .header("cookie", &cookie)
+        .send()
+        .await?
+        .text()
+        .await?;
+    assert!(
+        page.contains(&format!("href=\"/transcribe/jobs/{id}\"")),
+        "{page}"
+    );
+    assert!(!page.contains(&other.to_string()), "{page}");
+    app.stop().await
+}
+
+#[tokio::test]
+async fn running_status_separates_progress_and_failed_jobs_have_no_return_link()
+-> anyhow::Result<()> {
+    let app = TestApp::start().await?;
+    let upload = app.reserve().await?;
+    let job = upload.strip_suffix("/audio").unwrap();
+    let id: JobId = job.rsplit('/').next().unwrap().parse()?;
+    let (finish, finished) = tokio::sync::oneshot::channel::<()>();
+    app.transcription
+        .queue
+        .begin_upload(&id)
+        .expect("reservation should accept an upload")
+        .submit(move |progress| async move {
+            progress.set(37);
+            let _ = finished.await;
+            anyhow::bail!("test failure");
+        })
+        .expect("queue should accept the job");
+    let mut watch = app.transcription.queue.watch(&id).context("missing job")?;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !matches!(watch.status(), Status::Running { percent: 37 }) {
+            assert!(watch.changed().await);
+        }
+    })
+    .await?;
+    for (language, message, percent) in [
+        ("ar", "جارٍ التفريغ…", "37٪"),
+        ("en", "Transcribing…", "37%"),
+    ] {
+        let page = app
+            .client
+            .get(app.url(job))
+            .header("cookie", format!("lang={language}"))
+            .send()
+            .await?
+            .text()
+            .await?;
+        assert!(
+            page.contains(&format!(
+                "<p id=\"job-status\" class=\"status\" role=\"status\">{message}</p>"
+            )),
+            "{page}"
+        );
+        assert!(
+            page.contains(&format!("<p class=\"percent\">{percent}</p>")),
+            "{page}"
+        );
+        assert!(page.contains("aria-labelledby=\"job-status\""), "{page}");
+    }
+    finish.send(()).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !watch.status().is_finished() {
+            assert!(watch.changed().await);
+        }
+    })
+    .await?;
+    let page = app.client.get(app.url(job)).send().await?.text().await?;
+    assert!(
+        page.contains("class=\"status error\" role=\"status\""),
+        "{page}"
+    );
+    assert!(page.contains("تعذّر إكمال التفريغ"), "{page}");
+    let _busy = app.hold_upload();
+    let page = app
+        .client
+        .get(app.url("/transcribe"))
+        .header("cookie", format!("transcription_job={id}"))
+        .send()
+        .await?
+        .text()
+        .await?;
+    assert!(!page.contains("العودة إلى تفريغك"), "{page}");
     app.stop().await
 }
 
@@ -365,6 +625,9 @@ async fn home_and_upload_pages_default_to_arabic() -> anyhow::Result<()> {
         let body = response.text().await?;
         assert!(body.contains("<html lang=\"ar\" dir=\"rtl\">"), "{body}");
         assert!(body.contains(expected), "{body}");
+        if path == "/transcribe" {
+            assert!(body.contains("aria-label=\"جارٍ رفع الملف…\""), "{body}");
+        }
     }
     app.stop().await
 }
@@ -400,6 +663,9 @@ async fn switching_language_sets_a_cookie_and_renders_pages_in_english() -> anyh
             .await?;
         assert!(body.contains("<html lang=\"en\" dir=\"ltr\">"), "{body}");
         assert!(body.contains(expected), "{body}");
+        if path == "/transcribe" {
+            assert!(body.contains("aria-label=\"Uploading…\""), "{body}");
+        }
     }
     app.stop().await
 }

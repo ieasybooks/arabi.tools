@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use topcoat::{
     Result,
     context::{Cx, app_context},
+    cookie::{Cookies, cookies},
     router::{
         StatusCode,
         content::{Form, Json},
@@ -17,19 +18,26 @@ use topcoat::{
 };
 
 use crate::i18n::Locale;
-use crate::queue::{Attempt, Rejection};
+use crate::queue::{Attempt, JobId, Rejection};
 use crate::tools::transcription::Transcription;
+
+/// Remembers only the job accepted in this browser, never one found by client address.
+const COOKIE: &str = "transcription_job";
 
 /// What the upload page's script receives from the job routes.
 #[derive(Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(untagged)]
 enum Reply {
     /// Where to upload the file for a reserved job.
-    Upload(String),
+    Upload { upload: String },
     /// The page to show once the file is uploaded.
-    Next(String),
+    Next { next: String },
     /// Why the request was refused, ready to show.
-    Error(String),
+    Error {
+        error: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        job: Option<String>,
+    },
 }
 
 /// A reservation request from the upload page.
@@ -51,13 +59,23 @@ pub(super) async fn reserve(
     Ok(match transcription.queue.reserve(client_ip(cx), attempt) {
         Ok(id) => {
             let upload = href!(job::upload, job::Id(id)).resolve(cx);
-            (StatusCode::OK, Json(Reply::Upload(upload)))
+            (StatusCode::OK, Json(Reply::Upload { upload }))
         }
-        Err(rejection) => rejected(Locale::of(cx), rejection),
+        Err(rejection) => rejected(cx, rejection),
     })
 }
 
-fn rejected(locale: Locale, rejection: Rejection) -> (StatusCode, Json<Reply>) {
+/// The cookie's job page, only while that job is unfinished. Reading it must not watch it
+/// or extend its lifetime.
+pub(super) fn unfinished_job(cx: &Cx) -> Option<String> {
+    let id: JobId = cookies(cx).get(COOKIE)?.value().parse().ok()?;
+    app_context::<Transcription>(cx)
+        .queue
+        .is_unfinished(&id)
+        .then(|| href!(job::page, job::Id(id)).resolve(cx))
+}
+
+fn rejected(cx: &Cx, rejection: Rejection) -> (StatusCode, Json<Reply>) {
     let status = match rejection {
         Rejection::Closed | Rejection::Full => StatusCode::SERVICE_UNAVAILABLE,
         Rejection::ActiveJob => StatusCode::TOO_MANY_REQUESTS,
@@ -65,6 +83,13 @@ fn rejected(locale: Locale, rejection: Rejection) -> (StatusCode, Json<Reply>) {
     };
     (
         status,
-        Json(Reply::Error(locale.rejection(rejection).to_owned())),
+        Json(Reply::Error {
+            error: Locale::of(cx).rejection(rejection).to_owned(),
+            job: if rejection == Rejection::ActiveJob {
+                unfinished_job(cx)
+            } else {
+                None
+            },
+        }),
     )
 }
