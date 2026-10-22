@@ -189,11 +189,28 @@ async fn result(locale: Locale, id: JobId, transcript: Arc<Transcript>) -> Resul
                 <p>(text.no_speech)</p>
             } else {
                 <h2 class="transcript-title">(text.transcript_title)</h2>
-                <div class="transcript" lang=(transcript.language.as_str()) dir="auto">
-                    for line in transcript.text.lines() {
-                        <p>(line)</p>
+                // The cues of the SRT file. Their direction follows the transcript's text, while
+                // each number and time range stays left to right.
+                <ol
+                    class="cues"
+                    role="list"
+                    lang=(transcript.language.as_str())
+                    dir="auto"
+                >
+                    for (number, cue) in (1..).zip(&transcript.cues) {
+                        <li class="cue">
+                            <p class="cue-time">
+                                <span dir="ltr">
+                                    <span class="cue-number">(number.to_string())</span>
+                                    (cue.start.as_str())
+                                    " → "
+                                    (cue.end.as_str())
+                                </span>
+                            </p>
+                            <p class="cue-text">(cue.text.as_str())</p>
+                        </li>
                     }
-                </div>
+                </ol>
             }
         </div>
     })

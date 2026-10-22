@@ -66,6 +66,16 @@ pub struct Transcript {
     pub text: String,
     /// SRT subtitles.
     pub srt: String,
+    /// The subtitles' cues, in order.
+    pub cues: Vec<Cue>,
+}
+
+/// One cue of the SRT subtitles: when it is said, and what.
+pub struct Cue {
+    /// SRT timestamps, such as `00:01:02,500`.
+    pub start: String,
+    pub end: String,
+    pub text: String,
 }
 
 /// Why an uploaded file was refused.
@@ -294,12 +304,31 @@ fn render(name: String, language: String, segments: &[Segment]) -> anyhow::Resul
     let [text, srt] = written.files.as_slice() else {
         bail!("expected a text and an SRT file, got {:?}", written.files);
     };
+    let srt = std::fs::read_to_string(srt)?;
     Ok(Transcript {
         name,
         language,
         text: std::fs::read_to_string(text)?,
-        srt: std::fs::read_to_string(srt)?,
+        cues: cues(&srt),
+        srt,
     })
+}
+
+/// Reads the cues back from SRT as tafrigh writes it: each cue's number, time range and text,
+/// with a blank line after each cue.
+fn cues(srt: &str) -> Vec<Cue> {
+    srt.split("\n\n")
+        .map(|block| block.trim_matches('\n'))
+        .filter_map(|block| {
+            let mut lines = block.lines().skip(1);
+            let (start, end) = lines.next()?.split_once(" --> ")?;
+            Some(Cue {
+                start: start.to_owned(),
+                end: end.to_owned(),
+                text: lines.collect::<Vec<_>>().join(" "),
+            })
+        })
+        .collect()
 }
 
 /// Estimates a transcription's progress from tafrigh's events.
@@ -354,6 +383,32 @@ impl Tracker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cues_match_the_srt_file() -> anyhow::Result<()> {
+        let segments = [
+            Segment::new(0.5, 2.25, "اللغة العربية من أوسع اللغات مفردات"),
+            Segment::new(2.25, 3.0, ""),
+            Segment::new(61.0, 3725.125, "وقد حفظت لنا كتب التراث كثيرا من شواهدها"),
+        ];
+        let transcript = render("lesson".to_owned(), "ar".to_owned(), &segments)?;
+        assert_eq!(
+            transcript.cues.len(),
+            transcript.srt.matches(" --> ").count()
+        );
+        for (number, cue) in (1..).zip(&transcript.cues) {
+            let block = format!("{number}\n{} --> {}\n{}\n", cue.start, cue.end, cue.text);
+            assert!(
+                transcript.srt.contains(&block),
+                "{block:?} in {:?}",
+                transcript.srt
+            );
+        }
+        let last = transcript.cues.last().unwrap();
+        assert_eq!(last.end, "01:02:05,125");
+        assert_eq!(last.text, "وقد حفظت لنا كتب التراث كثيرا من شواهدها");
+        Ok(())
+    }
 
     #[test]
     fn only_decoded_audio_past_the_limit_triggers_the_cutoff() {

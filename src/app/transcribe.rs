@@ -25,7 +25,6 @@ pub async fn page(cx: &Cx) -> Result<impl View> {
     let locale = Locale::of(cx);
     let text = &locale.text().transcription;
     let transcription = app_context::<Transcription>(cx);
-    let languages = transcription.languages();
     Ok(view! {
         tool_hero(locale: locale, lead: true)
         <section class="workspace">
@@ -77,21 +76,6 @@ pub async fn page(cx: &Cx) -> Result<impl View> {
                                     <p class="dropzone-hint">(locale.upload_limits())</p>
                                     <p class="file-name">(text.no_file)</p>
                                 </div>
-                                if languages.len() > 1 {
-                                    <div class="field">
-                                        <label for="language">(text.language_label)</label>
-                                        <div class="select">
-                                            <select id="language" name="language">
-                                                for language in languages {
-                                                    <option value=(language.code.as_str())>
-                                                        (locale.language_name(&language.code))
-                                                    </option>
-                                                }
-                                            </select>
-                                            icon(data: icons::CHEVRON_DOWN, size: 16)
-                                        </div>
-                                    </div>
-                                }
                                 <div class="form-actions">
                                     <button type="submit" class="button primary">
                                         (text.submit)

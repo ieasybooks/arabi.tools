@@ -144,7 +144,7 @@ async fn layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
             <head>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
-                <title>"arabi.tools"</title>
+                <title>(text.site_name)</title>
                 topcoat::font::link(font: LATIN_FONT)
                 topcoat::font::link(font: ARABIC_FONT)
                 topcoat::font::link(font: ARABIC_DISPLAY_FONT)
@@ -162,7 +162,7 @@ async fn layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                             aria-label=(text.home_label)
                         >
                             <span class="brand-mark" aria-hidden="true">"ع"</span>
-                            <span class="brand-name">"arabi.tools"</span>
+                            <span class="brand-name">(text.site_name)</span>
                         </a>
                         <form
                             class="language-switch"
@@ -202,22 +202,61 @@ async fn layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                         (slot)
                     )
                 </main>
-                <footer class="site-footer">
-                    <div class="container footer-inner">
-                        <p>
-                            <span class="brand-name">"arabi.tools"</span>
-                            (text.initiative_before)
-                            <a href=(INITIATIVE_URL)>(text.initiative_name)</a>
-                            (text.initiative_after)
-                        </p>
-                        <a class="footer-link" href=(SOURCE_URL)>
-                            icon(data: icons::CODE, size: 16)
-                            <span>(text.source_code)</span>
-                        </a>
-                    </div>
-                </footer>
+                site_footer(locale: locale)
             </body>
         </html>
+    })
+}
+
+/// The initiative behind the site, its accounts, and the site's source code.
+#[component]
+async fn site_footer(locale: Locale) -> Result<impl View> {
+    let text = locale.text();
+    let social = &text.social;
+    let links = [
+        ("https://t.me/ieasybooks", icons::TELEGRAM, social.telegram),
+        (
+            "https://youtube.com/@ieasybooks",
+            icons::YOUTUBE,
+            social.youtube,
+        ),
+        ("https://x.com/iieasybooks", icons::X, social.x),
+        (
+            "https://fb.com/ieasybooks",
+            icons::FACEBOOK,
+            social.facebook,
+        ),
+        (
+            "https://github.com/ieasybooks",
+            icons::GITHUB,
+            social.github,
+        ),
+        ("mailto:easybooksdev@gmail.com", icons::MAIL, social.email),
+    ];
+    Ok(view! {
+        <footer class="site-footer">
+            <div class="container footer-inner">
+                <p>
+                    <span class="brand-name">(text.site_name)</span>
+                    (text.initiative_before)
+                    <a href=(INITIATIVE_URL)>(text.initiative_name)</a>
+                    (text.initiative_after)
+                </p>
+                <ul class="social" role="list" aria-label=(social.label)>
+                    for (href, data, label) in links {
+                        <li>
+                            <a href=(href) title=(label) aria-label=(label)>
+                                icon(data: data, size: 20)
+                            </a>
+                        </li>
+                    }
+                </ul>
+                <a class="footer-link" href=(SOURCE_URL)>
+                    icon(data: icons::CODE, size: 16)
+                    <span>(text.source_code)</span>
+                </a>
+            </div>
+        </footer>
     })
 }
 
@@ -269,9 +308,9 @@ async fn tool_card(href: String, name: &str, description: &str, action: &str) ->
             <a class="tool" href=(href)>
                 <h3 class="tool-name">(name)</h3>
                 <p class="tool-description">(description)</p>
-                <p class="tool-formats" dir="ltr">
+                <p class="tool-formats">
                     <span class="badge">"MP3 · M4A"</span>
-                    <span class="tool-arrow" aria-hidden="true">"→"</span>
+                    <span class="forward">icon(data: icons::FORWARD, size: 16)</span>
                     <span class="badge">"TXT · SRT"</span>
                 </p>
                 <p class="tool-action">
