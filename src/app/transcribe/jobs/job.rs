@@ -111,7 +111,11 @@ async fn job_status(locale: Locale, id: JobId, status: Status<Transcript>) -> Re
                     if transcript.text.trim().is_empty() {
                         <p>(text.no_speech)</p>
                     } else {
-                        <div class="transcript" dir="auto">
+                        <div
+                            class="transcript"
+                            lang=(transcript.language.as_str())
+                            dir="auto"
+                        >
                             for line in transcript.text.lines() {
                                 <p>(line)</p>
                             }

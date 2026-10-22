@@ -58,6 +58,8 @@ pub struct Language {
 pub struct Transcript {
     /// Name for downloaded files, without an extension.
     pub name: String,
+    /// Code of the language it is in, e.g. `ar`.
+    pub language: String,
     /// Plain text, one segment per line.
     pub text: String,
     /// SRT subtitles.
@@ -135,6 +137,7 @@ impl Language {
         name: String,
     ) -> Result<(), Rejection> {
         let transcriber = Arc::clone(&self.transcriber);
+        let language = self.code.clone();
         upload.submit(move |progress| async move {
             let tracker = Mutex::new(Tracker::default());
             let report = |event: TranscribeEvent| {
@@ -145,7 +148,7 @@ impl Language {
             };
             let segments = transcriber.transcribe(&audio, &report).await?;
             drop(audio);
-            render(name, &segments)
+            render(name, language, &segments)
         })
     }
 }
@@ -249,7 +252,7 @@ pub async fn check_audio(path: &Path) -> Result<(), AudioProblem> {
 }
 
 /// Writes the transcript files the site offers and reads them back.
-fn render(name: String, segments: &[Segment]) -> anyhow::Result<Transcript> {
+fn render(name: String, language: String, segments: &[Segment]) -> anyhow::Result<Transcript> {
     let dir = tempfile::tempdir()?;
     let written = OutputWriter::new()
         .formats([BuiltinFormat::Txt, BuiltinFormat::Srt])
@@ -259,6 +262,7 @@ fn render(name: String, segments: &[Segment]) -> anyhow::Result<Transcript> {
     };
     Ok(Transcript {
         name,
+        language,
         text: std::fs::read_to_string(text)?,
         srt: std::fs::read_to_string(srt)?,
     })
