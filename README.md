@@ -1,6 +1,6 @@
-# arlang.tools
+# arabi.tools
 
-Free Arabic language tools on the web, starting with audio transcription, with Arabic and English interfaces.
+Free Arabic language tools on the web at [arabi.tools](https://arabi.tools), starting with audio transcription, with Arabic and English interfaces. A project of the nonprofit [iEasyBooks](https://ieasybooks.com) initiative.
 
 ## Run locally
 

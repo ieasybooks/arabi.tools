@@ -1,6 +1,7 @@
 //! One transcription job: its upload, its live status page and its downloads.
 
 use std::fmt::Write;
+use std::sync::Arc;
 use std::time::Duration;
 
 use tempfile::TempPath;
@@ -9,6 +10,7 @@ use topcoat::{
     Result,
     context::{Cx, app_context},
     cookie::{Cookies, cookie, cookies, time},
+    icon::icon,
     router::{
         Body, StatusCode,
         content::{
@@ -28,6 +30,7 @@ use topcoat::{
 use super::{COOKIE, Reply, rejected};
 use crate::app::transcribe;
 use crate::i18n::Locale;
+use crate::icons;
 use crate::queue::{CancelReason, JobId, Status};
 use crate::tools::transcription::{
     AudioProblem, MAX_UPLOAD_BYTES, Transcript, Transcription, check_audio, download_name,
@@ -48,25 +51,29 @@ pub(super) async fn page(cx: &Cx) -> Result<impl View> {
         .watch(&id)
         .ok_or_not_found()?;
     Ok(view! {
-        <h1>(locale.text().transcription.name)</h1>
-        (live! {
-            loop {
-                let status = watch.status();
-                let finished = status.is_finished();
-                let token = emit! {
-                    job_status(locale: locale, id: id.clone(), status: status)
-                }?;
-                if finished || !connected(cx) {
-                    break Ok(token);
-                }
-                tokio::select! {
-                    changed = watch.changed() => if !changed {
-                        break Ok(token);
-                    },
-                    () = tokio::time::sleep(HEARTBEAT) => {}
-                }
-            }
-        })
+        transcribe::tool_hero(locale: locale, lead: false)
+        <section class="workspace">
+            <div class="container workspace-layout">
+                (live! {
+                    loop {
+                        let status = watch.status();
+                        let finished = status.is_finished();
+                        let token = emit! {
+                            job_status(locale: locale, id: id.clone(), status: status)
+                        }?;
+                        if finished || !connected(cx) {
+                            break Ok(token);
+                        }
+                        tokio::select! {
+                            changed = watch.changed() => if !changed {
+                                break Ok(token);
+                            },
+                            () = tokio::time::sleep(HEARTBEAT) => {}
+                        }
+                    }
+                })
+            </div>
+        </section>
     })
 }
 
@@ -83,10 +90,16 @@ async fn job_status(locale: Locale, id: JobId, status: Status<Transcript>) -> Re
         Status::Cancelled(CancelReason::Unwatched) => text.cancelled_unwatched.to_owned(),
         Status::Cancelled(CancelReason::Shutdown) => text.cancelled_shutdown.to_owned(),
     };
-    let class = match &status {
-        Status::Done(_) => "status success",
-        Status::Failed | Status::Cancelled(_) => "status error",
-        _ => "status",
+    let (state, state_icon) = match &status {
+        Status::Reserved | Status::Waiting { .. } => ("waiting", Some(icons::WAITING)),
+        Status::Running { .. } => ("running", None),
+        Status::Done(_) => ("done", Some(icons::DONE)),
+        Status::Failed | Status::Cancelled(_) => ("failed", Some(icons::FAILED)),
+    };
+    let step = if state == "done" {
+        transcribe::Step::Download
+    } else {
+        transcribe::Step::Transcribe
     };
     let percent = match status {
         Status::Running { percent } => Some(percent),
@@ -98,11 +111,15 @@ async fn job_status(locale: Locale, id: JobId, status: Status<Transcript>) -> Re
         _ => None,
     };
     Ok(view! {
-        <div class="card job">
-            // Topcoat preserves this node across live updates. Only status text belongs
-            // here, so percentage updates do not repeat the polite announcement.
+        transcribe::steps(locale: locale, current: step, failed: state == "failed")
+        <div class="job" data-state=(state)>
             <div class="job-heading">
-                <p id="job-status" class=(class) role="status">(message)</p>
+                if let Some(state_icon) = state_icon {
+                    <span class="job-icon">icon(data: state_icon, size: 20)</span>
+                }
+                // Topcoat preserves this node across live updates. Only status text belongs
+                // here, so percentage updates do not repeat the polite announcement.
+                <p id="job-status" class="status" role="status">(message)</p>
                 if let Some(percent) = percent {
                     <p class="percent">(locale.percent(percent))</p>
                 }
@@ -111,44 +128,74 @@ async fn job_status(locale: Locale, id: JobId, status: Status<Transcript>) -> Re
                 <progress max="100" value=(percent) aria-labelledby="job-status"></progress>
             }
             if keep_open {
-                <p class="hint">(text.keep_open)</p>
+                <p class="keep-open">
+                    icon(data: icons::WARNING, size: 20)
+                    <span>(text.keep_open)</span>
+                </p>
             }
             if let Some(transcript) = transcript {
+                result(locale: locale, id: id, transcript: transcript)
+            }
+        </div>
+        if finished {
+            <p class="another">
+                <a
+                    class=(if state == "done" {
+                        "button secondary"
+                    } else {
+                        "button primary"
+                    })
+                    href=(href!(transcribe::page))
+                >
+                    (text.another)
+                </a>
+            </p>
+        }
+    })
+}
+
+/// A finished job's downloads and transcript.
+#[component]
+async fn result(locale: Locale, id: JobId, transcript: Arc<Transcript>) -> Result<impl View> {
+    let text = &locale.text().transcription;
+    Ok(view! {
+        <div class="result">
+            <div class="result-heading">
+                <p class="result-name">
+                    icon(data: icons::TRANSCRIPT, size: 20)
+                    <span dir="auto">(transcript.name.as_str())</span>
+                </p>
                 <div class="downloads">
                     <a
-                        class="button"
+                        class="button primary"
                         href=(href!(download_text, Id(id.clone())))
                         download=(true)
                     >
-                        (text.download_text)
+                        icon(data: icons::DOWNLOAD, size: 16)
+                        <span>(text.download_text)</span>
                     </a>
                     <a
                         class="button secondary"
                         href=(href!(download_srt, Id(id.clone())))
                         download=(true)
                     >
-                        (text.download_srt)
+                        icon(data: icons::DOWNLOAD, size: 16)
+                        <span>(text.download_srt)</span>
                     </a>
                 </div>
-                <p class="hint">(locale.kept_for())</p>
-                if transcript.text.trim().is_empty() {
-                    <p>(text.no_speech)</p>
-                } else {
-                    <div
-                        class="transcript"
-                        lang=(transcript.language.as_str())
-                        dir="auto"
-                    >
-                        for line in transcript.text.lines() {
-                            <p>(line)</p>
-                        }
-                    </div>
-                }
+            </div>
+            <p class="hint">(locale.kept_for())</p>
+            if transcript.text.trim().is_empty() {
+                <p>(text.no_speech)</p>
+            } else {
+                <h2 class="transcript-title">(text.transcript_title)</h2>
+                <div class="transcript" lang=(transcript.language.as_str()) dir="auto">
+                    for line in transcript.text.lines() {
+                        <p>(line)</p>
+                    }
+                </div>
             }
         </div>
-        if finished {
-            <p><a href=(href!(transcribe::page))>(text.another)</a></p>
-        }
     })
 }
 
@@ -271,7 +318,7 @@ async fn download_srt(cx: &Cx) -> Result<Download> {
     })
 }
 
-fn finished(cx: &Cx) -> Result<std::sync::Arc<Transcript>> {
+fn finished(cx: &Cx) -> Result<Arc<Transcript>> {
     let id = path_param::<Id>(cx)?;
     Ok(app_context::<Transcription>(cx)
         .queue

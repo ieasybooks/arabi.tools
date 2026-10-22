@@ -1,26 +1,38 @@
-/* arlang.tools. Logical properties (inline/block) keep the layout right for Arabic (RTL)
-   and English (LTR) alike. */
+/* arabi.tools: warm paper, Arabic display headings and a single book-like column. Logical
+   properties (inline/block) keep the layout right for Arabic (RTL) and English (LTR) alike. */
 
 :root {
-  --font: "Inter", "IBM Plex Sans Arabic", system-ui, sans-serif;
-  --text: #18181b; /* zinc-900 */
-  --muted: #52525b; /* zinc-600 */
-  --faint: #71717a; /* zinc-500 */
-  --line: rgb(9 9 11 / 0.1); /* zinc-950 at 10% */
-  --line-soft: rgb(9 9 11 / 0.05);
-  --well: #fafafa; /* zinc-50 */
-  --brand: #0f766e; /* teal-700 */
-  --brand-strong: #115e59; /* teal-800 */
-  --brand-soft: #f0fdfa; /* teal-50 */
-  --danger: #b91c1c; /* red-700 */
-  --danger-soft: #fef2f2; /* red-50 */
-  --radius: 0.75rem;
+  --font-body: "Gilroy", "Noto Naskh Arabic UI", system-ui, sans-serif;
+  --font-display: "Gilroy", "Thmanyah Serif Display", "Noto Naskh Arabic UI", serif;
+  --font-transcript: "Kitab", "Noto Naskh Arabic UI", serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --paper: #f8f4ea;
+  --surface: #fffcf5;
+  --well: #f1ebdd;
+  --text: #2b2119;
+  --muted: #5f5245;
+  --faint: #7d6e5e;
+  --line: rgb(74 52 30 / 0.16);
+  --line-soft: rgb(74 52 30 / 0.09);
+  --green: #1f5c49;
+  --green-strong: #164536;
+  --green-soft: #e4ede6;
+  --gold: #a4824a;
+  --danger: #9f2a1d;
+  --danger-soft: #f7e6df;
+  --warning: #8a5a14;
+  --warning-soft: #f5ead2;
+  --shadow: 0 2px 16px rgb(74 52 30 / 0.07);
+  --radius: 1.25rem;
+  --radius-control: 0.75rem;
+  --container: 48rem;
 
   color-scheme: light;
   color: var(--text);
-  background: #fff;
-  font-family: var(--font);
+  background: var(--paper);
+  font-family: var(--font-body);
   font-size: 100%;
+  font-synthesis: none;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -30,7 +42,7 @@
 /* Arabic letters read best a touch larger and with more room between lines. */
 :root:lang(ar) {
   font-size: 106.25%;
-  line-height: 1.85;
+  line-height: 1.75;
 }
 
 *,
@@ -39,53 +51,87 @@
   box-sizing: border-box;
 }
 
+/* The hidden attribute must win over every display rule. */
+[hidden] {
+  display: none !important;
+}
+
 body {
-  margin: 0;
+  display: flex;
+  flex-direction: column;
   min-height: 100dvh;
+  margin: 0;
   isolation: isolate;
 }
 
 h1,
 h2,
-p {
+h3,
+p,
+ul,
+ol {
   margin: 0;
 }
 
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+
 h1,
-h2 {
-  font-weight: 600;
-  line-height: 1.3;
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  line-height: 1.4;
   text-wrap: balance;
+}
+
+/* Tracking suits Latin headings only; Arabic letters must stay joined. */
+:lang(en) :is(h1, h2) {
+  line-height: 1.15;
+  letter-spacing: -0.02em;
 }
 
 p {
   text-wrap: pretty;
 }
 
-/* Tracking suits Latin headings only; Arabic letters must stay joined. */
-:lang(en) h1 {
-  letter-spacing: -0.025em;
-}
-
 a {
-  color: var(--brand);
+  color: var(--green);
   text-underline-offset: 0.2em;
 }
 
 a:hover {
-  color: var(--brand-strong);
+  color: var(--green-strong);
 }
 
 :focus-visible {
-  outline: 2px solid var(--brand);
+  outline: 2px solid var(--green);
   outline-offset: 2px;
+}
+
+svg {
+  flex-shrink: 0;
+}
+
+/* Arrows point the way the text runs. */
+[dir="rtl"] .forward svg {
+  transform: scaleX(-1);
 }
 
 .container {
   width: 100%;
-  max-width: 48rem;
+  max-width: var(--container);
   margin-inline: auto;
   padding-inline: 1.25rem;
+}
+
+@media (min-width: 40rem) {
+  .container {
+    padding-inline: 2rem;
+  }
 }
 
 /* Header */
@@ -94,131 +140,384 @@ a:hover {
   border-block-end: 1px solid var(--line-soft);
 }
 
-.site-header .container {
+.header-inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  min-height: 4rem;
+  min-height: 4.5rem;
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
   color: var(--text);
-  font-weight: 600;
   text-decoration: none;
-  /* The name is Latin in both languages. */
-  direction: ltr;
 }
 
 .brand:hover {
-  color: var(--brand);
+  color: var(--text);
+}
+
+/* A seal: the letter in a double gold ring. */
+.brand-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 2.375rem;
+  height: 2.375rem;
+  padding-block-end: 0.125rem;
+  border-radius: 999px;
+  box-shadow:
+    inset 0 0 0 1px var(--gold),
+    inset 0 0 0 3px var(--paper),
+    inset 0 0 0 4px var(--gold);
+  color: var(--green);
+  font-family: "Thmanyah Serif Display", serif;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+/* The name is Latin in both languages. */
+.brand-name {
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-family: "Gilroy", sans-serif;
+  font-weight: 700;
+}
+
+.brand .brand-name {
+  font-size: 1.1875rem;
 }
 
 .language-switch button {
-  padding: 0.375rem 0.75rem;
-  border: 0;
-  border-radius: 0.5rem;
-  background: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4375rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
   color: var(--muted);
   font: inherit;
-  font-size: 0.9375rem;
   cursor: pointer;
 }
 
 .language-switch button:hover {
-  background: var(--well);
+  border-color: var(--gold);
   color: var(--text);
 }
 
-/* Page */
-
-main.container {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  padding-block: 2.5rem 4rem;
+.page {
+  flex: 1;
 }
 
-h1 {
-  font-size: 1.875rem;
+/* Centred title pages, with an ornament under the lead. */
+
+.hero,
+.tool-hero {
+  text-align: center;
+}
+
+.hero {
+  padding-block: 4.5rem 2rem;
+}
+
+.hero h1 {
+  font-size: 3rem;
 }
 
 .lead {
   max-width: 48ch;
+  margin: 1rem auto 0;
   color: var(--muted);
-  font-size: 1.125rem;
-  margin-block-start: -0.75rem;
+  font-size: 1.1875rem;
 }
 
-.hint {
-  color: var(--faint);
-  font-size: 0.9375rem;
+.hero .lead::after,
+.tool-hero .container::after {
+  content: "";
+  display: block;
+  width: 9rem;
+  height: 0.75rem;
+  margin: 2rem auto 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 144 12'%3E%3Cpath d='M0 6h60M84 6h60' stroke='%23a4824a'/%3E%3Cpath d='M72 1l5 5-5 5-5-5z' fill='%23a4824a'/%3E%3Ccircle cx='63' cy='6' r='1' fill='%23a4824a'/%3E%3Ccircle cx='81' cy='6' r='1' fill='%23a4824a'/%3E%3C/svg%3E")
+    center / contain no-repeat;
 }
 
-.notice {
-  padding: 1rem 1.25rem;
-  border-radius: var(--radius);
-  background: var(--well);
-  box-shadow: inset 0 0 0 1px var(--line-soft);
+.highlights {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem 1.75rem;
+  margin-block-start: 2rem;
+  color: var(--muted);
 }
 
-/* Home: one card per tool */
+.highlights li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.highlights svg {
+  color: var(--gold);
+}
+
+/* Home: the tools read like a table of contents. */
+
+.section {
+  padding-block: 1.5rem 5rem;
+}
+
+.section-title {
+  margin-block-end: 1.25rem;
+  font-size: 1.625rem;
+  text-align: center;
+}
 
 .tools {
-  display: grid;
-  gap: 1rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  border-block: 1px solid var(--line);
 }
 
-@media (min-width: 40rem) {
-  .tools {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+.tools > li + li {
+  border-block-start: 1px solid var(--line-soft);
 }
 
 .tool {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-  height: 100%;
-  padding: 1.25rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.25rem 2rem;
+  padding: 1.75rem 1rem;
   color: inherit;
   text-decoration: none;
 }
 
 .tool:hover {
-  border-color: var(--brand);
-  background: var(--brand-soft);
+  background: rgb(255 252 245 / 0.75);
   color: inherit;
 }
 
-.tool h2 {
-  font-size: 1.125rem;
-  color: var(--brand-strong);
+.tool-name {
+  color: var(--green);
+  font-size: 1.875rem;
 }
 
-.tool p {
+.tool-description {
   color: var(--muted);
 }
 
-/* Upload form and job status share the card look. */
+.tool-formats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-block-start: 0.25rem;
+  color: var(--faint);
+}
 
-.card {
+/* The formats read left to right, but sit at the start of the row. */
+:root[dir="ltr"] .tool-formats {
+  justify-content: flex-start;
+}
+
+.badge {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.tool-action {
+  display: inline-flex;
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  align-items: center;
+  align-self: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1.125rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--green);
+  font-weight: 500;
+}
+
+.tool:hover .tool-action {
+  border-color: var(--green);
+}
+
+.tool-soon {
+  padding: 1.25rem;
+  color: var(--faint);
+  text-align: center;
+}
+
+/* Tool pages: one column, the notes following the form like footnotes. */
+
+.tool-hero {
+  padding-block: 3.5rem 0;
+}
+
+.tool-hero h1 {
+  font-size: 2.625rem;
+}
+
+.crumbs {
+  margin-block-end: 0.5rem;
+}
+
+.crumbs a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.crumbs a:hover {
+  color: var(--text);
+}
+
+.workspace {
+  padding-block: 2rem 5rem;
+}
+
+.workspace-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.workspace-main,
+.job {
+  display: flex;
+  flex-direction: column;
+  padding: 2rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.workspace-main {
+  gap: 1.75rem;
+}
+
+.workspace-aside {
+  padding-block-start: 1.5rem;
+  border-block-start: 1px solid var(--line);
+}
+
+.aside-title {
+  margin-block-end: 1rem;
+  font-size: 1.375rem;
+}
+
+.notes {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  padding: 1.5rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  color: var(--muted);
 }
 
-.upload label {
+.notes li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.notes svg {
+  margin-block-start: 0.25em;
+  color: var(--gold);
+}
+
+/* Steps: numbered seals joined by a gold line, each label under its seal. */
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-width: 30rem;
+  width: 100%;
+  margin-inline: auto;
+}
+
+.step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--faint);
+  text-align: center;
+}
+
+/* The line runs from this seal's edge to the next one's. */
+.step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 1rem;
+  inset-inline-start: calc(50% + 1.5rem);
+  width: calc(100% - 3rem);
+  height: 1px;
+  background: var(--gold);
+  opacity: 0.5;
+}
+
+.step[data-state="done"]::after {
+  opacity: 1;
+}
+
+.step-marker {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--gold);
+  color: var(--gold);
+  font-family: "Gilroy", sans-serif;
+  font-size: 0.875rem;
   font-weight: 500;
-  margin-block-end: -0.5rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.step[data-state="done"] {
+  color: var(--muted);
+}
+
+.step[data-state="done"] .step-marker {
+  background: var(--green-soft);
+  box-shadow: inset 0 0 0 1px var(--green);
+  color: var(--green);
+}
+
+.step[data-state="current"] {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.step[data-state="current"] .step-marker {
+  background: var(--green);
+  box-shadow: none;
+  color: #fff;
+}
+
+.step[data-state="failed"] {
+  color: var(--danger);
+  font-weight: 500;
+}
+
+.step[data-state="failed"] .step-marker {
+  background: var(--danger-soft);
+  box-shadow: inset 0 0 0 1px var(--danger);
+  color: var(--danger);
+}
+
+/* Upload form */
+
+.upload {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
 }
 
 .dropzone {
@@ -227,21 +526,21 @@ h1 {
   flex-direction: column;
   align-items: center;
   gap: 0.25rem;
-  padding: 2rem 1.25rem;
-  border: 1px dashed rgb(9 9 11 / 0.2);
-  border-radius: 0.625rem;
-  background: var(--well);
+  padding: 2.5rem 1.25rem;
+  border: 1px dashed var(--gold);
+  border-radius: 1rem;
+  background: var(--paper);
   text-align: center;
 }
 
 .dropzone:hover,
 .dropzone:has(input:focus-visible) {
-  border-color: var(--brand);
-  background: var(--brand-soft);
+  border-color: var(--green);
+  background: var(--green-soft);
 }
 
 .dropzone:has(input:focus-visible) {
-  outline: 2px solid var(--brand);
+  outline: 2px solid var(--green);
   outline-offset: 2px;
 }
 
@@ -259,75 +558,128 @@ h1 {
   cursor: default;
 }
 
+.dropzone-icon {
+  display: flex;
+  margin-block-end: 0.5rem;
+  color: var(--gold);
+}
+
 .dropzone-title {
+  font-family: var(--font-display);
+  font-size: 1.375rem;
   font-weight: 500;
-  color: var(--brand-strong);
+}
+
+.dropzone-hint {
+  color: var(--faint);
 }
 
 .file-name {
   max-width: 100%;
+  margin-block-start: 0.75rem;
   overflow-wrap: anywhere;
   color: var(--muted);
 }
 
-.upload select {
-  padding: 0.5rem 0.75rem;
+/* A chosen file stands out. */
+.dropzone:has(input:valid) .file-name {
+  padding: 0.25rem 0.875rem;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.field label {
+  font-weight: 500;
+}
+
+.select {
+  display: inline-grid;
+  grid-template-columns: 1fr 2.5rem;
+  align-items: center;
+  max-width: 20rem;
+}
+
+.select select {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  min-height: 2.875rem;
+  padding-block: 0.5rem;
+  padding-inline: 1rem 2.5rem;
   border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  background: #fff;
+  border-radius: var(--radius-control);
+  background: var(--surface);
   color: var(--text);
   font: inherit;
+  appearance: none;
+}
+
+.select select:focus-visible {
+  outline-offset: 0;
+}
+
+.select svg {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: center;
+  color: var(--faint);
+  pointer-events: none;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: center;
 }
 
 /* Buttons: one primary per page; the rest are secondary. */
 
-.button,
-.upload button[type="submit"] {
+.button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.625rem 1rem;
-  border: 0;
-  border-radius: 0.5rem;
-  background: var(--brand);
-  color: #fff;
+  padding: 0.75rem 1.5rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
   font: inherit;
   font-weight: 500;
+  line-height: 1.5;
   text-decoration: none;
   cursor: pointer;
 }
 
-.button:hover,
-.upload button[type="submit"]:hover {
-  background: var(--brand-strong);
+.button.primary {
+  background: var(--green);
   color: #fff;
 }
 
-.upload button[type="submit"] {
-  align-self: flex-start;
+.button.primary:hover {
+  background: var(--green-strong);
+  color: #fff;
 }
 
-.upload button[type="submit"]:disabled {
+.button.primary:disabled {
   background: var(--faint);
   cursor: progress;
 }
 
 .button.secondary {
-  background: #fff;
-  box-shadow: inset 0 0 0 1px var(--line);
+  border-color: var(--line);
+  background: var(--surface);
   color: var(--text);
 }
 
 .button.secondary:hover {
-  background: var(--well);
+  border-color: var(--gold);
   color: var(--text);
-}
-
-.downloads {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
 }
 
 /* Progress */
@@ -337,23 +689,23 @@ progress {
   height: 0.5rem;
   border: 0;
   border-radius: 999px;
-  background: rgb(9 9 11 / 0.08);
+  background: var(--well);
   overflow: hidden;
   appearance: none;
 }
 
 progress::-webkit-progress-bar {
-  background: rgb(9 9 11 / 0.08);
+  background: var(--well);
 }
 
 progress::-webkit-progress-value {
   border-radius: 999px;
-  background: var(--brand);
+  background: var(--green);
 }
 
 progress::-moz-progress-bar {
   border-radius: 999px;
-  background: var(--brand);
+  background: var(--green);
 }
 
 .upload-progress {
@@ -363,24 +715,75 @@ progress::-moz-progress-bar {
   color: var(--muted);
 }
 
-/* The hidden attribute must win over the display rules above. */
-[hidden] {
-  display: none !important;
+/* Messages */
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid rgb(138 90 20 / 0.25);
+  border-radius: var(--radius-control);
+  background: var(--warning-soft);
 }
 
-/* Status and messages */
+.notice > svg {
+  margin-block-start: 0.25em;
+  color: var(--warning);
+}
 
-.status {
-  font-size: 1.125rem;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
+.notice-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.error {
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-control);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.return-to-job {
+  align-self: center;
+}
+
+.hint {
+  color: var(--faint);
+}
+
+/* Job status */
+
+.job {
+  gap: 1.25rem;
 }
 
 .job-heading {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.job-icon {
+  display: flex;
+  color: var(--faint);
+}
+
+.status {
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 500;
+}
+
+.job[data-state="done"] .job-icon {
+  color: var(--green);
+}
+
+.job[data-state="failed"] .job-icon,
+.job[data-state="failed"] .status {
+  color: var(--danger);
 }
 
 .percent {
@@ -389,70 +792,184 @@ progress::-moz-progress-bar {
   font-variant-numeric: tabular-nums;
 }
 
-.status.success {
-  color: var(--brand-strong);
+.keep-open {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  color: var(--muted);
 }
 
-.status.error,
-.error {
-  color: var(--danger);
+.keep-open svg {
+  margin-block-start: 0.25em;
+  color: var(--warning);
 }
 
-.upload .error {
-  padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
-  background: var(--danger-soft);
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.result-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block-end: 1rem;
+  border-block-end: 1px solid var(--line-soft);
+}
+
+.result-name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.result-name svg {
+  color: var(--gold);
+}
+
+.downloads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* The transcript reads like a printed page. */
+
+.transcript-title {
+  padding-block-end: 0.75rem;
+  font-size: 1.375rem;
+  text-align: center;
 }
 
 .transcript {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  max-height: 32rem;
+  max-height: 36rem;
   overflow-y: auto;
-  padding: 1rem 1.25rem;
-  border-radius: 0.625rem;
-  background: var(--well);
+  padding: 1.5rem 2rem;
+  border-radius: 1rem;
+  background: var(--paper);
   box-shadow: inset 0 0 0 1px var(--line-soft);
-  /* Transcripts are Arabic even on English pages, so give them Arabic spacing. */
-  line-height: 1.85;
+  font-family: var(--font-transcript);
+  font-size: 1.375rem;
+  line-height: 2;
 }
 
-/* Notes under the upload form */
+.another {
+  display: flex;
+  justify-content: center;
+}
 
-.notes {
+/* 404 */
+
+.not-found .error-code {
+  color: var(--gold);
+  font-family: "Gilroy", sans-serif;
+  font-size: 4.5rem;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.not-found h1 {
+  margin-block-start: 1rem;
+}
+
+.not-found .lead::after {
+  display: none;
+}
+
+.not-found .lead + p {
+  margin-block-start: 2rem;
+}
+
+/* Footer */
+
+.site-footer {
+  margin-block-start: 2rem;
+  border-radius: 2rem 2rem 0 0;
+  background: var(--well);
+  color: var(--muted);
+}
+
+.footer-inner {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding-block-start: 1.25rem;
-  border-block-start: 1px solid var(--line-soft);
-  color: var(--faint);
-  font-size: 0.9375rem;
+  align-items: center;
+  gap: 0.75rem;
+  padding-block: 2rem;
+  text-align: center;
 }
 
-/* Phones: slightly larger text and full-width actions. */
+.site-footer .brand-name {
+  color: var(--text);
+}
+
+.footer-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--faint);
+  text-decoration: none;
+}
+
+.footer-link:hover {
+  color: var(--text);
+}
+
+/* Phones: smaller titles and full-width actions. */
 
 @media (max-width: 39.99rem) {
-  .hint,
-  .notes,
-  .language-switch button {
-    font-size: 1rem;
+  .hero {
+    padding-block: 3rem 1.5rem;
   }
 
-  main.container {
-    padding-block: 1.75rem 3rem;
+  .hero h1 {
+    font-size: 2.375rem;
   }
 
-  h1 {
-    font-size: 1.625rem;
+  .tool-hero {
+    padding-block: 2.25rem 0;
   }
 
-  .card {
+  .tool-hero h1 {
+    font-size: 2.125rem;
+  }
+
+  .tool {
+    grid-template-columns: 1fr;
+    padding-inline: 0.25rem;
+  }
+
+  .tool-action {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+    margin-block-start: 0.75rem;
+  }
+
+  .workspace-main,
+  .job {
     padding: 1.25rem;
   }
 
-  .upload button[type="submit"],
-  .downloads .button {
-    width: 100%;
+  .transcript {
+    padding: 1.25rem;
+    font-size: 1.25rem;
+  }
+
+  .select {
+    max-width: none;
+  }
+
+  .form-actions .button,
+  .downloads .button,
+  .another .button {
+    flex: 1;
   }
 }

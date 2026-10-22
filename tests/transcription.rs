@@ -65,10 +65,7 @@ async fn transcribe_fixture(
         .text()
         .await?;
     assert!(page.contains("اكتمل التفريغ."), "{page}");
-    assert!(
-        page.contains("class=\"status success\" role=\"status\""),
-        "{page}"
-    );
+    assert!(page.contains("class=\"job\" data-state=\"done\""), "{page}");
     assert!(page.contains(ARABIC_TEXT), "{page}");
     for (extension, content_type) in [
         ("txt", "text/plain; charset=utf-8"),
@@ -713,7 +710,7 @@ async fn accepted_upload_links_only_to_the_browsers_unfinished_job() -> anyhow::
     app.transcription.queue.sweep();
     let page = app.client.get(app.url(job)).send().await?.text().await?;
     assert!(
-        page.contains("class=\"status error\" role=\"status\""),
+        page.contains("class=\"job\" data-state=\"failed\""),
         "{page}"
     );
     assert!(page.contains("The transcription was cancelled"), "{page}");
@@ -905,7 +902,7 @@ async fn running_status_separates_progress_and_failed_jobs_have_no_return_link()
     .await?;
     let page = app.client.get(app.url(job)).send().await?.text().await?;
     assert!(
-        page.contains("class=\"status error\" role=\"status\""),
+        page.contains("class=\"job\" data-state=\"failed\""),
         "{page}"
     );
     assert!(page.contains("تعذّر إكمال التفريغ"), "{page}");
