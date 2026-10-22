@@ -3,7 +3,8 @@
 //!
 //! A job starts as a reservation ([`Queue::reserve`]) so the browser learns whether there is
 //! room before it uploads anything. The upload then fills the reservation ([`Upload::submit`])
-//! and the job waits for one of the running slots, which are handed out in upload order.
+//! and the job joins the line of waiting jobs. The queue starts jobs from the front of that
+//! line whenever a running slot is free, so the order pages show is the order jobs run in.
 
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
@@ -12,7 +13,7 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use tokio::sync::{Semaphore, watch};
+use tokio::sync::watch;
 use tokio::time::Instant;
 
 /// How often [`Queue::spawn_sweeper`] looks for jobs to cancel or forget.
@@ -144,28 +145,25 @@ pub enum Rejection {
 
 /// A queue of jobs producing results of type `R`. Clones share the queue.
 pub struct Queue<R> {
-    shared: Arc<Shared<R>>,
+    state: Arc<Mutex<State<R>>>,
 }
 
 impl<R> Clone for Queue<R> {
     fn clone(&self) -> Self {
         Self {
-            shared: Arc::clone(&self.shared),
+            state: Arc::clone(&self.state),
         }
     }
 }
 
-struct Shared<R> {
-    limits: Limits,
-    running: Semaphore,
-    state: Mutex<State<R>>,
-}
-
 struct State<R> {
+    limits: Limits,
     jobs: HashMap<JobId, Job<R>>,
-    /// Waiting jobs, next to run first.
+    /// Waiting jobs, next to run first. Jobs start in exactly this order.
     waiting: VecDeque<JobId>,
-    /// Set on shutdown: nothing new is accepted.
+    /// How many running slots are taken. Shutdown waits for it to reach zero.
+    running: watch::Sender<usize>,
+    /// Set on shutdown: nothing new is accepted or started.
     closed: bool,
 }
 
@@ -182,32 +180,32 @@ struct Job<R> {
     /// When its last page closed, or when it was submitted. An unfinished job that nobody
     /// watches is cancelled from here.
     unwatched_since: Instant,
+    /// Holds a running slot: from when the queue starts the job until its work is dropped.
+    has_slot: bool,
 }
 
 impl<R: Send + Sync + 'static> Queue<R> {
     pub fn new(limits: Limits) -> Self {
         Self {
-            shared: Arc::new(Shared {
-                running: Semaphore::new(limits.running),
+            state: Arc::new(Mutex::new(State {
                 limits,
-                state: Mutex::new(State {
-                    jobs: HashMap::new(),
-                    waiting: VecDeque::new(),
-                    closed: false,
-                }),
-            }),
+                jobs: HashMap::new(),
+                waiting: VecDeque::new(),
+                running: watch::Sender::new(0),
+                closed: false,
+            })),
         }
     }
 
     /// Whether `client` could reserve a job right now.
     pub fn availability(&self, client: Option<IpAddr>) -> Result<(), Rejection> {
-        self.lock().admits(client, self.shared.limits.jobs)
+        self.lock().admits(client)
     }
 
     /// Reserves a job for `client`, to be filled by an upload.
     pub fn reserve(&self, client: Option<IpAddr>) -> Result<JobId, Rejection> {
         let mut state = self.lock();
-        state.admits(client, self.shared.limits.jobs)?;
+        state.admits(client)?;
         let id = JobId::random();
         state.jobs.insert(
             id.clone(),
@@ -218,6 +216,7 @@ impl<R: Send + Sync + 'static> Queue<R> {
                 uploading: false,
                 status_since: Instant::now(),
                 unwatched_since: Instant::now(),
+                has_slot: false,
             },
         );
         Ok(id)
@@ -267,9 +266,9 @@ impl<R: Send + Sync + 'static> Queue<R> {
 
     /// Cancels jobs nobody is watching and forgets expired reservations and finished jobs.
     pub fn sweep(&self) {
-        let limits = &self.shared.limits;
         let now = Instant::now();
         let mut state = self.lock();
+        let limits = state.limits.clone();
         let mut unwatched_jobs = Vec::new();
         state.jobs.retain(|id, job| {
             let in_status = now.saturating_duration_since(job.status_since);
@@ -306,7 +305,7 @@ impl<R: Send + Sync + 'static> Queue<R> {
     /// Stops accepting jobs, cancels the ones that have not started, and gives the running
     /// ones up to `grace` to finish before cancelling them too.
     pub async fn shutdown(&self, grace: Duration) {
-        {
+        let mut running = {
             let mut state = self.lock();
             state.closed = true;
             let unstarted: Vec<JobId> = state
@@ -323,10 +322,12 @@ impl<R: Send + Sync + 'static> Queue<R> {
             for id in unstarted {
                 state.cancel(&id, CancelReason::Shutdown);
             }
-        }
-        let all = u32::try_from(self.shared.limits.running).unwrap_or(u32::MAX);
-        let finished = tokio::time::timeout(grace, self.shared.running.acquire_many(all)).await;
-        if finished.is_err() {
+            state.running.subscribe()
+        };
+        let finished = tokio::time::timeout(grace, running.wait_for(|running| *running == 0))
+            .await
+            .is_ok_and(|finished| finished.is_ok());
+        if !finished {
             let mut state = self.lock();
             let running: Vec<JobId> = state
                 .jobs
@@ -340,7 +341,7 @@ impl<R: Send + Sync + 'static> Queue<R> {
         }
     }
 
-    /// Queues the reserved job `id` to run `work` once a running slot frees up.
+    /// Puts the reserved job `id` in line to run `work`.
     fn submit<W, F>(&self, id: &JobId, work: W) -> Result<(), Rejection>
     where
         W: FnOnce(Progress<R>) -> F + Send + 'static,
@@ -357,46 +358,46 @@ impl<R: Send + Sync + 'static> Queue<R> {
             job.unwatched_since = Instant::now();
             let status = job.status.subscribe();
             state.waiting.push_back(id.clone());
-            state.number_waiting();
+            state.start_waiting();
             status
         };
         let queue = self.clone();
         let id = id.clone();
         tokio::spawn(async move {
-            let run = async {
-                let _slot = queue
-                    .shared
-                    .running
-                    .acquire()
-                    .await
-                    .expect("the semaphore is never closed");
-                queue.lock().start(&id);
-                work(Progress {
-                    queue: queue.clone(),
-                    id: id.clone(),
-                })
-                .await
+            // Declared before the work, so it is dropped after it.
+            let _slot = Slot {
+                queue: queue.clone(),
+                id: id.clone(),
             };
+            // The queue decides when the job starts; it may also be cancelled before then.
+            let started = status
+                .wait_for(|status| matches!(status, Status::Running { .. }) || status.is_finished())
+                .await
+                .is_ok_and(|status| matches!(*status, Status::Running { .. }));
+            if !started {
+                return;
+            }
+            let work = work(Progress {
+                queue: queue.clone(),
+                id: id.clone(),
+            });
             tokio::select! {
                 biased;
                 // Whoever cancelled the job already recorded why.
                 _ = status.wait_for(|status| matches!(status, Status::Cancelled(_))) => {}
-                outcome = run => queue.lock().finish(&id, outcome),
+                outcome = work => queue.lock().finish(&id, outcome),
             }
         });
         Ok(())
     }
 
     fn lock(&self) -> MutexGuard<'_, State<R>> {
-        self.shared
-            .state
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
+        self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
 impl<R> State<R> {
-    fn admits(&self, client: Option<IpAddr>, capacity: usize) -> Result<(), Rejection> {
+    fn admits(&self, client: Option<IpAddr>) -> Result<(), Rejection> {
         if self.closed {
             return Err(Rejection::Closed);
         }
@@ -410,24 +411,44 @@ impl<R> State<R> {
             }
             active += 1;
         }
-        if active >= capacity {
+        if active >= self.limits.jobs {
             return Err(Rejection::Full);
         }
         Ok(())
     }
 
-    fn start(&mut self, id: &JobId) {
-        self.waiting.retain(|waiting| waiting != id);
-        if let Some(job) = self.jobs.get(id) {
-            job.status.send_if_modified(|status| {
-                let waiting = matches!(status, Status::Waiting { .. });
-                if waiting {
-                    *status = Status::Running { percent: 0 };
-                }
-                waiting
-            });
+    /// Starts jobs from the front of the line while running slots are free.
+    fn start_waiting(&mut self) {
+        while !self.closed && *self.running.borrow() < self.limits.running {
+            let Some(id) = self.waiting.pop_front() else {
+                break;
+            };
+            let Some(job) = self.jobs.get_mut(&id) else {
+                continue;
+            };
+            job.status.send_replace(Status::Running { percent: 0 });
+            job.status_since = Instant::now();
+            job.has_slot = true;
+            self.running.send_modify(|running| *running += 1);
         }
         self.number_waiting();
+    }
+
+    /// Frees the running slot of job `id`, whose work has been dropped, and starts the next
+    /// job in line.
+    fn free_slot(&mut self, id: &JobId) {
+        let Some(job) = self.jobs.get_mut(id).filter(|job| job.has_slot) else {
+            return;
+        };
+        job.has_slot = false;
+        if matches!(*job.status.borrow(), Status::Running { .. }) {
+            // The work stopped without an outcome: it panicked.
+            tracing::error!(job = %id, "stopped without a result");
+            job.status.send_replace(Status::Failed);
+            job.status_since = Instant::now();
+        }
+        self.running.send_modify(|running| *running -= 1);
+        self.start_waiting();
     }
 
     fn finish(&mut self, id: &JobId, outcome: anyhow::Result<R>) {
@@ -449,14 +470,18 @@ impl<R> State<R> {
         job.status_since = Instant::now();
     }
 
+    /// Cancels job `id`. A running job keeps its slot until its task has dropped the work.
     fn cancel(&mut self, id: &JobId, reason: CancelReason) {
         self.waiting.retain(|waiting| waiting != id);
-        if let Some(job) = self.jobs.get_mut(id)
-            && !job.status.borrow().is_finished()
-        {
-            job.status.send_replace(Status::Cancelled(reason));
-            job.status_since = Instant::now();
-        }
+        let Some(job) = self
+            .jobs
+            .get_mut(id)
+            .filter(|job| !job.status.borrow().is_finished())
+        else {
+            return;
+        };
+        job.status.send_replace(Status::Cancelled(reason));
+        job.status_since = Instant::now();
         self.number_waiting();
     }
 
@@ -503,6 +528,19 @@ impl<R: Send + Sync + 'static> Drop for Upload<R> {
         if !self.submitted {
             self.queue.lock().jobs.remove(&self.id);
         }
+    }
+}
+
+/// Frees a job's running slot when its task ends, after the work has been dropped, however
+/// the task ended: finished, cancelled or panicked.
+struct Slot<R: Send + Sync + 'static> {
+    queue: Queue<R>,
+    id: JobId,
+}
+
+impl<R: Send + Sync + 'static> Drop for Slot<R> {
+    fn drop(&mut self) {
+        self.queue.lock().free_slot(&self.id);
     }
 }
 
@@ -568,8 +606,13 @@ mod tests {
     type Outcome = anyhow::Result<&'static str>;
 
     fn queue() -> Queue<&'static str> {
+        queue_for(3)
+    }
+
+    /// A queue taking `jobs` jobs at once and running one at a time.
+    fn queue_for(jobs: usize) -> Queue<&'static str> {
         Queue::new(Limits {
-            jobs: 3,
+            jobs,
             running: 1,
             upload_start: Duration::from_secs(60),
             unwatched: Duration::from_secs(30),
@@ -627,6 +670,45 @@ mod tests {
         assert_eq!(status(&queue, &c), "Waiting { position: 1 }");
         assert_eq!(queue.result(&a).as_deref(), Some(&"a"));
         assert!(queue.result(&b).is_none());
+    }
+
+    // Like request handlers, submit from a task on the runtime's worker thread, which runs
+    // the tasks it spawns latest first. Jobs must still start in the order their pages show.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn starts_jobs_in_the_order_their_pages_show() {
+        let queue = queue_for(10);
+        let (started, mut starts) = tokio::sync::mpsc::unbounded_channel();
+        let submitting = queue.clone();
+        let finishers = tokio::spawn(async move {
+            let mut finishers = Vec::new();
+            for n in 1..=10 {
+                let id = submitting.reserve(client(n)).unwrap();
+                let (finish, finished) = oneshot::channel::<Outcome>();
+                let started = started.clone();
+                submitting
+                    .begin_upload(&id)
+                    .unwrap()
+                    .submit(move |_progress| async move {
+                        started.send(n).unwrap();
+                        finished.await.unwrap()
+                    })
+                    .unwrap();
+                let position = match *submitting.lock().jobs[&id].status.borrow() {
+                    Status::Running { .. } => 0,
+                    Status::Waiting { position } => position,
+                    _ => panic!("job {n} neither runs nor waits"),
+                };
+                assert_eq!(position, usize::from(n) - 1, "job {n}");
+                finishers.push(finish);
+            }
+            finishers
+        })
+        .await
+        .unwrap();
+        for (n, finish) in (1..=10).zip(finishers) {
+            assert_eq!(starts.recv().await, Some(n));
+            finish.send(Ok("done")).unwrap();
+        }
     }
 
     #[tokio::test(start_paused = true)]
@@ -721,6 +803,40 @@ mod tests {
         tokio::time::advance(Duration::from_secs(1)).await;
         queue.sweep();
         assert_eq!(status(&queue, &b), "Cancelled(Unwatched)");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_cancelled_job_keeps_its_slot_until_its_work_is_dropped() {
+        let queue = queue();
+        let (a, finish_a) = submit(&queue, 1);
+        let (b, _finish_b) = submit(&queue, 2);
+        let _watch_b = queue.watch(&b).unwrap();
+        settle().await;
+
+        tokio::time::advance(Duration::from_secs(31)).await;
+        queue.sweep();
+        assert_eq!(status(&queue, &a), "Cancelled(Unwatched)");
+        assert!(!finish_a.is_closed(), "the cancelled work is still alive");
+        assert_eq!(status(&queue, &b), "Waiting { position: 1 }");
+
+        settle().await;
+        assert!(finish_a.is_closed(), "the cancelled work is dropped");
+        assert_eq!(status(&queue, &b), "Running { percent: 0 }");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_job_whose_work_panics_fails_and_frees_its_slot() {
+        let queue = queue();
+        let id = queue.reserve(client(1)).unwrap();
+        queue
+            .begin_upload(&id)
+            .unwrap()
+            .submit(|_progress| async { panic!("a bug in the tool") })
+            .unwrap();
+        let (next, _finish_next) = submit(&queue, 2);
+        settle().await;
+        assert_eq!(status(&queue, &id), "Failed");
+        assert_eq!(status(&queue, &next), "Running { percent: 0 }");
     }
 
     #[tokio::test(start_paused = true)]
