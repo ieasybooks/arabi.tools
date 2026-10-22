@@ -5,7 +5,7 @@ use std::process::Stdio;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use anyhow::{Context, bail};
+use anyhow::{Context, bail, ensure};
 use serde::Deserialize;
 use tafrigh::audio::Decoder;
 use tafrigh::output::{BuiltinFormat, OutputWriter};
@@ -13,6 +13,7 @@ use tafrigh::segment::silero::{SileroConfig, SileroSegmenter};
 use tafrigh::{ChunkOptions, ChunkedTranscriber, Segment, TranscribeEvent, Transcriber};
 use tafrigh_wit::{WitConfig, WitRecognizer};
 use tempfile::TempPath;
+use tokio::sync::watch;
 
 use crate::queue::{Limits, Queue, Rejection, Upload};
 
@@ -52,6 +53,7 @@ pub struct Language {
     /// Wit's language code, e.g. `ar`.
     pub code: String,
     transcriber: Arc<ChunkedTranscriber>,
+    max_duration: Duration,
 }
 
 /// A finished transcription.
@@ -85,6 +87,15 @@ impl Transcription {
     /// Sets up one transcriber per language, checking with Wit that each language's tokens
     /// belong to apps of that language.
     pub async fn new(languages: Vec<(String, WitConfig)>) -> anyhow::Result<Self> {
+        Self::new_with_max_duration(languages, MAX_DURATION).await
+    }
+
+    /// Sets up transcribers with a custom decoded-audio limit. The upfront metadata check
+    /// still uses [`MAX_DURATION`].
+    pub async fn new_with_max_duration(
+        languages: Vec<(String, WitConfig)>,
+        max_duration: Duration,
+    ) -> anyhow::Result<Self> {
         let decoder = Decoder::default();
         decoder.check().await.context("ffmpeg is required")?;
         let segmenter = SileroSegmenter::new(SileroConfig::default())?;
@@ -105,6 +116,7 @@ impl Transcription {
             configured.push(Language {
                 code,
                 transcriber: Arc::new(transcriber),
+                max_duration,
             });
         }
         Ok(Self {
@@ -138,15 +150,33 @@ impl Language {
     ) -> Result<(), Rejection> {
         let transcriber = Arc::clone(&self.transcriber);
         let language = self.code.clone();
+        let max_duration = self.max_duration;
         upload.submit(move |progress| async move {
             let tracker = Mutex::new(Tracker::default());
+            let (limit_exceeded, mut exceeded) = watch::channel(false);
             let report = |event: TranscribeEvent| {
+                if exceeds_duration_limit(&event, max_duration) {
+                    limit_exceeded.send_replace(true);
+                    return;
+                }
                 let mut tracker = tracker.lock().unwrap_or_else(PoisonError::into_inner);
                 if let Some(percent) = tracker.update(&event) {
                     progress.set(percent);
                 }
             };
-            let segments = transcriber.transcribe(&audio, &report).await?;
+            let segments = tokio::select! {
+                biased;
+                _ = exceeded.wait_for(|exceeded| *exceeded) => {
+                    bail!("decoded audio exceeds the {max_duration:?} duration limit");
+                }
+                result = transcriber.transcribe(&audio, &report) => result,
+            };
+            // A final decoded event can arrive in the same poll as transcription completes.
+            ensure!(
+                !*exceeded.borrow(),
+                "decoded audio exceeds the {max_duration:?} duration limit"
+            );
+            let segments = segments?;
             drop(audio);
             render(name, language, &segments)
         })
@@ -251,6 +281,10 @@ pub async fn check_audio(path: &Path) -> Result<(), AudioProblem> {
     }
 }
 
+fn exceeds_duration_limit(event: &TranscribeEvent, max_duration: Duration) -> bool {
+    matches!(event, TranscribeEvent::Decoded { seconds } if *seconds > max_duration.as_secs_f64())
+}
+
 /// Writes the transcript files the site offers and reads them back.
 fn render(name: String, language: String, segments: &[Segment]) -> anyhow::Result<Transcript> {
     let dir = tempfile::tempdir()?;
@@ -320,6 +354,31 @@ impl Tracker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_decoded_audio_past_the_limit_triggers_the_cutoff() {
+        for limit in [Duration::from_secs(2), MAX_DURATION] {
+            let seconds = limit.as_secs_f64();
+            assert!(!exceeds_duration_limit(
+                &TranscribeEvent::Started {
+                    duration: Some(seconds + 1.0),
+                },
+                limit,
+            ));
+            for decoded in [seconds - 0.001, seconds] {
+                assert!(!exceeds_duration_limit(
+                    &TranscribeEvent::Decoded { seconds: decoded },
+                    limit,
+                ));
+            }
+            assert!(exceeds_duration_limit(
+                &TranscribeEvent::Decoded {
+                    seconds: seconds + 0.001,
+                },
+                limit,
+            ));
+        }
+    }
 
     #[test]
     fn accepts_mp3_and_m4a_names() {

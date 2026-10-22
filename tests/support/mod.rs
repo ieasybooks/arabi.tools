@@ -6,7 +6,7 @@ use anyhow::{Context, bail};
 use arlang_tools::app;
 use arlang_tools::config::Config;
 use arlang_tools::queue::{JobId, Limits, Queue, Status, Upload};
-use arlang_tools::tools::transcription::{self, Transcript, Transcription};
+use arlang_tools::tools::transcription::{self, MAX_DURATION, Transcript, Transcription};
 use reqwest::{Client, Response, StatusCode, multipart};
 use serde_json::{Value, json};
 use tafrigh_wit::WitConfig;
@@ -57,6 +57,26 @@ impl Assets {
     }
 }
 
+/// How a [`TestApp`] differs from the site's own setup; `Setup::default()` is the same.
+pub struct Setup<'a> {
+    /// `(language, token, text)` per Wit app, where `text` is what every dictation request
+    /// with that token returns.
+    pub languages: &'a [(&'a str, &'a str, &'a str)],
+    pub limits: Limits,
+    /// Longest decoded audio a job may have.
+    pub max_duration: Duration,
+}
+
+impl Default for Setup<'_> {
+    fn default() -> Self {
+        Self {
+            languages: &[ARABIC],
+            limits: transcription::limits(),
+            max_duration: MAX_DURATION,
+        }
+    }
+}
+
 pub struct TestApp {
     pub client: Client,
     pub transcription: Transcription,
@@ -69,23 +89,14 @@ pub struct TestApp {
 
 impl TestApp {
     pub async fn start() -> anyhow::Result<Self> {
-        Self::start_with(&[ARABIC], transcription::limits()).await
+        Self::start_with(Setup::default()).await
     }
 
-    pub async fn start_with_limits(limits: Limits) -> anyhow::Result<Self> {
-        Self::start_with(&[ARABIC], limits).await
-    }
-
-    pub async fn start_with_languages(languages: &[(&str, &str, &str)]) -> anyhow::Result<Self> {
-        Self::start_with(languages, transcription::limits()).await
-    }
-
-    /// Starts the site against a Wit mock with one app per `(language, token, text)`, where
-    /// `text` is what every dictation request with that token returns.
-    async fn start_with(languages: &[(&str, &str, &str)], limits: Limits) -> anyhow::Result<Self> {
+    /// Starts the site against a Wit mock with one app per configured language.
+    pub async fn start_with(setup: Setup<'_>) -> anyhow::Result<Self> {
         let wit = MockServer::start().await;
         let mut configured = Vec::new();
-        for &(code, token, text) in languages {
+        for &(code, token, text) in setup.languages {
             let authorization = format!("Bearer {token}");
             Mock::given(method("GET"))
                 .and(path("/apps"))
@@ -107,8 +118,9 @@ impl TestApp {
             wit_config.request_timeout = Duration::from_secs(5);
             configured.push((code.to_owned(), wit_config));
         }
-        let mut transcription = Transcription::new(configured).await?;
-        transcription.queue = Queue::new(limits);
+        let mut transcription =
+            Transcription::new_with_max_duration(configured, setup.max_duration).await?;
+        transcription.queue = Queue::new(setup.limits);
         let config = Config {
             host: "127.0.0.1".into(),
             port: 0,
