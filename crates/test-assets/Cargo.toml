@@ -1,0 +1,11 @@
+[package]
+name = "test-assets"
+description = "Bundles a test binary's Topcoat assets for the site's integration tests."
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+publish = false
+
+[dependencies]
+topcoat-asset = { version = "0.10.0", features = ["bundler"] }
