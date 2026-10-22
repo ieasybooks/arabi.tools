@@ -54,13 +54,17 @@ impl FromStr for JobId {
     type Err = InvalidJobId;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let valid = s.len() == 32 && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
-        if valid {
+        if is_random_id(s) {
             Ok(Self(s.to_owned()))
         } else {
             Err(InvalidJobId)
         }
     }
+}
+
+/// Whether `s` is written like a random 128-bit id: 32 lowercase hex digits.
+fn is_random_id(s: &str) -> bool {
+    s.len() == 32 && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
 /// A string that is not a job id.
@@ -74,6 +78,20 @@ impl fmt::Display for InvalidJobId {
 }
 
 impl std::error::Error for InvalidJobId {}
+
+/// Identifies one browser tab's upload attempts; the tab chooses it at random. A tab that
+/// lost its reservation, for example by reloading before its upload started, reserves again
+/// with the same attempt to replace it. Another tab or browser on the same connection has
+/// another attempt, so it cannot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Attempt(String);
+
+impl Attempt {
+    /// The attempt written as 32 lowercase hex digits, like a job id.
+    pub fn parse(s: &str) -> Option<Self> {
+        is_random_id(s).then(|| Self(s.to_owned()))
+    }
+}
 
 /// Where a job is in its life.
 #[derive(Debug)]
@@ -169,6 +187,8 @@ struct State<R> {
 
 struct Job<R> {
     client: Option<IpAddr>,
+    /// The attempt that reserved the job, if the browser named one.
+    attempt: Option<Attempt>,
     status: watch::Sender<Status<R>>,
     /// Open job pages.
     watchers: usize,
@@ -197,20 +217,34 @@ impl<R: Send + Sync + 'static> Queue<R> {
         }
     }
 
-    /// Whether `client` could reserve a job right now.
+    /// Whether `client` could reserve a job right now. Its unused reservation does not count:
+    /// the attempt that made it may reserve again.
     pub fn availability(&self, client: Option<IpAddr>) -> Result<(), Rejection> {
-        self.lock().admits(client)
+        self.lock().admits(client, Job::is_unused_reservation)
     }
 
-    /// Reserves a job for `client`, to be filled by an upload.
-    pub fn reserve(&self, client: Option<IpAddr>) -> Result<JobId, Rejection> {
+    /// Reserves a job for `client`, to be filled by an upload. It replaces the client's
+    /// unused reservation from the same `attempt`, which the browser has lost.
+    pub fn reserve(
+        &self,
+        client: Option<IpAddr>,
+        attempt: Option<Attempt>,
+    ) -> Result<JobId, Rejection> {
+        let lost = |job: &Job<R>| {
+            job.client == client
+                && attempt.is_some()
+                && job.attempt == attempt
+                && job.is_unused_reservation()
+        };
         let mut state = self.lock();
-        state.admits(client)?;
+        state.admits(client, lost)?;
+        state.jobs.retain(|_, job| !lost(job));
         let id = JobId::random();
         state.jobs.insert(
             id.clone(),
             Job {
                 client,
+                attempt,
                 status: watch::Sender::new(Status::Reserved),
                 watchers: 0,
                 uploading: false,
@@ -233,7 +267,7 @@ impl<R: Send + Sync + 'static> Queue<R> {
         let job = state
             .jobs
             .get_mut(id)
-            .filter(|job| !job.uploading && matches!(*job.status.borrow(), Status::Reserved))
+            .filter(|job| job.is_unused_reservation())
             .ok_or(Rejection::NoReservation)?;
         job.uploading = true;
         Ok(Upload {
@@ -396,8 +430,20 @@ impl<R: Send + Sync + 'static> Queue<R> {
     }
 }
 
+impl<R> Job<R> {
+    /// Reserved, with no upload filling it.
+    fn is_unused_reservation(&self) -> bool {
+        !self.uploading && matches!(*self.status.borrow(), Status::Reserved)
+    }
+}
+
 impl<R> State<R> {
-    fn admits(&self, client: Option<IpAddr>) -> Result<(), Rejection> {
+    /// Whether `client` may reserve a job once its jobs that `replaced` picks are replaced.
+    fn admits(
+        &self,
+        client: Option<IpAddr>,
+        replaced: impl Fn(&Job<R>) -> bool,
+    ) -> Result<(), Rejection> {
         if self.closed {
             return Err(Rejection::Closed);
         }
@@ -407,6 +453,9 @@ impl<R> State<R> {
                 continue;
             }
             if job.client == client {
+                if replaced(job) {
+                    continue;
+                }
                 return Err(Rejection::ActiveJob);
             }
             active += 1;
@@ -626,9 +675,14 @@ mod tests {
         Some(IpAddr::V4(Ipv4Addr::new(10, 0, 0, n)))
     }
 
+    /// An attempt, optional like the one a reservation request may name.
+    fn attempt(n: u8) -> Option<Attempt> {
+        Attempt::parse(&format!("{n:032x}"))
+    }
+
     /// Reserves and uploads a job for client `n`; its work ends with what the sender sends.
     fn submit(queue: &Queue<&'static str>, n: u8) -> (JobId, oneshot::Sender<Outcome>) {
-        let id = queue.reserve(client(n)).unwrap();
+        let id = queue.reserve(client(n), None).unwrap();
         let (finish, finished) = oneshot::channel::<Outcome>();
         queue
             .begin_upload(&id)
@@ -682,7 +736,7 @@ mod tests {
         let finishers = tokio::spawn(async move {
             let mut finishers = Vec::new();
             for n in 1..=10 {
-                let id = submitting.reserve(client(n)).unwrap();
+                let id = submitting.reserve(client(n), None).unwrap();
                 let (finish, finished) = oneshot::channel::<Outcome>();
                 let started = started.clone();
                 submitting
@@ -714,7 +768,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn reports_progress_and_failures() {
         let queue = queue();
-        let id = queue.reserve(client(1)).unwrap();
+        let id = queue.reserve(client(1), None).unwrap();
         let (fail, failed) = oneshot::channel::<()>();
         queue
             .begin_upload(&id)
@@ -736,24 +790,68 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn limits_jobs_in_total_and_per_client() {
         let queue = queue();
-        let first = queue.reserve(client(1)).unwrap();
-        assert_eq!(queue.reserve(client(1)), Err(Rejection::ActiveJob));
-        queue.reserve(client(2)).unwrap();
-        queue.reserve(client(3)).unwrap();
+        let first = queue.reserve(client(1), None).unwrap();
+        let uploading = queue.begin_upload(&first).unwrap();
+        assert_eq!(queue.reserve(client(1), None), Err(Rejection::ActiveJob));
+        drop(uploading);
+        let first = queue.reserve(client(1), None).unwrap();
+        queue.reserve(client(2), None).unwrap();
+        queue.reserve(client(3), None).unwrap();
         assert_eq!(queue.availability(client(4)), Err(Rejection::Full));
-        assert_eq!(queue.reserve(client(4)), Err(Rejection::Full));
+        assert_eq!(queue.reserve(client(4), None), Err(Rejection::Full));
 
         // An upload that fails releases its reservation.
         drop(queue.begin_upload(&first).unwrap());
         assert_eq!(status(&queue, &first), "forgotten");
-        queue.reserve(client(4)).unwrap();
+        queue.reserve(client(4), None).unwrap();
         assert_eq!(queue.availability(client(1)), Err(Rejection::Full));
+    }
+
+    // A tab can lose its reservation, e.g. when the page reloads before its upload starts;
+    // reserving again from the same attempt must not wait for the lost one to expire.
+    #[tokio::test(start_paused = true)]
+    async fn reserving_again_from_the_same_attempt_replaces_its_unused_reservation() {
+        let queue = queue();
+        let lost = queue.reserve(client(1), attempt(1)).unwrap();
+        assert_eq!(queue.availability(client(1)), Ok(()));
+        let retry = queue.reserve(client(1), attempt(1)).unwrap();
+        assert_eq!(status(&queue, &lost), "forgotten");
+        assert!(matches!(
+            queue.begin_upload(&lost),
+            Err(Rejection::NoReservation)
+        ));
+
+        // A reservation being uploaded, waiting or running still counts.
+        let upload = queue.begin_upload(&retry).unwrap();
+        assert_eq!(
+            queue.reserve(client(1), attempt(1)),
+            Err(Rejection::ActiveJob)
+        );
+        upload.submit(|_progress| async { Ok("done") }).unwrap();
+        assert_eq!(
+            queue.reserve(client(1), attempt(1)),
+            Err(Rejection::ActiveJob)
+        );
+    }
+
+    // Another tab or browser on the same connection may not take over a reservation whose
+    // upload is still on its way.
+    #[tokio::test(start_paused = true)]
+    async fn other_attempts_from_the_same_client_cannot_replace_a_reservation() {
+        let queue = queue();
+        let first = queue.reserve(client(1), attempt(1)).unwrap();
+        for other in [attempt(2), None] {
+            assert_eq!(queue.reserve(client(1), other), Err(Rejection::ActiveJob));
+        }
+        assert_eq!(status(&queue, &first), "Reserved");
+        queue.reserve(client(2), attempt(1)).unwrap();
+        assert_eq!(status(&queue, &first), "Reserved");
     }
 
     #[tokio::test(start_paused = true)]
     async fn uploads_fill_only_existing_reservations_once() {
         let queue = queue();
-        let id = queue.reserve(client(1)).unwrap();
+        let id = queue.reserve(client(1), None).unwrap();
         let other: JobId = "0123456789abcdef0123456789abcdef".parse().unwrap();
         assert!(matches!(
             queue.begin_upload(&other),
@@ -770,8 +868,8 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn forgets_reservations_whose_upload_never_starts() {
         let queue = queue();
-        let idle = queue.reserve(client(1)).unwrap();
-        let uploading = queue.reserve(client(2)).unwrap();
+        let idle = queue.reserve(client(1), None).unwrap();
+        let uploading = queue.reserve(client(2), None).unwrap();
         let _upload = queue.begin_upload(&uploading).unwrap();
         tokio::time::advance(Duration::from_secs(61)).await;
         queue.sweep();
@@ -827,7 +925,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn a_job_whose_work_panics_fails_and_frees_its_slot() {
         let queue = queue();
-        let id = queue.reserve(client(1)).unwrap();
+        let id = queue.reserve(client(1), None).unwrap();
         queue
             .begin_upload(&id)
             .unwrap()
@@ -887,7 +985,7 @@ mod tests {
         let queue = queue();
         let (a, finish_a) = submit(&queue, 1);
         let (b, _finish_b) = submit(&queue, 2);
-        let reserved = queue.reserve(client(3)).unwrap();
+        let reserved = queue.reserve(client(3), None).unwrap();
         settle().await;
 
         let shutdown = tokio::spawn({
@@ -897,7 +995,7 @@ mod tests {
         settle().await;
         assert_eq!(status(&queue, &b), "Cancelled(Shutdown)");
         assert_eq!(status(&queue, &reserved), "Cancelled(Shutdown)");
-        assert_eq!(queue.reserve(client(4)), Err(Rejection::Closed));
+        assert_eq!(queue.reserve(client(4), None), Err(Rejection::Closed));
         assert!(!shutdown.is_finished());
 
         finish_a.send(Ok("a")).unwrap();

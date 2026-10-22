@@ -23,6 +23,8 @@ pub const ARABIC_TEXT: &str = "مرحبا بالعالم";
 pub const MP3: &[u8] = include_bytes!("../fixtures/speech.mp3");
 pub const M4A: &[u8] = include_bytes!("../fixtures/speech.m4a");
 pub const UNKNOWN_JOB: &str = "/transcribe/jobs/00000000000000000000000000000000";
+/// The upload attempt of [`TestApp::reserve`], as one browser tab would send it.
+pub const ATTEMPT: &str = "a77e3b7a1e5d4c0f9b2a6c8d0e1f2a3b";
 
 struct Assets {
     bundle: AssetBundle,
@@ -139,10 +141,12 @@ impl TestApp {
         format!("{}{path}", self.base_url)
     }
 
+    /// Reserves a job like a browser tab whose upload attempt is [`ATTEMPT`].
     pub async fn reserve(&self) -> anyhow::Result<String> {
         let response = self
             .client
             .post(self.url("/transcribe/jobs"))
+            .form(&[("attempt", ATTEMPT)])
             .send()
             .await?;
         let reply = json_reply(response, StatusCode::OK).await?;

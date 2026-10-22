@@ -245,9 +245,65 @@ async fn uploading_to_an_unknown_job_returns_conflict_with_a_json_error() -> any
 }
 
 #[tokio::test]
-async fn a_second_reservation_from_the_same_ip_returns_too_many_requests() -> anyhow::Result<()> {
+async fn reserving_again_from_the_same_attempt_replaces_an_unused_reservation() -> anyhow::Result<()>
+{
     let app = TestApp::start().await?;
-    app.reserve().await?;
+    let lost = app.reserve().await?;
+    let retry = app.reserve().await?;
+    assert_ne!(lost, retry);
+    assert_error(
+        app.upload(&lost, "درس.mp3", MP3, None).await?,
+        StatusCode::CONFLICT,
+        "انتهت مهلة هذا الرفع. حاول مرة أخرى.",
+    )
+    .await?;
+    json_reply(
+        app.upload(&retry, "درس.mp3", MP3, None).await?,
+        StatusCode::OK,
+    )
+    .await?;
+    app.stop().await
+}
+
+// Another tab or browser on the same connection must not take over a reservation whose
+// upload is still on its way, e.g. held by a proxy until it is complete.
+#[tokio::test]
+async fn another_attempt_from_the_same_ip_cannot_replace_a_reservation() -> anyhow::Result<()> {
+    let app = TestApp::start().await?;
+    let upload = app.reserve().await?;
+    for form in [
+        vec![("attempt", "0123456789abcdef0123456789abcdef")],
+        vec![],
+    ] {
+        let response = app
+            .client
+            .post(app.url("/transcribe/jobs"))
+            .form(&form)
+            .send()
+            .await?;
+        assert_error(
+            response,
+            StatusCode::TOO_MANY_REQUESTS,
+            "لديك تفريغ لم ينتهِ بعد. انتظر حتى ينتهي، ثم ارفع ملفًا آخر.",
+        )
+        .await?;
+    }
+    json_reply(
+        app.upload(&upload, "درس.mp3", MP3, None).await?,
+        StatusCode::OK,
+    )
+    .await?;
+    app.stop().await
+}
+
+#[tokio::test]
+async fn reserving_while_the_same_ip_uploads_returns_too_many_requests() -> anyhow::Result<()> {
+    let app = TestApp::start().await?;
+    let queue = &app.transcription.queue;
+    let id = queue
+        .reserve(Some(IpAddr::V4(Ipv4Addr::LOCALHOST)), None)
+        .expect("an empty queue takes a reservation");
+    let upload = queue.begin_upload(&id).expect("the reservation is unused");
     // A separate connection with no cookies must still count as the same client IP.
     let client = reqwest::Client::builder()
         .no_proxy()
@@ -260,6 +316,7 @@ async fn a_second_reservation_from_the_same_ip_returns_too_many_requests() -> an
         "لديك تفريغ لم ينتهِ بعد. انتظر حتى ينتهي، ثم ارفع ملفًا آخر.",
     )
     .await?;
+    drop(upload);
     app.stop().await
 }
 
@@ -269,7 +326,7 @@ async fn a_full_queue_returns_service_unavailable_with_a_json_error() -> anyhow:
     for client in 1..=100 {
         app.transcription
             .queue
-            .reserve(Some(IpAddr::V4(Ipv4Addr::new(192, 0, 2, client))))
+            .reserve(Some(IpAddr::V4(Ipv4Addr::new(192, 0, 2, client))), None)
             .expect("queue should have space");
     }
     let response = app.client.post(app.url("/transcribe/jobs")).send().await?;
