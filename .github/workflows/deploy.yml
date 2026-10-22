@@ -1,0 +1,149 @@
+name: Deploy
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build and deploy, for example v0.1.0
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  image:
+    name: Publish image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      revision: ${{ steps.source.outputs.revision }}
+    steps:
+      - name: Select the release tag
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: |
+          tag=${RELEASE_TAG:-$REQUESTED_TAG}
+          if ! [[ $tag =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo '::error::Choose a release tag such as v0.1.0.'
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: refs/tags/${{ steps.release.outputs.tag }}
+      - name: Match the tag to the crate version
+        id: source
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          version = tomllib.loads(Path("Cargo.toml").read_text())["package"]["version"]
+          if version != os.environ["VERSION"]:
+              raise SystemExit("The release tag must match Cargo.toml's version.")
+          PY
+          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v4.4.1
+      - uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/ieasybooks/arlang.tools:${{ steps.release.outputs.version }}
+            ghcr.io/ieasybooks/arlang.tools:latest
+          labels: |
+            org.opencontainers.image.title=arlang-tools
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.release.outputs.version }}
+            org.opencontainers.image.revision=${{ steps.source.outputs.revision }}
+          cache-from: type=gha,scope=arlang-tools
+          cache-to: type=gha,mode=max,scope=arlang-tools
+
+  deploy:
+    name: Update production
+    needs: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.image.outputs.revision }}
+      - name: Deploy over SSH
+        env:
+          VERSION: ${{ needs.image.outputs.version }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_DIRECTORY: ${{ vars.DEPLOY_DIRECTORY }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_PORT DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS DEPLOY_DIRECTORY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Set $name in the production environment."
+              exit 1
+            fi
+          done
+          if ! [[ $DEPLOY_DIRECTORY =~ ^/[a-zA-Z0-9._/-]+$ ]] || [ "$DEPLOY_DIRECTORY" = / ]; then
+            echo '::error::DEPLOY_DIRECTORY must be an absolute path with letters, numbers, dots, dashes, underscores, or slashes.'
+            exit 1
+          fi
+          if ! [[ $DEPLOY_PORT =~ ^[0-9]+$ ]]; then
+            echo '::error::DEPLOY_PORT must be a port number.'
+            exit 1
+          fi
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host arlang
+            HostName $DEPLOY_HOST
+            User $DEPLOY_USER
+            Port $DEPLOY_PORT
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            BatchMode yes
+          EOF
+          # The directory is validated above before it reaches the remote shell.
+          # shellcheck disable=SC2029
+          ssh arlang "mkdir -p '$DEPLOY_DIRECTORY/deploy'"
+          scp compose.yaml "arlang:$DEPLOY_DIRECTORY/compose.yaml"
+          scp deploy/deploy.sh "arlang:$DEPLOY_DIRECTORY/deploy/deploy.sh"
+          # Pass the short-lived registry token on stdin, never as an argument.
+          # shellcheck disable=SC2029
+          printf '%s' "$REGISTRY_TOKEN" |
+            ssh arlang "sh '$DEPLOY_DIRECTORY/deploy/deploy.sh' $(printf %q "$VERSION") $(printf %q "$GITHUB_ACTOR")"
+          echo "Deployed ghcr.io/ieasybooks/arlang.tools:$VERSION; app health check passed." >> "$GITHUB_STEP_SUMMARY"

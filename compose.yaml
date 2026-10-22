@@ -1,0 +1,39 @@
+name: arlang-tools
+
+services:
+  app:
+    image: ghcr.io/ieasybooks/arlang.tools:${ARLANG_TAG:?Set ARLANG_TAG to a released version}
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3000"
+      TMPDIR: /tmp
+      CLIENT_IP_HEADER: CF-Connecting-IP
+    restart: unless-stopped
+    stop_grace_period: 5m
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, --show-error, --max-time, "4", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.10.3
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?Set TUNNEL_TOKEN in .env}
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
