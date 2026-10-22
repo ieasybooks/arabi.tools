@@ -319,7 +319,6 @@ impl<R: Send + Sync + 'static> Queue<R> {
             }
         });
         for id in unwatched_jobs {
-            tracing::info!(job = %id, "cancelling: nobody is watching");
             state.cancel(&id, CancelReason::Unwatched);
         }
     }
@@ -475,10 +474,18 @@ impl<R> State<R> {
             let Some(job) = self.jobs.get_mut(&id) else {
                 continue;
             };
+            let waited = job.status_since.elapsed();
             job.status.send_replace(Status::Running { percent: 0 });
             job.status_since = Instant::now();
             job.has_slot = true;
             self.running.send_modify(|running| *running += 1);
+            tracing::info!(
+                job = %id,
+                waited_secs = waited.as_secs(),
+                running = *self.running.borrow(),
+                waiting = self.waiting.len(),
+                "started"
+            );
         }
         self.number_waiting();
     }
@@ -492,7 +499,8 @@ impl<R> State<R> {
         job.has_slot = false;
         if matches!(*job.status.borrow(), Status::Running { .. }) {
             // The work stopped without an outcome: it panicked.
-            tracing::error!(job = %id, "stopped without a result");
+            let ran_secs = job.status_since.elapsed().as_secs();
+            tracing::error!(job = %id, ran_secs, "stopped without a result");
             job.status.send_replace(Status::Failed);
             job.status_since = Instant::now();
         }
@@ -508,10 +516,14 @@ impl<R> State<R> {
         else {
             return;
         };
+        let ran_secs = job.status_since.elapsed().as_secs();
         let status = match outcome {
-            Ok(result) => Status::Done(Arc::new(result)),
+            Ok(result) => {
+                tracing::info!(job = %id, ran_secs, "done");
+                Status::Done(Arc::new(result))
+            }
             Err(error) => {
-                tracing::warn!(job = %id, "failed: {error:#}");
+                tracing::warn!(job = %id, ran_secs, "failed: {error:#}");
                 Status::Failed
             }
         };
@@ -529,6 +541,13 @@ impl<R> State<R> {
         else {
             return;
         };
+        tracing::info!(
+            job = %id,
+            in_status_secs = job.status_since.elapsed().as_secs(),
+            was_running = matches!(*job.status.borrow(), Status::Running { .. }),
+            ?reason,
+            "cancelled"
+        );
         job.status.send_replace(Status::Cancelled(reason));
         job.status_since = Instant::now();
         self.number_waiting();
