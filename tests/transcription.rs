@@ -1,7 +1,7 @@
 mod support;
 
 use std::net::{IpAddr, Ipv4Addr};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use arlang_tools::queue::{JobId, Limits, Status};
@@ -9,7 +9,7 @@ use arlang_tools::tools::transcription::{MAX_UPLOAD_BYTES, limits};
 use reqwest::{StatusCode, multipart};
 use serde_json::json;
 use support::{
-    ARABIC_TEXT, ENGLISH_TEXT, M4A, MP3, TestApp, UNKNOWN_JOB, assert_error, json_reply,
+    ARABIC_TEXT, ENGLISH_TEXT, M4A, MP3, Setup, TestApp, UNKNOWN_JOB, assert_error, json_reply,
     successful_dictation,
 };
 use wiremock::matchers::{header, method, path};
@@ -359,10 +359,13 @@ async fn silence_finishes_with_localized_no_speech_and_empty_downloads() -> anyh
 
 #[tokio::test]
 async fn recording_language_picker_uses_the_selected_tokens_and_transcript() -> anyhow::Result<()> {
-    let app = TestApp::start_with_languages(&[
-        ("ar", "dev-ar", ARABIC_TEXT),
-        ("en", "dev-en", ENGLISH_TEXT),
-    ])
+    let app = TestApp::start_with(Setup {
+        languages: &[
+            ("ar", "dev-ar", ARABIC_TEXT),
+            ("en", "dev-en", ENGLISH_TEXT),
+        ],
+        ..Setup::default()
+    })
     .await?;
     for (locale, label, arabic, english) in [
         ("ar", "لغة التسجيل", "العربية", "الإنجليزية"),
@@ -487,6 +490,58 @@ async fn refuses_uploads_only_past_the_size_limit() -> anyhow::Result<()> {
             .iter()
             .all(|request| request.url.path() == "/apps"),
         "refused files must not reach dictation"
+    );
+    app.stop().await
+}
+
+#[tokio::test]
+async fn decoded_audio_over_limit_fails_and_allows_retry() -> anyhow::Result<()> {
+    let app = TestApp::start_with(Setup {
+        max_duration: Duration::from_secs(2),
+        ..Setup::default()
+    })
+    .await?;
+    // Wit takes 30 s to reply, so the job only fails in time if it stops while decoding.
+    Mock::given(method("POST"))
+        .and(path("/dictation"))
+        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(30)))
+        .with_priority(1)
+        .mount(&app.wit)
+        .await;
+    let upload = app.reserve().await?;
+    // The short recording passes the upfront metadata check, but exceeds the decoded limit.
+    let reply = json_reply(
+        app.upload(&upload, "speech.mp3", MP3, None).await?,
+        StatusCode::OK,
+    )
+    .await?;
+    let job = reply["next"].as_str().context("missing job page URL")?;
+    let started = Instant::now();
+    assert!(matches!(
+        app.wait_until_finished(job).await?,
+        Status::Failed
+    ));
+    assert!(
+        started.elapsed() < Duration::from_secs(10),
+        "the job waited for Wit instead of stopping"
+    );
+    let page = app
+        .client
+        .get(app.url(job))
+        .send()
+        .await?
+        .error_for_status()?
+        .text()
+        .await?;
+    assert!(
+        page.contains("تعذّر إكمال التفريغ. حاول مرة أخرى لاحقًا."),
+        "{page}"
+    );
+    assert_missing_downloads(&app, job).await?;
+    assert_ne!(
+        upload,
+        app.reserve().await?,
+        "the failed job must release its client"
     );
     app.stop().await
 }
@@ -619,10 +674,13 @@ async fn reserving_while_the_same_ip_uploads_returns_too_many_requests() -> anyh
 
 #[tokio::test]
 async fn accepted_upload_links_only_to_the_browsers_unfinished_job() -> anyhow::Result<()> {
-    let app = TestApp::start_with_limits(Limits {
-        running: 0,
-        unwatched: Duration::ZERO,
-        ..limits()
+    let app = TestApp::start_with(Setup {
+        limits: Limits {
+            running: 0,
+            unwatched: Duration::ZERO,
+            ..limits()
+        },
+        ..Setup::default()
     })
     .await?;
     let response = app.client.post(app.url("/transcribe/jobs")).send().await?;
