@@ -138,7 +138,7 @@ pub enum Rejection {
     Full,
     /// This client already has an unfinished job.
     ActiveJob,
-    /// No reservation with this id is waiting for an upload from this client.
+    /// No reservation with this id is waiting for an upload.
     NoReservation,
 }
 
@@ -219,9 +219,10 @@ impl<R: Send + Sync + 'static> Queue<R> {
         Ok(id)
     }
 
-    /// Starts filling the reservation `id` made by `client`. Dropping the returned upload
-    /// without submitting it releases the reservation.
-    pub fn begin_upload(&self, id: &JobId, client: Option<IpAddr>) -> Result<Upload<R>, Rejection> {
+    /// Starts filling the reservation `id`. Its random id is what ties the upload to it, so
+    /// the upload may arrive from another address, e.g. over IPv6 after reserving over IPv4.
+    /// Dropping the returned upload without submitting it releases the reservation.
+    pub fn begin_upload(&self, id: &JobId) -> Result<Upload<R>, Rejection> {
         let mut state = self.lock();
         if state.closed {
             return Err(Rejection::Closed);
@@ -229,11 +230,7 @@ impl<R: Send + Sync + 'static> Queue<R> {
         let job = state
             .jobs
             .get_mut(id)
-            .filter(|job| {
-                job.client == client
-                    && !job.uploading
-                    && matches!(*job.status.borrow(), Status::Reserved)
-            })
+            .filter(|job| !job.uploading && matches!(*job.status.borrow(), Status::Reserved))
             .ok_or(Rejection::NoReservation)?;
         job.uploading = true;
         Ok(Upload {
@@ -585,7 +582,7 @@ mod tests {
         let id = queue.reserve(client(n)).unwrap();
         let (finish, finished) = oneshot::channel::<Outcome>();
         queue
-            .begin_upload(&id, client(n))
+            .begin_upload(&id)
             .unwrap()
             .submit(|_progress| async move { finished.await.unwrap() })
             .unwrap();
@@ -632,7 +629,7 @@ mod tests {
         let id = queue.reserve(client(1)).unwrap();
         let (fail, failed) = oneshot::channel::<()>();
         queue
-            .begin_upload(&id, client(1))
+            .begin_upload(&id)
             .unwrap()
             .submit(|progress| async move {
                 progress.set(40);
@@ -659,28 +656,24 @@ mod tests {
         assert_eq!(queue.reserve(client(4)), Err(Rejection::Full));
 
         // An upload that fails releases its reservation.
-        drop(queue.begin_upload(&first, client(1)).unwrap());
+        drop(queue.begin_upload(&first).unwrap());
         assert_eq!(status(&queue, &first), "forgotten");
         queue.reserve(client(4)).unwrap();
         assert_eq!(queue.availability(client(1)), Err(Rejection::Full));
     }
 
     #[tokio::test(start_paused = true)]
-    async fn uploads_fill_only_their_own_reservation_once() {
+    async fn uploads_fill_only_existing_reservations_once() {
         let queue = queue();
         let id = queue.reserve(client(1)).unwrap();
         let other: JobId = "0123456789abcdef0123456789abcdef".parse().unwrap();
         assert!(matches!(
-            queue.begin_upload(&id, client(2)),
+            queue.begin_upload(&other),
             Err(Rejection::NoReservation)
         ));
+        let upload = queue.begin_upload(&id).unwrap();
         assert!(matches!(
-            queue.begin_upload(&other, client(1)),
-            Err(Rejection::NoReservation)
-        ));
-        let upload = queue.begin_upload(&id, client(1)).unwrap();
-        assert!(matches!(
-            queue.begin_upload(&id, client(1)),
+            queue.begin_upload(&id),
             Err(Rejection::NoReservation)
         ));
         drop(upload);
@@ -691,7 +684,7 @@ mod tests {
         let queue = queue();
         let idle = queue.reserve(client(1)).unwrap();
         let uploading = queue.reserve(client(2)).unwrap();
-        let _upload = queue.begin_upload(&uploading, client(2)).unwrap();
+        let _upload = queue.begin_upload(&uploading).unwrap();
         tokio::time::advance(Duration::from_secs(61)).await;
         queue.sweep();
         assert_eq!(status(&queue, &idle), "forgotten");

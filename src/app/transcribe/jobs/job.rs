@@ -17,7 +17,6 @@ use topcoat::{
         error::RouterErrorExt,
         header::{CONTENT_DISPOSITION, CONTENT_TYPE},
         href, module_param, page, path_param,
-        request::client_ip,
         response::{IntoResponse, Response},
         route,
     },
@@ -145,7 +144,7 @@ pub(super) async fn upload(cx: &Cx, mut form: Multipart) -> Result<(StatusCode, 
     let locale = Locale::of(cx);
     let transcription = app_context::<Transcription>(cx);
     let id = path_param::<Id>(cx)?;
-    let upload = match transcription.queue.begin_upload(id, client_ip(cx)) {
+    let upload = match transcription.queue.begin_upload(id) {
         Ok(upload) => upload,
         Err(rejection) => return Ok(rejected(locale, rejection)),
     };
