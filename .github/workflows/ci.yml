@@ -25,6 +25,11 @@ jobs:
       - name: Install the pinned Rust toolchain
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2.9.3
+        with:
+          # rust-toolchain.toml pins the compiler and is already part of the key. Hashing every
+          # toolchain the runner image happens to ship changes the key between image updates,
+          # so the cache was never found.
+          add-rust-environment-hash-key: false
       - name: Install ffmpeg and ffprobe
         run: |
           sudo apt-get update
