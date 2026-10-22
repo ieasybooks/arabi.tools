@@ -6,5 +6,6 @@
 pub mod app;
 pub mod config;
 mod i18n;
+mod icons;
 pub mod queue;
 pub mod tools;
