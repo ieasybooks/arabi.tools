@@ -176,9 +176,12 @@ struct Job<R> {
     watchers: usize,
     /// An upload request is filling this reservation.
     uploading: bool,
-    /// When the job was reserved, submitted, last left without a page, or finished, whichever
-    /// is latest. The cleanup rules measure from here.
-    idle_since: Instant,
+    /// When the job reached its current stage: reserved, waiting, running or finished. Unused
+    /// reservations and finished results expire from here.
+    status_since: Instant,
+    /// When its last page closed, or when it was submitted. An unfinished job that nobody
+    /// watches is cancelled from here.
+    unwatched_since: Instant,
 }
 
 impl<R: Send + Sync + 'static> Queue<R> {
@@ -213,7 +216,8 @@ impl<R: Send + Sync + 'static> Queue<R> {
                 status: watch::Sender::new(Status::Reserved),
                 watchers: 0,
                 uploading: false,
-                idle_since: Instant::now(),
+                status_since: Instant::now(),
+                unwatched_since: Instant::now(),
             },
         );
         Ok(id)
@@ -266,21 +270,22 @@ impl<R: Send + Sync + 'static> Queue<R> {
         let limits = &self.shared.limits;
         let now = Instant::now();
         let mut state = self.lock();
-        let mut unwatched = Vec::new();
+        let mut unwatched_jobs = Vec::new();
         state.jobs.retain(|id, job| {
-            let idle = now.saturating_duration_since(job.idle_since);
+            let in_status = now.saturating_duration_since(job.status_since);
             match &*job.status.borrow() {
-                Status::Reserved => job.uploading || idle < limits.upload_start,
+                Status::Reserved => job.uploading || in_status < limits.upload_start,
                 Status::Waiting { .. } | Status::Running { .. } => {
-                    if job.watchers == 0 && idle >= limits.unwatched {
-                        unwatched.push(id.clone());
+                    let unwatched = now.saturating_duration_since(job.unwatched_since);
+                    if job.watchers == 0 && unwatched >= limits.unwatched {
+                        unwatched_jobs.push(id.clone());
                     }
                     true
                 }
-                _ => idle < limits.keep_finished,
+                _ => in_status < limits.keep_finished,
             }
         });
-        for id in unwatched {
+        for id in unwatched_jobs {
             tracing::info!(job = %id, "cancelling: nobody is watching");
             state.cancel(&id, CancelReason::Unwatched);
         }
@@ -348,7 +353,8 @@ impl<R: Send + Sync + 'static> Queue<R> {
             }
             let job = state.jobs.get_mut(id).ok_or(Rejection::NoReservation)?;
             job.uploading = false;
-            job.idle_since = Instant::now();
+            job.status_since = Instant::now();
+            job.unwatched_since = Instant::now();
             let status = job.status.subscribe();
             state.waiting.push_back(id.clone());
             state.number_waiting();
@@ -440,7 +446,7 @@ impl<R> State<R> {
             }
         };
         job.status.send_replace(status);
-        job.idle_since = Instant::now();
+        job.status_since = Instant::now();
     }
 
     fn cancel(&mut self, id: &JobId, reason: CancelReason) {
@@ -449,7 +455,7 @@ impl<R> State<R> {
             && !job.status.borrow().is_finished()
         {
             job.status.send_replace(Status::Cancelled(reason));
-            job.idle_since = Instant::now();
+            job.status_since = Instant::now();
         }
         self.number_waiting();
     }
@@ -545,7 +551,7 @@ impl<R: Send + Sync + 'static> Drop for Watch<R> {
         if let Some(job) = self.queue.lock().jobs.get_mut(&self.id) {
             job.watchers -= 1;
             if job.watchers == 0 {
-                job.idle_since = Instant::now();
+                job.unwatched_since = Instant::now();
             }
         }
     }
@@ -730,6 +736,19 @@ mod tests {
         queue.sweep();
         assert!(queue.result(&id).is_none());
         assert!(queue.watch(&id).is_none());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn viewing_a_finished_result_does_not_keep_it_longer() {
+        let queue = queue();
+        let (id, finish) = submit(&queue, 1);
+        finish.send(Ok("done")).unwrap();
+        settle().await;
+        tokio::time::advance(Duration::from_secs(590)).await;
+        drop(queue.watch(&id).unwrap());
+        tokio::time::advance(Duration::from_secs(10)).await;
+        queue.sweep();
+        assert!(queue.result(&id).is_none(), "kept for 600 s from finishing");
     }
 
     #[tokio::test(start_paused = true)]
