@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/ieasybooks/arlang.tools/compare/v0.4.0...v0.4.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* **deps:** upgrade tafrigh and tafrigh-wit to 0.4.0 ([8cd8d44](https://github.com/ieasybooks/arlang.tools/commit/8cd8d4479d3b1af9009f963c1c5f8b4638e65c00))
+
 ## [0.4.0](https://github.com/ieasybooks/arlang.tools/compare/v0.3.0...v0.4.0) (2026-10-22)
 
 
