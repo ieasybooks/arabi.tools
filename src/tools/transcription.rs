@@ -113,7 +113,7 @@ impl Transcription {
         for (code, wit) in languages {
             let recognizer = WitRecognizer::new(wit)
                 .await
-                .with_context(|| format!("checking the Wit tokens for `{code}`"))?;
+                .with_context(|| format!("setting up Wit for `{code}`"))?;
             if !recognizer.language().eq_ignore_ascii_case(&code) {
                 bail!(
                     "the Wit tokens for `{code}` belong to `{}` apps",

@@ -115,8 +115,8 @@ async fn transcribe_fixture(
     );
     for chunk in chunks {
         assert!(
-            chunk.body.starts_with(b"RIFF"),
-            "Wit should receive WAV audio"
+            chunk.body.starts_with(b"OggS"),
+            "Wit should receive Ogg Opus audio"
         );
         assert!(chunk.body.len() > 44, "Wit should receive actual samples");
     }

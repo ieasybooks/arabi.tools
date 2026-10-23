@@ -260,7 +260,7 @@ pub fn successful_dictation(token: &str, text: &str) -> Mock {
     Mock::given(method("POST"))
         .and(path("/dictation"))
         .and(header("authorization", format!("Bearer {token}").as_str()))
-        .and(header("content-type", "audio/wav"))
+        .and(header("content-type", "audio/opus"))
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_json(json!({
