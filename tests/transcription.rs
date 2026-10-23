@@ -1069,3 +1069,171 @@ async fn assert_missing_downloads(app: &TestApp, job: &str) -> anyhow::Result<()
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn pages_describe_themselves_to_search_engines_and_link_previews() -> anyhow::Result<()> {
+    let app = TestApp::start().await?;
+    let origin = app.url("/").trim_end_matches('/').to_owned();
+    let get = |path: &str, language: &str| {
+        app.client
+            .get(app.url(path))
+            .header("cookie", format!("lang={language}"))
+            .send()
+    };
+
+    let home = get("/", "ar").await?.error_for_status()?.text().await?;
+    for tag in [
+        "<title>أدوات العربية — أدوات مجانية للغة العربية</title>".to_owned(),
+        "<meta name=\"description\" content=\"أدوات مجانية لمن يعمل بالعربية".to_owned(),
+        format!("<link rel=\"canonical\" href=\"{origin}/\">"),
+        format!("<meta property=\"og:url\" content=\"{origin}/\">"),
+        "<meta property=\"og:locale\" content=\"ar_AR\">".to_owned(),
+        "<meta property=\"og:locale:alternate\" content=\"en_US\">".to_owned(),
+        "<meta name=\"twitter:card\" content=\"summary_large_image\">".to_owned(),
+        "<script type=\"application/ld+json\">{\"@context\":\"https://schema.org\"".to_owned(),
+        "\"@type\":\"WebSite\"".to_owned(),
+    ] {
+        assert!(home.contains(&tag), "missing {tag}: {home}");
+    }
+    assert!(!home.contains("noindex"), "{home}");
+    let preview = home
+        .split("<meta property=\"og:image\" content=\"")
+        .nth(1)
+        .and_then(|rest| rest.split('"').next())
+        .context("missing og:image")?;
+    assert!(
+        preview.starts_with(&format!("{origin}/_topcoat/assets/og-ar-")),
+        "{preview}"
+    );
+    let image = app.client.get(preview).send().await?.error_for_status()?;
+    assert_eq!(image.headers()["content-type"], "image/png");
+
+    let tool = get("/transcribe", "en")
+        .await?
+        .error_for_status()?
+        .text()
+        .await?;
+    for tag in [
+        "<title>Audio transcription — arabi.tools</title>".to_owned(),
+        "Up to 99 MB and 3 hours.\">".to_owned(),
+        format!("<link rel=\"canonical\" href=\"{origin}/transcribe\">"),
+        format!("<meta property=\"og:image\" content=\"{origin}/_topcoat/assets/og-en-"),
+        "\"@type\":\"WebApplication\"".to_owned(),
+    ] {
+        assert!(tool.contains(&tag), "missing {tag}: {tool}");
+    }
+
+    // Jobs and missing pages stay out of search results.
+    for path in [UNKNOWN_JOB, "/no-such-page"] {
+        let page = get(path, "ar").await?.text().await?;
+        assert!(
+            page.contains("<meta name=\"robots\" content=\"noindex\">"),
+            "{page}"
+        );
+        assert!(!page.contains("rel=\"canonical\""), "{page}");
+    }
+
+    // Behind the HTTPS proxy, links use https.
+    let page = app
+        .client
+        .get(app.url("/"))
+        .header("x-forwarded-proto", "https")
+        .send()
+        .await?
+        .text()
+        .await?;
+    let secure = origin.replacen("http://", "https://", 1);
+    assert!(
+        page.contains(&format!("<link rel=\"canonical\" href=\"{secure}/\">")),
+        "{page}"
+    );
+    app.stop().await
+}
+
+#[tokio::test]
+async fn crawlers_find_the_sitemap_icons_and_manifest() -> anyhow::Result<()> {
+    let app = TestApp::start().await?;
+    let origin = app.url("/").trim_end_matches('/').to_owned();
+
+    let robots = app
+        .client
+        .get(app.url("/robots.txt"))
+        .send()
+        .await?
+        .error_for_status()?;
+    assert!(
+        robots.headers()["content-type"]
+            .to_str()?
+            .starts_with("text/plain")
+    );
+    let robots = robots.text().await?;
+    assert!(
+        robots.contains(&format!("Sitemap: {origin}/sitemap.xml")),
+        "{robots}"
+    );
+
+    let sitemap = app
+        .client
+        .get(app.url("/sitemap.xml"))
+        .send()
+        .await?
+        .error_for_status()?;
+    assert_eq!(
+        sitemap.headers()["content-type"],
+        "application/xml; charset=utf-8"
+    );
+    let sitemap = sitemap.text().await?;
+    for path in ["/", "/transcribe"] {
+        assert!(
+            sitemap.contains(&format!("<loc>{origin}{path}</loc>")),
+            "{sitemap}"
+        );
+    }
+
+    let favicon = app
+        .client
+        .get(app.url("/favicon.ico"))
+        .send()
+        .await?
+        .error_for_status()?;
+    assert_eq!(favicon.headers()["content-type"], "image/x-icon");
+    assert!(favicon.bytes().await?.starts_with(&[0, 0, 1, 0]));
+
+    let manifest: serde_json::Value = app
+        .client
+        .get(app.url("/site.webmanifest"))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    assert_eq!(manifest["name"], "أدوات العربية");
+    assert_eq!(manifest["dir"], "rtl");
+    let icons = manifest["icons"].as_array().context("missing icons")?;
+    assert_eq!(icons.len(), 2);
+    for icon in icons {
+        let src = icon["src"].as_str().context("missing icon src")?;
+        let response = app
+            .client
+            .get(app.url(src))
+            .send()
+            .await?
+            .error_for_status()?;
+        assert_eq!(response.headers()["content-type"], "image/png");
+    }
+
+    let home = app.client.get(app.url("/")).send().await?.text().await?;
+    assert!(
+        home.contains("<link rel=\"icon\" href=\"/favicon.ico\" sizes=\"48x48\">"),
+        "{home}"
+    );
+    assert!(
+        home.contains("<link rel=\"manifest\" href=\"/site.webmanifest\">"),
+        "{home}"
+    );
+    assert!(
+        home.contains("<img class=\"brand-logo\" src=\"/_topcoat/assets/logo-"),
+        "{home}"
+    );
+    app.stop().await
+}

@@ -4,17 +4,22 @@ mod jobs;
 
 use std::cmp::Ordering;
 
+use serde_json::json;
 use topcoat::{
     Result,
     asset::{Asset, asset},
     context::{Cx, app_context},
     icon::icon,
-    router::{href, page, request::client_ip},
+    router::{
+        href, page,
+        request::{client_ip, uri},
+    },
     view::{View, component, view},
 };
 
 use crate::i18n::Locale;
 use crate::icons;
+use crate::meta::PageMeta;
 use crate::queue::Rejection;
 use crate::tools::transcription::{EXTENSIONS, MAX_UPLOAD_BYTES, Transcription};
 
@@ -101,6 +106,42 @@ pub async fn page(cx: &Cx) -> Result<impl View> {
             </div>
         </section>
     })
+}
+
+/// What the tool's pages tell search engines and link previews: the upload page is indexed and
+/// described as a free web app; job pages are private. `None` for other paths.
+pub(crate) fn meta(cx: &Cx, locale: Locale, origin: &str) -> Option<PageMeta> {
+    let text = locale.text();
+    let page_path = href!(page).resolve(cx);
+    let path = uri(cx).path();
+    let title = locale.page_title(text.transcription.name);
+    let description = locale.transcription_summary();
+    if path == page_path {
+        let structured_data = json!({
+            "@context": "https://schema.org",
+            "@type": "WebApplication",
+            "name": text.transcription.name,
+            "url": format!("{origin}{page_path}"),
+            "description": description,
+            "inLanguage": locale.code(),
+            "applicationCategory": "MultimediaApplication",
+            "operatingSystem": "Any",
+            "browserRequirements": "Requires JavaScript",
+            "isAccessibleForFree": true,
+            "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
+            "isPartOf": {"@type": "WebSite", "name": text.site_name, "url": format!("{origin}/")},
+        });
+        Some(PageMeta {
+            title,
+            description,
+            index: true,
+            structured_data: Some(structured_data),
+        })
+    } else if path.starts_with(&format!("{page_path}/")) {
+        Some(PageMeta::private(title, description))
+    } else {
+        None
+    }
 }
 
 /// Notes under the form: how to fit a large recording, and when files are deleted.

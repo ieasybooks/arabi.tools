@@ -160,22 +160,10 @@ svg {
   color: var(--text);
 }
 
-/* A seal: the letter in a double gold ring. */
-.brand-mark {
-  display: inline-grid;
-  place-items: center;
-  width: 2.375rem;
-  height: 2.375rem;
-  padding-block-end: 0.125rem;
-  border-radius: 999px;
-  box-shadow:
-    inset 0 0 0 1px var(--gold),
-    inset 0 0 0 3px var(--paper),
-    inset 0 0 0 4px var(--gold);
-  color: var(--green);
-  font-family: "Thmanyah Serif Display", serif;
-  font-size: 1.25rem;
-  line-height: 1;
+.brand-logo {
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
 }
 
 .brand-name {

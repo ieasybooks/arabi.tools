@@ -54,6 +54,35 @@ impl Locale {
         }
     }
 
+    /// The locale of link previews, in Open Graph's form.
+    pub fn og_locale(self) -> &'static str {
+        match self {
+            Self::Ar => "ar_AR",
+            Self::En => "en_US",
+        }
+    }
+
+    /// A page's `<title>`: its own name, then the site's.
+    pub fn page_title(self, page: &str) -> String {
+        format!("{page} — {}", self.text().site_name)
+    }
+
+    /// The transcription tool's description for search results and link previews.
+    pub fn transcription_summary(self) -> String {
+        match self {
+            Self::Ar => format!(
+                "فرّغ تسجيلاتك الصوتية بصيغة MP3 أو M4A إلى نص مكتوب وملف ترجمة SRT، مجانًا ودون حساب. حتى {} ميغابايت و{} ساعات.",
+                max_megabytes(),
+                max_hours()
+            ),
+            Self::En => format!(
+                "Transcribe MP3 and M4A recordings into text and SRT subtitles, free and with no account. Up to {} MB and {} hours.",
+                max_megabytes(),
+                max_hours()
+            ),
+        }
+    }
+
     pub fn rejection(self, rejection: Rejection) -> &'static str {
         let text = &self.text().transcription;
         match rejection {
@@ -174,6 +203,10 @@ pub struct Text {
     pub home_label: &'static str,
     pub tagline: &'static str,
     pub lead: &'static str,
+    /// The site's description for search results and link previews.
+    pub description: &'static str,
+    /// What the link-preview image shows.
+    pub preview_alt: &'static str,
     pub free: &'static str,
     pub files_deleted: &'static str,
     pub arabic_first: &'static str,
@@ -249,6 +282,8 @@ static AR: Text = Text {
     home_label: "الصفحة الرئيسية",
     tagline: "أدوات مجانية للغة العربية",
     lead: "أدوات بسيطة لمن يعمل بالعربية: ارفع ملفك واحصل على النتيجة، دون حساب أو تثبيت.",
+    description: "أدوات مجانية لمن يعمل بالعربية، تبدأ بتفريغ التسجيلات الصوتية إلى نص مكتوب وملف ترجمة SRT، دون حساب أو تثبيت.",
+    preview_alt: "شعار أدوات العربية، وتحته: أدوات مجانية للغة العربية.",
     free: "مجانية بلا حساب",
     files_deleted: "تُحذف ملفاتك تلقائيًا",
     arabic_first: "للعربية أولًا",
@@ -316,6 +351,8 @@ static EN: Text = Text {
     home_label: "Homepage",
     tagline: "Free tools for the Arabic language",
     lead: "Simple tools for working in Arabic. Upload a file and get the result, with no account and nothing to install.",
+    description: "Free tools for working in Arabic, starting with transcribing recordings into text and SRT subtitles, with no account and nothing to install.",
+    preview_alt: "The arabi.tools logo above the words: Free tools for the Arabic language.",
     free: "Free, no account",
     files_deleted: "Files deleted automatically",
     arabic_first: "Arabic first",
