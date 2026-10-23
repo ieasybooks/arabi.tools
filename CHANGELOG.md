@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/ieasybooks/arlang.tools/compare/v0.4.1...v0.5.0) (2026-10-23)
+
+
+### Features
+
+* add a logo, link previews and search engine metadata ([06fd776](https://github.com/ieasybooks/arlang.tools/commit/06fd7768b88ea4b9f7bb7ebee45ca17001042305))
+
 ## [0.4.1](https://github.com/ieasybooks/arlang.tools/compare/v0.4.0...v0.4.1) (2026-10-23)
 
 
