@@ -2669,9 +2669,9 @@ dependencies = [
 
 [[package]]
 name = "tafrigh"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b980ebc36ffffd00db182a5fd99be8462d64c46bb0e8ed9876cf2bfe152d2a6"
+checksum = "7c984d3fde42a9d2546eb6be9449a706230cf7471d4cbf19ab4c9748d5c22d55"
 dependencies = [
  "async-trait",
  "csv",
@@ -2687,9 +2687,9 @@ dependencies = [
 
 [[package]]
 name = "tafrigh-wit"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc7aa54a00311dc263ad4894ca5d94ae925693a0590157ff14241c93fb53675c"
+checksum = "64011a1571a71dd466e77e56a42b6c2bc62cf35f30a41865a7500152fd046c56"
 dependencies = [
  "async-trait",
  "futures",
