@@ -7,5 +7,6 @@ pub mod app;
 pub mod config;
 mod i18n;
 mod icons;
+mod meta;
 pub mod queue;
 pub mod tools;
