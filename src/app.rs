@@ -1,7 +1,9 @@
 //! The site's pages. Each module under `app/` serves the URL of its module path.
 
+mod download;
 mod health;
 mod language;
+mod ocr;
 mod transcribe;
 
 use std::fmt::Write;
@@ -33,7 +35,9 @@ use crate::config::Config;
 use crate::i18n::Locale;
 use crate::icons;
 use crate::meta::{PageMeta, origin};
-use crate::tools::transcription::{MAX_UPLOAD_BYTES, Transcription};
+use crate::tools::MAX_UPLOAD_BYTES;
+use crate::tools::ocr::Ocr;
+use crate::tools::transcription::Transcription;
 
 const STYLES: Asset = asset!("./app/styles.css");
 
@@ -63,6 +67,7 @@ const FORM_OVERHEAD: usize = 64 * 1024;
 pub fn router(
     config: &Config,
     transcription: Transcription,
+    ocr: Ocr,
     assets: AssetBundle,
 ) -> anyhow::Result<Router> {
     let upload_limit = usize::try_from(MAX_UPLOAD_BYTES)? + FORM_OVERHEAD;
@@ -71,6 +76,8 @@ pub fn router(
         .assets(assets)
         .cookies()
         .app_context(transcription)
+        .app_context(ocr)
+        .layer(BodyLimit::max(upload_limit).at("/ocr/jobs"))
         .layer(BodyLimit::max(upload_limit).at("/transcribe/jobs"));
     if let Some(header) = &config.client_ip_header {
         // The proxy in front of the app is the only way in, so trust its header.
@@ -303,12 +310,14 @@ fn page_meta(cx: &Cx, locale: Locale, origin: &str) -> PageMeta {
             structured_data: Some(site_data(locale, origin)),
         };
     }
-    transcribe::meta(cx, locale, origin).unwrap_or_else(|| {
-        PageMeta::private(
-            locale.page_title(text.not_found_title),
-            text.description.to_owned(),
-        )
-    })
+    transcribe::meta(cx, locale, origin)
+        .or_else(|| ocr::meta(cx, locale, origin))
+        .unwrap_or_else(|| {
+            PageMeta::private(
+                locale.page_title(text.not_found_title),
+                text.description.to_owned(),
+            )
+        })
 }
 
 /// The site and the initiative behind it, as schema.org data.
@@ -351,7 +360,11 @@ async fn sitemap(cx: &Cx) -> Result<Typed> {
     let mut xml = String::from(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n",
     );
-    for path in [href!(home).resolve(cx), href!(transcribe::page).resolve(cx)] {
+    for path in [
+        href!(home).resolve(cx),
+        href!(transcribe::page).resolve(cx),
+        href!(ocr::page).resolve(cx),
+    ] {
         let _ = writeln!(xml, "  <url><loc>{origin}{path}</loc></url>");
     }
     xml.push_str("</urlset>\n");
@@ -495,7 +508,17 @@ async fn home(cx: &Cx) -> Result<impl View> {
                         href: href!(transcribe::page).resolve(cx),
                         name: text.transcription.name,
                         description: text.transcription.description,
-                        action: text.open_tool
+                        action: text.open_tool,
+                        inputs: text.transcription.input_formats,
+                        outputs: text.transcription.output_formats
+                    )
+                    tool_card(
+                        href: href!(ocr::page).resolve(cx),
+                        name: text.ocr.name,
+                        description: text.ocr.description,
+                        action: text.open_tool,
+                        inputs: text.ocr.input_formats,
+                        outputs: text.ocr.output_formats
                     )
                     <li class="tool-soon"><p>(text.more_tools)</p></li>
                 </ul>
@@ -505,16 +528,23 @@ async fn home(cx: &Cx) -> Result<impl View> {
 }
 
 #[component]
-async fn tool_card(href: String, name: &str, description: &str, action: &str) -> Result<impl View> {
+async fn tool_card(
+    href: String,
+    name: &str,
+    description: &str,
+    action: &str,
+    inputs: &str,
+    outputs: &str,
+) -> Result<impl View> {
     Ok(view! {
         <li>
             <a class="tool" href=(href)>
                 <h3 class="tool-name">(name)</h3>
                 <p class="tool-description">(description)</p>
                 <p class="tool-formats">
-                    <span class="badge">"MP3 · M4A"</span>
+                    <span class="badge">(inputs)</span>
                     <span class="forward">icon(data: icons::FORWARD, size: 16)</span>
-                    <span class="badge">"TXT · SRT"</span>
+                    <span class="badge">(outputs)</span>
                 </p>
                 <p class="tool-action">
                     <span>(action)</span>

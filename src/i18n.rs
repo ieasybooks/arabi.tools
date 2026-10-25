@@ -5,7 +5,9 @@ use topcoat::context::Cx;
 use topcoat::cookie::{Cookies, cookies};
 
 use crate::queue::Rejection;
-use crate::tools::transcription::{AudioProblem, KEEP_FINISHED, MAX_DURATION, MAX_UPLOAD_BYTES};
+use crate::tools::ocr::{DocumentProblem, MAX_PAGES};
+use crate::tools::transcription::{AudioProblem, MAX_DURATION};
+use crate::tools::{KEEP_FINISHED, MAX_UPLOAD_BYTES};
 
 /// The cookie holding the visitor's language.
 pub const COOKIE: &str = "lang";
@@ -170,6 +172,57 @@ impl Locale {
         }
     }
 
+    pub fn ocr_rejection(self, rejection: Rejection) -> &'static str {
+        let text = &self.text().ocr;
+        match rejection {
+            Rejection::Closed => text.closed,
+            Rejection::Full => text.full,
+            Rejection::ActiveJob => text.active_job,
+            Rejection::NoReservation => text.no_reservation,
+        }
+    }
+
+    pub fn document_problem(self, problem: DocumentProblem) -> String {
+        let text = &self.text().ocr;
+        match problem {
+            DocumentProblem::Missing => text.missing.into(),
+            DocumentProblem::WrongType => text.wrong_type.into(),
+            DocumentProblem::Unreadable => text.unreadable.into(),
+            DocumentProblem::TooLarge => self.too_large(),
+            DocumentProblem::TooManyPages => match self {
+                Self::Ar => format!("الملف يتجاوز الحد الأقصى البالغ {MAX_PAGES} صفحة."),
+                Self::En => format!("The file exceeds the {MAX_PAGES}-page limit."),
+            },
+        }
+    }
+
+    pub fn ocr_limits(self) -> String {
+        match self {
+            Self::Ar => format!(
+                "ملف PDF أو JPG أو PNG واحد، حتى {} ميغابايت و{MAX_PAGES} صفحة.",
+                max_megabytes()
+            ),
+            Self::En => format!(
+                "One PDF, JPG or PNG, up to {} MB and {MAX_PAGES} pages.",
+                max_megabytes()
+            ),
+        }
+    }
+
+    pub fn pages_done(self, done: usize, total: usize) -> String {
+        match self {
+            Self::Ar => format!("اكتملت {done} من {total} صفحة"),
+            Self::En => format!("{done} of {total} pages complete"),
+        }
+    }
+
+    pub fn page_number(self, number: usize) -> String {
+        match self {
+            Self::Ar => format!("الصفحة {number}"),
+            Self::En => format!("Page {number}"),
+        }
+    }
+
     pub fn kept_for(self) -> String {
         match self {
             Self::Ar => format!("يبقى النص متاحًا لمدة {} دقيقة.", keep_minutes()),
@@ -223,6 +276,7 @@ pub struct Text {
     pub not_found: &'static str,
     pub back_home: &'static str,
     pub transcription: TranscriptionText,
+    pub ocr: OcrText,
 }
 
 /// Names of the initiative's accounts, linked from the footer.
@@ -239,6 +293,8 @@ pub struct SocialText {
 
 /// Fixed text of the transcription tool.
 pub struct TranscriptionText {
+    pub input_formats: &'static str,
+    pub output_formats: &'static str,
     pub name: &'static str,
     pub description: &'static str,
     pub all_tools: &'static str,
@@ -276,13 +332,59 @@ pub struct TranscriptionText {
     pub unreadable: &'static str,
 }
 
+/// Fixed text of the OCR tool.
+pub struct OcrText {
+    pub name: &'static str,
+    pub description: &'static str,
+    pub input_formats: &'static str,
+    pub output_formats: &'static str,
+    pub all_tools: &'static str,
+    pub steps_label: &'static str,
+    pub step_upload: &'static str,
+    pub step_recognize: &'static str,
+    pub step_download: &'static str,
+    pub before_you_start: &'static str,
+    pub preview_title: &'static str,
+    pub file_label: &'static str,
+    pub choose_file: &'static str,
+    pub no_file: &'static str,
+    pub submit: &'static str,
+    pub uploading: &'static str,
+    pub upload_failed: &'static str,
+    pub needs_javascript: &'static str,
+    pub keep_open: &'static str,
+    pub reserved: &'static str,
+    pub running: &'static str,
+    pub done: &'static str,
+    pub download_text: &'static str,
+    pub download_docx: &'static str,
+    pub download_json: &'static str,
+    pub no_text: &'static str,
+    pub failed: &'static str,
+    pub cancelled_unwatched: &'static str,
+    pub cancelled_shutdown: &'static str,
+    pub another: &'static str,
+    pub closed: &'static str,
+    pub full: &'static str,
+    pub active_job: &'static str,
+    pub back_to_job: &'static str,
+    pub no_reservation: &'static str,
+    pub missing: &'static str,
+    pub wrong_type: &'static str,
+    pub unreadable: &'static str,
+    pub unavailable: &'static str,
+    pub privacy: &'static str,
+    pub auto_language: &'static str,
+    pub kept_for: &'static str,
+}
+
 static AR: Text = Text {
     name: "العربية",
     site_name: "أدوات العربية",
     home_label: "الصفحة الرئيسية",
     tagline: "أدوات مجانية للغة العربية",
     lead: "أدوات بسيطة لمن يعمل بالعربية: ارفع ملفك واحصل على النتيجة، دون حساب أو تثبيت.",
-    description: "أدوات مجانية لمن يعمل بالعربية، تبدأ بتفريغ التسجيلات الصوتية إلى نص مكتوب وملف ترجمة SRT، دون حساب أو تثبيت.",
+    description: "أدوات مجانية لتفريغ الصوت واستخراج النص من ملفات PDF والصور، دون حساب أو تثبيت.",
     preview_alt: "شعار أدوات العربية، وتحته: أدوات مجانية للغة العربية.",
     free: "مجانية بلا حساب",
     files_deleted: "تُحذف ملفاتك تلقائيًا",
@@ -307,6 +409,8 @@ static AR: Text = Text {
     not_found: "هذه الصفحة غير موجودة، أو انتهت صلاحيتها.",
     back_home: "العودة إلى الرئيسية",
     transcription: TranscriptionText {
+        input_formats: "MP3 · M4A",
+        output_formats: "TXT · SRT",
         name: "تفريغ الصوت",
         description: "حوّل تسجيلات MP3 وM4A إلى نص مكتوب وملف ترجمة SRT.",
         all_tools: "كل الأدوات",
@@ -343,6 +447,50 @@ static AR: Text = Text {
         wrong_type: "نقبل ملفات MP3 وM4A فقط.",
         unreadable: "لم نتمكن من قراءة الملف تسجيلًا صوتيًا بصيغة MP3 أو M4A.",
     },
+    ocr: OcrText {
+        name: "استخراج النص من الصور",
+        description: "حوّل ملفات PDF وصور JPG وPNG إلى نص قابل للتحرير، بأي لغة، ونزّله بصيغ TXT وDOCX وJSON.",
+        input_formats: "PDF · JPG · PNG",
+        output_formats: "TXT · DOCX · JSON",
+        all_tools: "كل الأدوات",
+        steps_label: "مراحل استخراج النص",
+        step_upload: "الرفع",
+        step_recognize: "استخراج النص",
+        step_download: "التنزيل",
+        before_you_start: "قبل أن تبدأ",
+        preview_title: "النص صفحةً صفحة",
+        file_label: "ملف PDF أو صورة",
+        choose_file: "اختر ملف PDF أو صورة، أو اسحبه وأفلته هنا",
+        no_file: "لم تختر ملفًا بعد.",
+        submit: "ابدأ استخراج النص",
+        uploading: "جارٍ رفع الملف…",
+        upload_failed: "تعذّر رفع الملف. تحقّق من اتصالك وحاول مرة أخرى.",
+        needs_javascript: "تحتاج هذه الصفحة إلى JavaScript.",
+        keep_open: "أبقِ هذه الصفحة مفتوحة حتى ينتهي استخراج النص، فإغلاقها يلغيه.",
+        reserved: "ننتظر وصول الملف…",
+        running: "جارٍ استخراج النص…",
+        done: "اكتمل استخراج النص.",
+        download_text: "تنزيل النص (TXT)",
+        download_docx: "تنزيل مستند Word (DOCX)",
+        download_json: "تنزيل بيانات الصفحات (JSON)",
+        no_text: "لم نجد نصًا في هذه الصفحة.",
+        failed: "تعذّر إكمال استخراج النص. حاول مرة أخرى لاحقًا.",
+        cancelled_unwatched: "أُلغي استخراج النص لأن صفحته أُغلقت.",
+        cancelled_shutdown: "أُلغي استخراج النص أثناء تحديث الموقع. ارفع الملف مرة أخرى بعد بضع دقائق.",
+        another: "استخراج النص من ملف آخر",
+        closed: "نحدّث الموقع الآن. حاول مرة أخرى بعد بضع دقائق.",
+        full: "الطابور ممتلئ الآن. حاول مرة أخرى بعد بضع دقائق.",
+        active_job: "يوجد استخراج نص قيد التنفيذ من اتصالك بالإنترنت. انتظر حتى ينتهي، ثم ارفع ملفًا آخر.",
+        back_to_job: "العودة إلى ملفك",
+        no_reservation: "انتهت مهلة هذا الرفع. حاول مرة أخرى.",
+        missing: "اختر ملف PDF أو صورة أولًا.",
+        wrong_type: "نقبل ملف PDF واحدًا أو صورة JPG أو PNG واحدة فقط.",
+        unreadable: "لم نتمكن من قراءة الملف. تأكد من سلامته وأنه غير محمي بكلمة مرور.",
+        unavailable: "أداة استخراج النص غير متاحة مؤقتًا. حاول مرة أخرى لاحقًا.",
+        privacy: "نرسل الصفحات إلى Google Drive لاستخراج النص ونحذفها منه فورًا بعد ذلك. نحذف ملفك عند انتهاء المهمة، والنتائج بعد 30 دقيقة.",
+        auto_language: "نتعرّف على لغة النص تلقائيًا. لا تحتاج إلى اختيار لغة.",
+        kept_for: "تبقى النتائج متاحة لمدة 30 دقيقة.",
+    },
 };
 
 static EN: Text = Text {
@@ -351,7 +499,7 @@ static EN: Text = Text {
     home_label: "Homepage",
     tagline: "Free tools for the Arabic language",
     lead: "Simple tools for working in Arabic. Upload a file and get the result, with no account and nothing to install.",
-    description: "Free tools for working in Arabic, starting with transcribing recordings into text and SRT subtitles, with no account and nothing to install.",
+    description: "Free tools for audio transcription and extracting text from PDFs and images, with no account and nothing to install.",
     preview_alt: "The arabi.tools logo above the words: Free tools for the Arabic language.",
     free: "Free, no account",
     files_deleted: "Files deleted automatically",
@@ -376,6 +524,8 @@ static EN: Text = Text {
     not_found: "This page doesn't exist, or it has expired.",
     back_home: "Back to home",
     transcription: TranscriptionText {
+        input_formats: "MP3 · M4A",
+        output_formats: "TXT · SRT",
         name: "Audio transcription",
         description: "Turn MP3 and M4A recordings into text and SRT subtitles.",
         all_tools: "All tools",
@@ -411,5 +561,49 @@ static EN: Text = Text {
         missing: "Choose an audio file first.",
         wrong_type: "Only MP3 and M4A files are accepted.",
         unreadable: "We couldn't read this file as MP3 or M4A audio.",
+    },
+    ocr: OcrText {
+        name: "Text recognition (OCR)",
+        description: "Turn PDFs and JPG or PNG images in any language into editable text, with TXT, DOCX and JSON downloads.",
+        input_formats: "PDF · JPG · PNG",
+        output_formats: "TXT · DOCX · JSON",
+        all_tools: "All tools",
+        steps_label: "Text recognition steps",
+        step_upload: "Upload",
+        step_recognize: "Recognize",
+        step_download: "Download",
+        before_you_start: "Before you start",
+        preview_title: "Text by page",
+        file_label: "PDF or image file",
+        choose_file: "Choose a PDF or image, or drop it here",
+        no_file: "No file chosen yet.",
+        submit: "Extract text",
+        uploading: "Uploading…",
+        upload_failed: "The upload failed. Check your connection and try again.",
+        needs_javascript: "This page needs JavaScript.",
+        keep_open: "Keep this page open until text recognition finishes. Closing it cancels the job.",
+        reserved: "Waiting for your file…",
+        running: "Recognizing text…",
+        done: "Text recognition complete.",
+        download_text: "Download text (.txt)",
+        download_docx: "Download Word document (.docx)",
+        download_json: "Download pages (.json)",
+        no_text: "No text was found on this page.",
+        failed: "Text recognition could not be completed. Please try again later.",
+        cancelled_unwatched: "Text recognition was cancelled because its page was closed.",
+        cancelled_shutdown: "Text recognition was cancelled while we updated the site. Please upload the file again in a few minutes.",
+        another: "Recognize another file",
+        closed: "We are updating the site. Please try again in a few minutes.",
+        full: "The queue is full right now. Please try again in a few minutes.",
+        active_job: "Text recognition from your connection is already in progress. Wait for it to finish, then upload another file.",
+        back_to_job: "Back to your document",
+        no_reservation: "This upload expired. Please try again.",
+        missing: "Choose a PDF or image first.",
+        wrong_type: "Choose exactly one PDF, JPG or PNG file.",
+        unreadable: "We could not read this file. Check that it is valid and is not password protected.",
+        unavailable: "Text recognition is temporarily unavailable. Please try again later.",
+        privacy: "Pages are sent to Google Drive for OCR and deleted right afterward. We delete your upload when the job ends and results after 30 minutes.",
+        auto_language: "The text language is detected automatically. You do not need to choose a language.",
+        kept_for: "Results stay available for 30 minutes.",
     },
 };

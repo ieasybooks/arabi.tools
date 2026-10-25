@@ -15,6 +15,7 @@ use std::time::Duration;
 
 use tokio::sync::watch;
 use tokio::time::Instant;
+use tokio_util::sync::CancellationToken;
 
 /// How often [`Queue::spawn_sweeper`] looks for jobs to cancel or forget.
 const SWEEP_INTERVAL: Duration = Duration::from_secs(5);
@@ -107,6 +108,8 @@ pub enum Status<R> {
     Running {
         /// Estimated progress, 0 to 100.
         percent: u8,
+        /// Completed and total pages, for tools processing documents.
+        pages: Option<(usize, usize)>,
     },
     /// Finished with a result.
     Done(Arc<R>),
@@ -131,7 +134,10 @@ impl<R> Clone for Status<R> {
             Self::Waiting { position } => Self::Waiting {
                 position: *position,
             },
-            Self::Running { percent } => Self::Running { percent: *percent },
+            Self::Running { percent, pages } => Self::Running {
+                percent: *percent,
+                pages: *pages,
+            },
             Self::Done(result) => Self::Done(Arc::clone(result)),
             Self::Failed => Self::Failed,
             Self::Cancelled(reason) => Self::Cancelled(*reason),
@@ -323,7 +329,7 @@ impl<R: Send + Sync + 'static> Queue<R> {
                     }
                     true
                 }
-                _ => in_status < limits.keep_finished,
+                _ => job.has_slot || in_status < limits.keep_finished,
             }
         });
         for id in unwatched_jobs {
@@ -380,10 +386,17 @@ impl<R: Send + Sync + 'static> Queue<R> {
                 state.cancel(&id, CancelReason::Shutdown);
             }
         }
+        // Cooperative jobs keep their slots until their remote cleanup has completed.
+        let _ = running.wait_for(|running| *running == 0).await;
     }
 
     /// Puts the reserved job `id` in line to run `work`.
-    fn submit<W, F>(&self, id: &JobId, work: W) -> Result<(), Rejection>
+    fn submit<W, F>(
+        &self,
+        id: &JobId,
+        cancellation: Option<CancellationToken>,
+        work: W,
+    ) -> Result<(), Rejection>
     where
         W: FnOnce(Progress<R>) -> F + Send + 'static,
         F: Future<Output = anyhow::Result<R>> + Send,
@@ -422,11 +435,17 @@ impl<R: Send + Sync + 'static> Queue<R> {
                 queue: queue.clone(),
                 id: id.clone(),
             });
+            tokio::pin!(work);
             tokio::select! {
                 biased;
                 // Whoever cancelled the job already recorded why.
-                _ = status.wait_for(|status| matches!(status, Status::Cancelled(_))) => {}
-                outcome = work => queue.lock().finish(&id, outcome),
+                () = async { let _ = status.wait_for(|status| matches!(status, Status::Cancelled(_))).await; } => {
+                    if let Some(cancellation) = cancellation {
+                        cancellation.cancel();
+                        let _ = work.await;
+                    }
+                }
+                outcome = &mut work => queue.lock().finish(&id, outcome),
             }
         });
         Ok(())
@@ -456,7 +475,7 @@ impl<R> State<R> {
         }
         let mut active = 0;
         for job in self.jobs.values() {
-            if job.status.borrow().is_finished() {
+            if job.status.borrow().is_finished() && !job.has_slot {
                 continue;
             }
             if job.client == client {
@@ -483,7 +502,10 @@ impl<R> State<R> {
                 continue;
             };
             let waited = job.status_since.elapsed();
-            job.status.send_replace(Status::Running { percent: 0 });
+            job.status.send_replace(Status::Running {
+                percent: 0,
+                pages: None,
+            });
             job.status_since = Instant::now();
             job.has_slot = true;
             self.running.send_modify(|running| *running += 1);
@@ -593,7 +615,23 @@ impl<R: Send + Sync + 'static> Upload<R> {
         W: FnOnce(Progress<R>) -> F + Send + 'static,
         F: Future<Output = anyhow::Result<R>> + Send,
     {
-        self.queue.submit(&self.id, work)?;
+        self.queue.submit(&self.id, None, work)?;
+        self.submitted = true;
+        Ok(())
+    }
+
+    /// Cancels cooperatively: work must observe the token and finish its cleanup. Its running
+    /// slot and client reservation remain occupied until the future returns.
+    pub fn submit_cancellable<W, F>(mut self, work: W) -> Result<(), Rejection>
+    where
+        W: FnOnce(Progress<R>, CancellationToken) -> F + Send + 'static,
+        F: Future<Output = anyhow::Result<R>> + Send,
+    {
+        let token = CancellationToken::new();
+        self.queue
+            .submit(&self.id, Some(token.clone()), move |progress| {
+                work(progress, token)
+            })?;
         self.submitted = true;
         Ok(())
     }
@@ -631,8 +669,30 @@ impl<R: Send + Sync + 'static> Progress<R> {
     pub fn set(&self, percent: u8) {
         if let Some(job) = self.queue.lock().jobs.get(&self.id) {
             job.status.send_if_modified(|status| match status {
-                Status::Running { percent: current } if *current != percent => {
+                Status::Running {
+                    percent: current, ..
+                } if *current != percent => {
                     *current = percent;
+                    true
+                }
+                _ => false,
+            });
+        }
+    }
+
+    /// Reports recognized pages. A result becomes 100% only once its downloads are ready.
+    pub fn pages(&self, done: usize, total: usize) {
+        if let Some(job) = self.queue.lock().jobs.get(&self.id) {
+            job.status.send_if_modified(|status| match status {
+                Status::Running { percent, pages } if *pages != Some((done, total)) => {
+                    *pages = Some((done, total));
+                    *percent = u8::try_from(
+                        done.saturating_mul(100)
+                            .checked_div(total)
+                            .unwrap_or(0)
+                            .min(99),
+                    )
+                    .unwrap_or(99);
                     true
                 }
                 _ => false,
@@ -740,14 +800,14 @@ mod tests {
         let (b, _finish_b) = submit(&queue, 2);
         let (c, _finish_c) = submit(&queue, 3);
         settle().await;
-        assert_eq!(status(&queue, &a), "Running { percent: 0 }");
+        assert_eq!(status(&queue, &a), "Running { percent: 0, pages: None }");
         assert_eq!(status(&queue, &b), "Waiting { position: 1 }");
         assert_eq!(status(&queue, &c), "Waiting { position: 2 }");
 
         finish_a.send(Ok("a")).unwrap();
         settle().await;
         assert_eq!(status(&queue, &a), "Done(\"a\")");
-        assert_eq!(status(&queue, &b), "Running { percent: 0 }");
+        assert_eq!(status(&queue, &b), "Running { percent: 0, pages: None }");
         assert_eq!(status(&queue, &c), "Waiting { position: 1 }");
         assert_eq!(queue.result(&a).as_deref(), Some(&"a"));
         assert!(queue.result(&b).is_none());
@@ -807,7 +867,7 @@ mod tests {
             })
             .unwrap();
         settle().await;
-        assert_eq!(status(&queue, &id), "Running { percent: 40 }");
+        assert_eq!(status(&queue, &id), "Running { percent: 40, pages: None }");
         fail.send(()).unwrap();
         settle().await;
         assert_eq!(status(&queue, &id), "Failed");
@@ -918,13 +978,13 @@ mod tests {
         settle().await;
         assert_eq!(status(&queue, &a), "Cancelled(Unwatched)");
         assert!(finish_a.is_closed(), "the cancelled work is dropped");
-        assert_eq!(status(&queue, &b), "Running { percent: 0 }");
+        assert_eq!(status(&queue, &b), "Running { percent: 0, pages: None }");
 
         // Closing the last page starts the clock again.
         drop(watch_b);
         tokio::time::advance(Duration::from_secs(29)).await;
         queue.sweep();
-        assert_eq!(status(&queue, &b), "Running { percent: 0 }");
+        assert_eq!(status(&queue, &b), "Running { percent: 0, pages: None }");
         tokio::time::advance(Duration::from_secs(1)).await;
         queue.sweep();
         assert_eq!(status(&queue, &b), "Cancelled(Unwatched)");
@@ -946,7 +1006,7 @@ mod tests {
 
         settle().await;
         assert!(finish_a.is_closed(), "the cancelled work is dropped");
-        assert_eq!(status(&queue, &b), "Running { percent: 0 }");
+        assert_eq!(status(&queue, &b), "Running { percent: 0, pages: None }");
     }
 
     #[tokio::test(start_paused = true)]
@@ -961,7 +1021,7 @@ mod tests {
         let (next, _finish_next) = submit(&queue, 2);
         settle().await;
         assert_eq!(status(&queue, &id), "Failed");
-        assert_eq!(status(&queue, &next), "Running { percent: 0 }");
+        assert_eq!(status(&queue, &next), "Running { percent: 0, pages: None }");
     }
 
     #[tokio::test(start_paused = true)]
@@ -1037,6 +1097,41 @@ mod tests {
         settle().await;
         queue.shutdown(Duration::from_secs(10)).await;
         assert_eq!(status(&queue, &id), "Cancelled(Shutdown)");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn cooperative_cancellation_holds_slot_and_client_until_cleanup_finishes() {
+        let queue = queue();
+        let id = queue.reserve(client(1), None).unwrap();
+        let (clean, cleaned) = oneshot::channel();
+        let (cancelled, cancellation) = oneshot::channel();
+        queue
+            .begin_upload(&id)
+            .unwrap()
+            .submit_cancellable(move |_, token| async move {
+                token.cancelled().await;
+                cancelled.send(()).unwrap();
+                cleaned.await.unwrap();
+                Ok("unused result")
+            })
+            .unwrap();
+        let (next, _finish) = submit(&queue, 2);
+        let _watch = queue.watch(&next).unwrap();
+        settle().await;
+        tokio::time::advance(Duration::from_secs(31)).await;
+        queue.sweep();
+        cancellation.await.unwrap();
+        assert_eq!(queue.reserve(client(1), None), Err(Rejection::ActiveJob));
+        assert_eq!(status(&queue, &next), "Waiting { position: 1 }");
+        // Even expired cancelled records must stay until their occupied slot is released.
+        tokio::time::advance(Duration::from_secs(601)).await;
+        queue.sweep();
+        assert_eq!(status(&queue, &id), "Cancelled(Unwatched)");
+        clean.send(()).unwrap();
+        settle().await;
+        assert_eq!(status(&queue, &next), "Running { percent: 0, pages: None }");
+        assert!(queue.result(&id).is_none());
+        queue.reserve(client(1), None).unwrap();
     }
 
     #[test]

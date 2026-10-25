@@ -846,7 +846,7 @@ async fn running_status_separates_progress_and_failed_jobs_have_no_return_link()
         .expect("queue should accept the job");
     let mut watch = app.transcription.queue.watch(&id).context("missing job")?;
     tokio::time::timeout(Duration::from_secs(5), async {
-        while !matches!(watch.status(), Status::Running { percent: 37 }) {
+        while !matches!(watch.status(), Status::Running { percent: 37, .. }) {
             assert!(watch.changed().await);
         }
     })
@@ -1084,7 +1084,7 @@ async fn pages_describe_themselves_to_search_engines_and_link_previews() -> anyh
     let home = get("/", "ar").await?.error_for_status()?.text().await?;
     for tag in [
         "<title>أدوات العربية — أدوات مجانية للغة العربية</title>".to_owned(),
-        "<meta name=\"description\" content=\"أدوات مجانية لمن يعمل بالعربية".to_owned(),
+        "<meta name=\"description\" content=\"أدوات مجانية لتفريغ الصوت".to_owned(),
         format!("<link rel=\"canonical\" href=\"{origin}/\">"),
         format!("<meta property=\"og:url\" content=\"{origin}/\">"),
         "<meta property=\"og:locale\" content=\"ar_AR\">".to_owned(),

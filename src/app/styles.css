@@ -968,4 +968,15 @@ progress::-moz-progress-bar {
   .another .button {
     flex: 1;
   }
+
+  .ocr-downloads .button {
+    flex-basis: 100%;
+  }
+}
+
+/* Each line takes its own direction: OCR pages often mix Arabic text with Latin or stray characters. */
+.ocr-pages .cue-text {
+  white-space: pre-wrap;
+  unicode-bidi: plaintext;
+  text-align: start;
 }

@@ -43,6 +43,11 @@ jobs:
       - name: Install Topcoat CLI
         if: steps.topcoat.outputs.cache-hit != 'true'
         run: cargo install --locked --version 0.10.0 topcoat-cli
+      - name: Install pinned PDFium for PDF tests
+        run: |
+          sh deploy/pdfium.sh amd64 "$RUNNER_TEMP/pdfium"
+          echo "TAHWEEL_TEST_PDFIUM=$RUNNER_TEMP/pdfium/lib/libpdfium.so" >> "$GITHUB_ENV"
+      - run: python3 tests/deploy_env.py
       - run: cargo fmt --all --check
       - run: topcoat fmt --check src
       - run: cargo clippy --all-targets --locked -- -D warnings
@@ -94,11 +99,15 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_GC: '1'
         run: node tests/browser/node_modules/@playwright/test/cli.js install --with-deps --only-shell chromium
-      - name: Build the app, mock, and assets
+      - name: Install pinned PDFium for OCR browser tests
         run: |
-          cargo build --locked --bin arlang-tools --example mock_wit
+          sh deploy/pdfium.sh amd64 "$RUNNER_TEMP/pdfium"
+          echo "TAHWEEL_TEST_PDFIUM=$RUNNER_TEMP/pdfium/lib/libpdfium.so" >> "$GITHUB_ENV"
+      - name: Build the app, mocks, and assets
+        run: |
+          cargo build --locked --bin arlang-tools --example mock_wit --example mock_ocr
           topcoat asset bundle --bin arlang-tools
-      - name: Test the live transcription flow
+      - name: Test the live transcription and OCR flows
         run: npm test --prefix tests/browser
       - name: Save browser failure traces and screenshots
         if: failure()

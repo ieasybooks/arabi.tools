@@ -6,3 +6,5 @@
 !src/**
 !crates/
 !crates/**
+!deploy/
+!deploy/pdfium.sh

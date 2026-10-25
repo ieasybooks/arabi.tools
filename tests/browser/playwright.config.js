@@ -33,6 +33,11 @@ export default defineConfig({
     },
     {
       ...server,
+      command: "node tests/browser/server.js unavailable",
+      url: "http://127.0.0.1:3205/health",
+    },
+    {
+      ...server,
       command: "node tests/browser/server.js app",
       url: "http://127.0.0.1:3204/health",
     },

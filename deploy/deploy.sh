@@ -34,7 +34,9 @@ if [ -n "$registry_user" ]; then
     docker login ghcr.io --username "$registry_user" --password-stdin > /dev/null
 fi
 
-# Keep credentials in .env; only the image selection changes between releases.
+# Keep WIT_TOKENS_AR and DRIVE_SERVICE_ACCOUNTS in .env, as written by write-env.py.
+# Compose reads its quoted JSON directly; never source .env in the shell.
+# Only the image selection changes between releases.
 unset ARLANG_TAG
 printf 'ARLANG_TAG=%s\n' "$version" > .env.image.next
 # A failed pull leaves the current containers and selected version untouched.
