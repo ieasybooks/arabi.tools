@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/ieasybooks/arabi.tools/compare/v0.5.0...v0.6.0) (2026-10-25)
+
+
+### Features
+
+* **ocr:** add PDF and image text recognition ([#25](https://github.com/ieasybooks/arabi.tools/issues/25)) ([d296580](https://github.com/ieasybooks/arabi.tools/commit/d2965809c3cd353028dd2ab39d9181eafb75a01a))
+
 ## [0.5.0](https://github.com/ieasybooks/arlang.tools/compare/v0.4.1...v0.5.0) (2026-10-23)
 
 
