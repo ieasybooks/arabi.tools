@@ -1,29 +1,28 @@
 import { spawn } from "node:child_process";
+import { resolve } from "node:path";
 
 // Never inherit real Wit credentials or proxy settings from the developer's shell.
 const env = Object.fromEntries(
   Object.entries(process.env).filter(
-    ([name]) => !name.startsWith("WIT_TOKENS_") && name !== "CLIENT_IP_HEADER",
+    ([name]) => !name.startsWith("WIT_TOKENS_") && !name.startsWith("DRIVE_") && name !== "CLIENT_IP_HEADER",
   ),
 );
 const mode = process.argv[2];
-if (!["app", "mock"].includes(mode)) throw new Error("Expected app or mock");
-
-const child = mode === "mock"
-  ? spawn("cargo", ["run", "--locked", "--example", "mock_wit", "--", "9804"], {
-      stdio: "inherit",
-      env: { ...env, MOCK_WIT_DELAY_MS: "750" },
-    })
-  : spawn("cargo", ["run", "--locked", "--bin", "arlang-tools"], {
-      stdio: "inherit",
-      env: {
-        ...env,
-        HOST: "127.0.0.1",
-        PORT: "3204",
-        WIT_API_URL: "http://127.0.0.1:9804",
-        WIT_TOKENS_AR: "dev",
-      },
-    });
+if (!["app", "mock", "unavailable"].includes(mode)) throw new Error("Expected app, mock or unavailable");
+const target = resolve(process.env.CARGO_TARGET_DIR || "target", "debug");
+const binary = mode === "mock" ? "examples/mock_wit" : mode === "app" ? "examples/mock_ocr" : "arlang-tools";
+// Binaries and assets are built before the suite; browser tests never start cargo builds.
+const child = spawn(resolve(target, binary), mode === "mock" ? ["9804"] : [], {
+  stdio: "inherit",
+  env: {
+    ...env,
+    MOCK_WIT_DELAY_MS: "750",
+    HOST: "127.0.0.1",
+    PORT: "3205",
+    WIT_API_URL: "http://127.0.0.1:9804",
+    WIT_TOKENS_AR: "dev",
+  },
+});
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => child.kill(signal));

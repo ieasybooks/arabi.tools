@@ -1,5 +1,13 @@
 # syntax=docker/dockerfile:1
 
+FROM debian:trixie-slim AS pdfium
+ARG TARGETARCH
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+COPY deploy/pdfium.sh /pdfium.sh
+RUN sh /pdfium.sh "$TARGETARCH" /pdfium
+
 FROM rust:1.99.1-trixie AS builder
 ENV CARGO_TARGET_DIR=/build/target
 WORKDIR /build
@@ -29,6 +37,9 @@ RUN apt-get update \
     && useradd --system --uid 10001 --create-home arlang
 WORKDIR /app
 COPY --from=builder /out/ ./
+COPY --from=pdfium /pdfium/lib/libpdfium.so ./libpdfium.so
+COPY --from=pdfium /pdfium/LICENSE /usr/share/doc/pdfium/LICENSE
+COPY --from=pdfium /pdfium/licenses/ /usr/share/doc/pdfium/licenses/
 USER arlang
 ENV HOST=0.0.0.0 PORT=3000 TMPDIR=/tmp
 EXPOSE 3000

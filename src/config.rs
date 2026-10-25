@@ -1,6 +1,9 @@
 //! Settings read from the environment.
 
-use std::env;
+use std::{env, path::PathBuf};
+
+use crate::tools::ocr::drive_config;
+use tahweel_drive::DriveConfig;
 
 use anyhow::{Context, bail};
 use topcoat::router::HeaderName;
@@ -24,6 +27,10 @@ pub struct Config {
     /// Header carrying the visitor's address, set by the one proxy in front of the app
     /// (`CLIENT_IP_HEADER`, e.g. `CF-Connecting-IP`). Unset uses the connection's address.
     pub client_ip_header: Option<HeaderName>,
+    /// OCR credentials parsed independently; invalid or missing settings disable only OCR.
+    pub drive: Option<DriveConfig>,
+    /// Optional `PDFium` path for local development (`TAHWEEL_PDFIUM`).
+    pub pdfium_library: Option<PathBuf>,
 }
 
 /// The Wit tokens of one language.
@@ -61,6 +68,16 @@ impl Config {
             wit_tokens: wit_tokens(env::vars())?,
             wit_api_url: env::var("WIT_API_URL").ok().filter(|url| !url.is_empty()),
             client_ip_header,
+            drive: env::var("DRIVE_SERVICE_ACCOUNTS").ok().and_then(|json| {
+                match drive_config(&json) {
+                    Ok(config) => Some(config),
+                    Err(error) => {
+                        tracing::warn!("OCR unavailable: {error}");
+                        None
+                    }
+                }
+            }),
+            pdfium_library: env::var_os("TAHWEEL_PDFIUM").map(PathBuf::from),
         })
     }
 }

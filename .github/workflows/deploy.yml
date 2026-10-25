@@ -108,10 +108,11 @@ jobs:
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           DEPLOY_DIRECTORY: ${{ vars.DEPLOY_DIRECTORY }}
           WIT_TOKENS_AR: ${{ secrets.WIT_TOKENS_AR }}
+          DRIVE_SERVICE_ACCOUNTS: ${{ secrets.DRIVE_SERVICE_ACCOUNTS }}
           TUNNEL_TOKEN: ${{ secrets.TUNNEL_TOKEN }}
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_PORT DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS DEPLOY_DIRECTORY WIT_TOKENS_AR TUNNEL_TOKEN; do
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_PORT DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS DEPLOY_DIRECTORY WIT_TOKENS_AR DRIVE_SERVICE_ACCOUNTS TUNNEL_TOKEN; do
             if [ -z "${!name}" ]; then
               echo "::error::Set $name in the production environment."
               exit 1
@@ -150,8 +151,10 @@ jobs:
           ssh arlang "install -d -m 700 '$DEPLOY_DIRECTORY' '$DEPLOY_DIRECTORY/deploy'"
           # The server's .env is rebuilt from the environment's secrets on every deploy, sent on
           # stdin so the values never appear in a command line or log.
+          # Validate before opening SSH: a failed writer must not replace .env with empty output.
+          compose_environment=$(python3 deploy/write-env.py)
           # shellcheck disable=SC2029
-          printf 'WIT_TOKENS_AR=%s\nTUNNEL_TOKEN=%s\n' "$WIT_TOKENS_AR" "$TUNNEL_TOKEN" |
+          printf '%s\n' "$compose_environment" |
             ssh arlang "umask 077 && cat > '$DEPLOY_DIRECTORY/.env.next' && mv '$DEPLOY_DIRECTORY/.env.next' '$DEPLOY_DIRECTORY/.env'"
           scp compose.yaml "arlang:$DEPLOY_DIRECTORY/compose.yaml"
           scp deploy/deploy.sh "arlang:$DEPLOY_DIRECTORY/deploy/deploy.sh"

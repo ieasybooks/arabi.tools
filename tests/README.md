@@ -11,11 +11,17 @@ Run `cargo test --locked` with `ffmpeg` (built with libopus) and `ffprobe` on PA
 ```sh
 npm ci --prefix tests/browser
 npx --prefix tests/browser playwright install --with-deps --only-shell chromium
-cargo build --locked --bin arlang-tools --example mock_wit
+cargo build --locked --bin arlang-tools --example mock_wit --example mock_ocr
 topcoat asset bundle --bin arlang-tools
 npm test --prefix tests/browser
 ```
 
-It starts the mock Wit on port 9804 and the site on port 3204, so both must be free. CI runs it on pull requests and keeps traces and screenshots of failures as the `browser-failures` artifact.
+It starts mock Wit on port 9804, the site with mock Drive on port 3204, and the site without OCR credentials on port 3205. All three ports must be free. Set `TAHWEEL_TEST_PDFIUM` to the pinned PDFium library for OCR browser tests. CI runs it on pull requests and keeps traces and screenshots of failures as the `browser-failures` artifact.
 
 `examples/mock_wit.rs` explains how to try the site by hand without Wit tokens.
+
+## OCR tests
+
+`tests/ocr.rs` uses a local Drive mock with fresh generated keys, PNG/JPEG images and generated PDFs. Set `TAHWEEL_TEST_PDFIUM` to include PDF validation, the 1,000-page limit recheck and cancellation cleanup tests. CI installs the pinned library using `deploy/pdfium.sh`. The tests cover both interface languages, all three downloads, progress, queue limits, invalid uploads, unavailable credentials and upload deletion. They never use production credentials. `tests/browser/ocr.spec.js` covers both languages in Chromium, including PDF uploads, live progress, page previews, TXT/DOCX/JSON downloads, errors and unavailable OCR with working transcription. Set `OCR_SCREENSHOT_DIR` to an existing directory to save successful upload/result screenshots.
+
+`python3 tests/deploy_env.py` verifies generated credential JSON through the installed Docker Compose parser, without starting containers or accessing real keys.

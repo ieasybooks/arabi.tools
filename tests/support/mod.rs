@@ -6,6 +6,7 @@ use anyhow::{Context, bail};
 use arlang_tools::app;
 use arlang_tools::config::Config;
 use arlang_tools::queue::{JobId, Limits, Queue, Status, Upload};
+use arlang_tools::tools::ocr::Ocr;
 use arlang_tools::tools::transcription::{self, MAX_DURATION, Transcript, Transcription};
 use reqwest::{Client, Response, StatusCode, multipart};
 use serde_json::{Value, json};
@@ -81,6 +82,7 @@ pub struct TestApp {
     pub client: Client,
     pub transcription: Transcription,
     pub wit: MockServer,
+    pub ocr: Ocr,
     base_url: String,
     shutdown: Option<oneshot::Sender<()>>,
     server: JoinHandle<std::io::Result<()>>,
@@ -94,6 +96,10 @@ impl TestApp {
 
     /// Starts the site against a Wit mock with one app per configured language.
     pub async fn start_with(setup: Setup<'_>) -> anyhow::Result<Self> {
+        Self::start_with_ocr(setup, Ocr::unavailable()).await
+    }
+
+    pub async fn start_with_ocr(setup: Setup<'_>, ocr: Ocr) -> anyhow::Result<Self> {
         let wit = MockServer::start().await;
         let mut configured = Vec::new();
         for &(code, token, text) in setup.languages {
@@ -127,9 +133,16 @@ impl TestApp {
             wit_tokens: vec![],
             wit_api_url: Some(wit.uri()),
             client_ip_header: None,
+            drive: None,
+            pdfium_library: None,
         };
         let assets = tokio::task::spawn_blocking(Assets::load).await??;
-        let router = app::router(&config, transcription.clone(), assets.bundle.clone())?;
+        let router = app::router(
+            &config,
+            transcription.clone(),
+            ocr.clone(),
+            assets.bundle.clone(),
+        )?;
         let listener = TcpListener::bind((config.host.as_str(), config.port)).await?;
         let base_url = format!("http://{}", listener.local_addr()?);
         let (shutdown, stop) = oneshot::channel();
@@ -145,6 +158,7 @@ impl TestApp {
         Ok(Self {
             client,
             transcription,
+            ocr,
             wit,
             base_url,
             shutdown: Some(shutdown),
@@ -234,6 +248,7 @@ impl TestApp {
 
     pub async fn stop(mut self) -> anyhow::Result<()> {
         self.transcription.queue.shutdown(Duration::ZERO).await;
+        self.ocr.queue.shutdown(Duration::ZERO).await;
         if let Some(shutdown) = self.shutdown.take() {
             let _ = shutdown.send(());
         }

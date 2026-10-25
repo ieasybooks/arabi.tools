@@ -15,31 +15,16 @@ use tafrigh_wit::{WitConfig, WitRecognizer};
 use tempfile::TempPath;
 use tokio::sync::watch;
 
-use crate::queue::{Limits, Queue, Rejection, Upload};
+use crate::queue::{Queue, Rejection, Upload};
 
-/// Largest upload accepted. Decimal, to stay under Cloudflare's 100 MB request limit with
-/// room for the form around the file.
-pub const MAX_UPLOAD_BYTES: u64 = 99_000_000;
+pub use super::{KEEP_FINISHED, MAX_UPLOAD_BYTES, limits};
+
 /// Longest recording accepted.
 pub const MAX_DURATION: Duration = Duration::from_hours(3);
 /// File extensions accepted, lowercase.
 pub const EXTENSIONS: [&str; 2] = ["mp3", "m4a"];
-/// How long finished transcripts are kept.
-pub const KEEP_FINISHED: Duration = Duration::from_mins(30);
-
 /// Longest a probe of an uploaded file may take.
 const PROBE_TIMEOUT: Duration = Duration::from_secs(30);
-
-pub fn limits() -> Limits {
-    Limits {
-        jobs: 100,
-        running: 4,
-        // Proxies such as Cloudflare may hold a slow upload until it is complete.
-        upload_start: Duration::from_mins(30),
-        unwatched: Duration::from_mins(1),
-        keep_finished: KEEP_FINISHED,
-    }
-}
 
 /// The transcription tool: its languages and its job queue. Clones share both.
 #[derive(Clone)]
@@ -205,27 +190,9 @@ pub fn has_accepted_extension(file_name: &str) -> bool {
         })
 }
 
-/// The name to give downloads of the transcript of `file_name`: its stem, cleaned of
-/// characters that do not belong in a file name.
+/// The name for a downloaded transcript, cleaned of characters that do not belong in file names.
 pub fn download_name(file_name: &str) -> String {
-    const MAX_CHARS: usize = 100;
-    let stem = Path::new(file_name)
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .unwrap_or_default();
-    let name: String = stem
-        .chars()
-        .filter(|c| {
-            !c.is_control() && !matches!(c, '/' | '\\' | '"' | ':' | '*' | '?' | '<' | '>' | '|')
-        })
-        .take(MAX_CHARS)
-        .collect();
-    let name = name.trim();
-    if name.is_empty() {
-        "transcript".to_owned()
-    } else {
-        name.to_owned()
-    }
+    super::download_name(file_name, "transcript")
 }
 
 /// Checks with ffprobe that `path` holds MP3 or M4A audio no longer than [`MAX_DURATION`].
