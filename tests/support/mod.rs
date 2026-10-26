@@ -125,7 +125,8 @@ impl TestApp {
             wit_config.request_timeout = Duration::from_secs(5);
             configured.push((code.to_owned(), wit_config));
         }
-        let slots = Slots::new(RUNNING_JOBS);
+        // Both tools run in the same slots, as on the site.
+        let slots = ocr.queue.slots().clone();
         let mut transcription =
             Transcription::new_with_max_duration(configured, setup.max_duration, &slots).await?;
         transcription.queue = Queue::new(setup.limits, &slots);

@@ -14,7 +14,6 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::net::IpAddr;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 use std::time::Duration;
 
@@ -176,53 +175,65 @@ pub enum Rejection {
 /// Clones share the slots.
 #[derive(Clone)]
 pub struct Slots {
-    shared: Arc<SharedSlots>,
+    /// Held while jobs join a line and while jobs start, so a start always sees every
+    /// waiting job. Lock it before a queue, never while holding one.
+    scheduler: Arc<Mutex<Scheduler>>,
 }
 
-struct SharedSlots {
+struct Scheduler {
     limit: usize,
-    /// The queues sharing the slots. Held while starting jobs, so one start is decided at a
-    /// time. Lock it before a queue, never while holding one.
-    queues: Mutex<Vec<Weak<dyn Line>>>,
-    /// Numbers jobs in the order they joined their queue's line. Atomic, because queues take
-    /// turns while holding their own lock.
-    turns: AtomicU64,
+    /// The queues sharing the slots.
+    queues: Vec<Weak<dyn Line>>,
+    /// Numbers jobs in the order they join any queue's line.
+    turns: u64,
 }
 
 impl Slots {
     pub fn new(limit: usize) -> Self {
         Self {
-            shared: Arc::new(SharedSlots {
+            scheduler: Arc::new(Mutex::new(Scheduler {
                 limit,
-                queues: Mutex::new(Vec::new()),
-                turns: AtomicU64::new(0),
-            }),
+                queues: Vec::new(),
+                turns: 0,
+            })),
         }
     }
 
     fn join(&self, queue: Weak<dyn Line>) {
-        let mut queues = lock(&self.shared.queues);
-        queues.retain(|queue| queue.strong_count() > 0);
-        queues.push(queue);
+        let mut scheduler = self.lock();
+        scheduler.queues.retain(|queue| queue.strong_count() > 0);
+        scheduler.queues.push(queue);
     }
 
-    fn take_turn(&self) -> u64 {
-        self.shared.turns.fetch_add(1, Ordering::Relaxed)
+    fn fill(&self) {
+        self.lock().fill();
+    }
+
+    fn lock(&self) -> MutexGuard<'_, Scheduler> {
+        lock(&self.scheduler)
+    }
+}
+
+impl Scheduler {
+    fn take_turn(&mut self) -> u64 {
+        let turn = self.turns;
+        self.turns += 1;
+        turn
     }
 
     /// Starts waiting jobs while slots are free, the one that has waited longest first.
     fn fill(&self) {
-        let registered = lock(&self.shared.queues);
-        let queues: Vec<Arc<dyn Line>> = registered.iter().filter_map(Weak::upgrade).collect();
-        while queues.iter().map(|queue| queue.running()).sum::<usize>() < self.shared.limit {
-            let Some((_, queue)) = queues
+        let queues: Vec<Arc<dyn Line>> = self.queues.iter().filter_map(Weak::upgrade).collect();
+        while queues.iter().map(|queue| queue.running()).sum::<usize>() < self.limit {
+            let Some((turn, queue)) = queues
                 .iter()
                 .filter_map(|queue| Some((queue.next_turn()?, queue)))
                 .min_by_key(|(turn, _)| *turn)
             else {
                 break;
             };
-            queue.start_next();
+            // If the job was cancelled since, nothing starts and the next round looks again.
+            queue.start(turn);
         }
     }
 }
@@ -233,8 +244,9 @@ trait Line: Send + Sync {
     fn running(&self) -> usize;
     /// The turn of the job at the front of the line, if the queue may start it now.
     fn next_turn(&self) -> Option<u64>;
-    /// Starts the job at the front of the line, if the queue may start it now.
-    fn start_next(&self);
+    /// Starts the job with `turn`, if it is still at the front of the line and the queue may
+    /// start it now.
+    fn start(&self, turn: u64);
 }
 
 impl<R: Send + Sync> Line for Mutex<State<R>> {
@@ -246,8 +258,8 @@ impl<R: Send + Sync> Line for Mutex<State<R>> {
         lock(self).next_turn()
     }
 
-    fn start_next(&self) {
-        lock(self).start_next();
+    fn start(&self, turn: u64) {
+        lock(self).start(turn);
     }
 }
 
@@ -493,21 +505,24 @@ impl<R: Send + Sync + 'static> Queue<R> {
         F: Future<Output = anyhow::Result<R>> + Send,
     {
         let mut status = {
-            let mut state = self.lock();
-            if state.closed {
-                return Err(Rejection::Closed);
-            }
-            let job = state.jobs.get_mut(id).ok_or(Rejection::NoReservation)?;
-            job.uploading = false;
-            job.status_since = Instant::now();
-            job.unwatched_since = Instant::now();
-            let status = job.status.subscribe();
-            let turn = self.slots.take_turn();
-            state.waiting.push_back((turn, id.clone()));
-            state.number_waiting();
+            let mut scheduler = self.slots.lock();
+            let status = {
+                let mut state = self.lock();
+                if state.closed {
+                    return Err(Rejection::Closed);
+                }
+                let job = state.jobs.get_mut(id).ok_or(Rejection::NoReservation)?;
+                job.uploading = false;
+                job.status_since = Instant::now();
+                job.unwatched_since = Instant::now();
+                let status = job.status.subscribe();
+                state.waiting.push_back((scheduler.take_turn(), id.clone()));
+                state.number_waiting();
+                status
+            };
+            scheduler.fill();
             status
         };
-        self.slots.fill();
         let queue = self.clone();
         let id = id.clone();
         tokio::spawn(async move {
@@ -542,6 +557,11 @@ impl<R: Send + Sync + 'static> Queue<R> {
             }
         });
         Ok(())
+    }
+
+    /// The running slots this queue shares.
+    pub fn slots(&self) -> &Slots {
+        &self.slots
     }
 
     fn lock(&self) -> MutexGuard<'_, State<R>> {
@@ -597,10 +617,10 @@ impl<R> State<R> {
         self.waiting.front().map(|(turn, _)| *turn)
     }
 
-    /// Starts the job at the front of the line, if this queue may start it now. Only
-    /// [`Slots::fill`] calls this, so the shared limit holds.
-    fn start_next(&mut self) {
-        if self.next_turn().is_none() {
+    /// Starts the job with `turn`, if it is still at the front of the line and this queue may
+    /// start it now. Only [`Scheduler::fill`] calls this, so the shared limit holds.
+    fn start(&mut self, turn: u64) {
+        if self.next_turn() != Some(turn) {
             return;
         }
         let Some((_, id)) = self.waiting.pop_front() else {
@@ -1046,6 +1066,36 @@ mod tests {
             status(&transcripts, &t4),
             "Running { percent: 0, pages: None }"
         );
+    }
+
+    // The scheduler picks a job by its turn, then starts it. If the job is cancelled in
+    // between, the job behind it must not start in its place: an older job in another queue
+    // may be next.
+    #[tokio::test(start_paused = true)]
+    async fn a_job_cancelled_after_being_picked_is_not_replaced_by_the_one_behind_it() {
+        let slots = Slots::new(2);
+        let transcripts = sharing::<&'static str>(&slots, 10, 2);
+        let documents = sharing::<u32>(&slots, 10, 2);
+        let (_t1, _finish_t1) = submit(&transcripts, 1);
+        let (_d1, finish_d1) = submit(&documents, 2);
+        let (t2, _finish_t2) = submit(&transcripts, 3);
+        let (d2, _finish_d2) = submit(&documents, 4);
+        let (t3, _finish_t3) = submit(&transcripts, 5);
+        settle().await;
+
+        // Replay the scheduler's two steps with a cancellation in between.
+        let picked = transcripts.lock().next_turn().unwrap();
+        transcripts.lock().cancel(&t2, CancelReason::Unwatched);
+        transcripts.lock().start(picked);
+        assert_eq!(status(&transcripts, &t3), "Waiting { position: 1 }");
+
+        finish_d1.send(Ok(1)).unwrap();
+        settle().await;
+        assert_eq!(
+            status(&documents, &d2),
+            "Running { percent: 0, pages: None }"
+        );
+        assert_eq!(status(&transcripts, &t3), "Waiting { position: 1 }");
     }
 
     #[tokio::test(start_paused = true)]
