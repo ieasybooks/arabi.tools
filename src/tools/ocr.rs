@@ -10,7 +10,7 @@ use tahweel_drive::{DriveAuth, DriveConfig, DriveRecognizer, ServiceAccountKey};
 use tempfile::TempDir;
 use tokio::sync::Semaphore;
 
-use crate::queue::{Queue, Rejection, Upload};
+use crate::queue::{Queue, Rejection, Slots, Upload};
 
 pub use super::{KEEP_FINISHED, MAX_UPLOAD_BYTES};
 pub const MAX_PAGES: usize = 1_000;
@@ -78,9 +78,11 @@ pub fn drive_config(json: &str) -> anyhow::Result<DriveConfig> {
 }
 
 impl Ocr {
-    pub fn unavailable() -> Self {
+    /// OCR without a recognizer yet; [`initialize`](Self::initialize) starts it. Jobs run in
+    /// the shared `slots`.
+    pub fn unavailable(slots: &Slots) -> Self {
         Self {
-            queue: Queue::new(super::limits()),
+            queue: Queue::new(super::limits(), slots),
             recognizer: Arc::default(),
             pdfium_library: None,
             validation: Arc::new(Semaphore::new(1)),
@@ -93,8 +95,12 @@ impl Ocr {
         self
     }
 
-    pub async fn new(config: DriveConfig, pdfium_library: Option<PathBuf>) -> anyhow::Result<Self> {
-        let ocr = Self::unavailable().with_pdfium_library(pdfium_library);
+    pub async fn new(
+        config: DriveConfig,
+        pdfium_library: Option<PathBuf>,
+        slots: &Slots,
+    ) -> anyhow::Result<Self> {
+        let ocr = Self::unavailable(slots).with_pdfium_library(pdfium_library);
         ocr.initialize(config).await?;
         Ok(ocr)
     }

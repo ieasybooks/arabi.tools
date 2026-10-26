@@ -3,7 +3,8 @@ use anyhow::Context;
 use arlang_tools::{
     app,
     config::Config,
-    tools::{ocr::Ocr, transcription::Transcription},
+    queue::Slots,
+    tools::{RUNNING_JOBS, ocr::Ocr, transcription::Transcription},
 };
 use std::time::Duration;
 use tafrigh_wit::WitConfig;
@@ -16,15 +17,17 @@ mod drive;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let drive = drive::Drive::start(Duration::from_millis(750)).await;
+    let slots = Slots::new(RUNNING_JOBS);
     let ocr = Ocr::new(
         drive.config(),
         std::env::var_os("TAHWEEL_TEST_PDFIUM").map(Into::into),
+        &slots,
     )
     .await?;
     ocr.queue.spawn_sweeper();
     let mut wit = WitConfig::new(["dev"]);
     wit.api_url = "http://127.0.0.1:9804".into();
-    let transcription = Transcription::new(vec![("ar".into(), wit)]).await?;
+    let transcription = Transcription::new(vec![("ar".into(), wit)], &slots).await?;
     transcription.queue.spawn_sweeper();
     let config = Config {
         host: "127.0.0.1".into(),

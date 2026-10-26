@@ -1,5 +1,5 @@
 //! The tools the site offers. Each one owns its limits, its job queue and its work; the
-//! pages that use it live under `src/app/`.
+//! queues share the running slots. The pages that use a tool live under `src/app/`.
 
 pub mod ocr;
 pub mod transcription;
@@ -12,11 +12,14 @@ use std::{path::Path, time::Duration};
 pub const MAX_UPLOAD_BYTES: u64 = 99_000_000;
 /// How long finished results are kept.
 pub const KEEP_FINISHED: Duration = Duration::from_mins(30);
+/// Jobs running at once across all tools.
+pub const RUNNING_JOBS: usize = 4;
 
 pub fn limits() -> Limits {
     Limits {
         jobs: 100,
-        running: 4,
+        // Fewer than `RUNNING_JOBS`, so a busy tool always leaves a slot for another one.
+        running: 3,
         // Proxies such as Cloudflare may hold a slow upload until it is complete.
         upload_start: Duration::from_mins(30),
         unwatched: Duration::from_mins(1),

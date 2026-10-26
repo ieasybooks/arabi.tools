@@ -5,7 +5,8 @@ use std::time::Duration;
 use anyhow::{Context, bail};
 use arlang_tools::app;
 use arlang_tools::config::Config;
-use arlang_tools::queue::{JobId, Limits, Queue, Status, Upload};
+use arlang_tools::queue::{JobId, Limits, Queue, Slots, Status, Upload};
+use arlang_tools::tools::RUNNING_JOBS;
 use arlang_tools::tools::ocr::Ocr;
 use arlang_tools::tools::transcription::{self, MAX_DURATION, Transcript, Transcription};
 use reqwest::{Client, Response, StatusCode, multipart};
@@ -96,7 +97,7 @@ impl TestApp {
 
     /// Starts the site against a Wit mock with one app per configured language.
     pub async fn start_with(setup: Setup<'_>) -> anyhow::Result<Self> {
-        Self::start_with_ocr(setup, Ocr::unavailable()).await
+        Self::start_with_ocr(setup, Ocr::unavailable(&Slots::new(RUNNING_JOBS))).await
     }
 
     pub async fn start_with_ocr(setup: Setup<'_>, ocr: Ocr) -> anyhow::Result<Self> {
@@ -124,9 +125,10 @@ impl TestApp {
             wit_config.request_timeout = Duration::from_secs(5);
             configured.push((code.to_owned(), wit_config));
         }
+        let slots = Slots::new(RUNNING_JOBS);
         let mut transcription =
-            Transcription::new_with_max_duration(configured, setup.max_duration).await?;
-        transcription.queue = Queue::new(setup.limits);
+            Transcription::new_with_max_duration(configured, setup.max_duration, &slots).await?;
+        transcription.queue = Queue::new(setup.limits, &slots);
         let config = Config {
             host: "127.0.0.1".into(),
             port: 0,

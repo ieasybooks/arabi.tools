@@ -15,7 +15,7 @@ use tafrigh_wit::{WitConfig, WitRecognizer};
 use tempfile::TempPath;
 use tokio::sync::watch;
 
-use crate::queue::{Queue, Rejection, Upload};
+use crate::queue::{Queue, Rejection, Slots, Upload};
 
 pub use super::{KEEP_FINISHED, MAX_UPLOAD_BYTES, limits};
 
@@ -80,9 +80,9 @@ pub enum AudioProblem {
 
 impl Transcription {
     /// Sets up one transcriber per language, checking with Wit that each language's tokens
-    /// belong to apps of that language.
-    pub async fn new(languages: Vec<(String, WitConfig)>) -> anyhow::Result<Self> {
-        Self::new_with_max_duration(languages, MAX_DURATION).await
+    /// belong to apps of that language. Jobs run in the shared `slots`.
+    pub async fn new(languages: Vec<(String, WitConfig)>, slots: &Slots) -> anyhow::Result<Self> {
+        Self::new_with_max_duration(languages, MAX_DURATION, slots).await
     }
 
     /// Sets up transcribers with a custom decoded-audio limit. The upfront metadata check
@@ -90,6 +90,7 @@ impl Transcription {
     pub async fn new_with_max_duration(
         languages: Vec<(String, WitConfig)>,
         max_duration: Duration,
+        slots: &Slots,
     ) -> anyhow::Result<Self> {
         let decoder = Decoder::default();
         decoder.check().await.context("ffmpeg is required")?;
@@ -115,7 +116,7 @@ impl Transcription {
             });
         }
         Ok(Self {
-            queue: Queue::new(limits()),
+            queue: Queue::new(limits(), slots),
             languages: configured.into(),
         })
     }
