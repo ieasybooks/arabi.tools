@@ -3,6 +3,8 @@ use std::time::Duration;
 use anyhow::Context;
 use arlang_tools::app;
 use arlang_tools::config::Config;
+use arlang_tools::queue::Slots;
+use arlang_tools::tools::RUNNING_JOBS;
 use arlang_tools::tools::ocr::Ocr;
 use arlang_tools::tools::transcription::Transcription;
 use tafrigh_wit::WitConfig;
@@ -35,10 +37,11 @@ async fn main() -> anyhow::Result<()> {
             (wit.language.clone(), wit_config)
         })
         .collect();
-    let transcription = Transcription::new(languages).await?;
+    let slots = Slots::new(RUNNING_JOBS);
+    let transcription = Transcription::new(languages, &slots).await?;
     transcription.queue.spawn_sweeper();
 
-    let ocr = Ocr::unavailable().with_pdfium_library(config.pdfium_library.clone());
+    let ocr = Ocr::unavailable(&slots).with_pdfium_library(config.pdfium_library.clone());
     ocr.queue.spawn_sweeper();
 
     let assets =

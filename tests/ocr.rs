@@ -11,11 +11,11 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::Context;
-use arlang_tools::queue::{JobId, Queue, Rejection, Status};
+use arlang_tools::queue::{JobId, Queue, Rejection, Slots, Status};
 use arlang_tools::tools::ocr::{
     Document, DocumentProblem, MAX_UPLOAD_BYTES, Ocr, UploadedDocument, drive_config,
 };
-use arlang_tools::tools::transcription;
+use arlang_tools::tools::{RUNNING_JOBS, transcription};
 use reqwest::{StatusCode, multipart};
 use serde_json::{Value, json};
 use wiremock::{
@@ -28,7 +28,11 @@ fn pdfium() -> Option<PathBuf> {
 }
 
 async fn ocr(drive: &drive::Drive) -> anyhow::Result<Ocr> {
-    Ocr::new(drive.config(), pdfium()).await
+    Ocr::new(drive.config(), pdfium(), &slots()).await
+}
+
+fn slots() -> Slots {
+    Slots::new(RUNNING_JOBS)
 }
 
 fn upload(name: &str, bytes: &[u8]) -> UploadedDocument {
@@ -292,7 +296,7 @@ async fn progress_and_cancellation_finish_active_pages_and_delete_upload() -> an
     let mut ocr = ocr(&drive).await?;
     let mut limits = transcription::limits();
     limits.unwatched = Duration::from_millis(20);
-    ocr.queue = Queue::new(limits);
+    ocr.queue = Queue::new(limits, &slots());
     let upload = upload("book.pdf", &drive::pdf(20));
     let path = upload.path.clone();
     let id = ocr.queue.reserve(None, None).unwrap();
@@ -381,6 +385,55 @@ async fn unavailable_ocr_does_not_disable_transcription() -> anyhow::Result<()> 
 }
 
 #[tokio::test]
+async fn transcription_and_ocr_share_four_running_jobs() -> anyhow::Result<()> {
+    let app = support::TestApp::start().await?;
+    let client = |n| Some(IpAddr::V4(Ipv4Addr::new(10, 0, 0, n)));
+    let mut transcriptions = Vec::new();
+    for n in 1..=3 {
+        let id = app.transcription.queue.reserve(client(n), None).unwrap();
+        let (finish, finished) = tokio::sync::oneshot::channel::<()>();
+        app.transcription
+            .queue
+            .begin_upload(&id)
+            .unwrap()
+            .submit(|_| async move {
+                let _ = finished.await;
+                anyhow::bail!("stopped by the test")
+            })
+            .unwrap();
+        let status = app.transcription.queue.watch(&id).unwrap().status();
+        assert!(matches!(status, Status::Running { .. }));
+        transcriptions.push(finish);
+    }
+    let mut documents = Vec::new();
+    for n in 4..=5 {
+        let id = app.ocr.queue.reserve(client(n), None).unwrap();
+        app.ocr
+            .queue
+            .begin_upload(&id)
+            .unwrap()
+            .submit(|_| std::future::pending::<anyhow::Result<Document>>())
+            .unwrap();
+        documents.push(id);
+    }
+    let status = app.ocr.queue.watch(&documents[0]).unwrap().status();
+    assert!(matches!(status, Status::Running { .. }));
+    let mut waiting = app.ocr.queue.watch(&documents[1]).unwrap();
+    let status = waiting.status();
+    assert!(matches!(status, Status::Waiting { position: 1 }));
+
+    transcriptions.remove(0).send(()).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !matches!(waiting.status(), Status::Running { .. }) {
+            assert!(waiting.changed().await);
+        }
+    })
+    .await?;
+    drop(waiting);
+    app.stop().await
+}
+
+#[tokio::test]
 async fn ocr_queue_enforces_limits() -> anyhow::Result<()> {
     let drive = drive::Drive::start(Duration::ZERO).await;
     let mut ocr = ocr(&drive).await?;
@@ -393,13 +446,13 @@ async fn ocr_queue_enforces_limits() -> anyhow::Result<()> {
             .submit(|_| std::future::pending::<anyhow::Result<Document>>())
             .unwrap();
         let status = ocr.queue.watch(&id).unwrap().status();
-        assert_eq!(matches!(status, Status::Running { .. }), index <= 4);
+        assert_eq!(matches!(status, Status::Running { .. }), index <= 3);
         if index == 5 {
-            assert!(matches!(status, Status::Waiting { position: 1 }));
+            assert!(matches!(status, Status::Waiting { position: 2 }));
         }
     }
     ocr.queue.shutdown(Duration::ZERO).await;
-    ocr.queue = Queue::new(transcription::limits());
+    ocr.queue = Queue::new(transcription::limits(), &slots());
     for index in 1..=100 {
         let client = Some(IpAddr::V4(Ipv4Addr::new(10, 0, 0, index)));
         ocr.queue.reserve(client, None).unwrap();
@@ -413,7 +466,7 @@ async fn ocr_queue_enforces_limits() -> anyhow::Result<()> {
 #[tokio::test]
 async fn drive_startup_does_not_block_transcription() -> anyhow::Result<()> {
     let drive = drive::Drive::start(Duration::from_secs(1)).await;
-    let ocr = Ocr::unavailable().with_pdfium_library(pdfium());
+    let ocr = Ocr::unavailable(&slots()).with_pdfium_library(pdfium());
     let app = support::TestApp::start_with_ocr(support::Setup::default(), ocr.clone()).await?;
     let config = drive.config();
     let starting = tokio::spawn(async move { ocr.initialize(config).await });

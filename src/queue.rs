@@ -3,14 +3,18 @@
 //!
 //! A job starts as a reservation ([`Queue::reserve`]) so the browser learns whether there is
 //! room before it uploads anything. The upload then fills the reservation ([`Upload::submit`])
-//! and the job joins the line of waiting jobs. The queue starts jobs from the front of that
-//! line whenever a running slot is free, so the order pages show is the order jobs run in.
+//! and the job joins the line of waiting jobs.
+//!
+//! Queues share running slots ([`Slots`]). When one is free, the job that has waited longest
+//! in any queue starts, unless its queue already runs as many jobs as its own limit allows.
+//! Within a queue, jobs start from the front of its line, so the order pages show is the
+//! order jobs run in.
 
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::net::IpAddr;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 use std::time::Duration;
 
 use tokio::sync::watch;
@@ -25,7 +29,7 @@ const SWEEP_INTERVAL: Duration = Duration::from_secs(5);
 pub struct Limits {
     /// Jobs accepted at once: reserved, waiting and running ones together.
     pub jobs: usize,
-    /// Jobs running at once.
+    /// Jobs this queue runs at once, within the limit of the [`Slots`] it shares.
     pub running: usize,
     /// How long a reservation may wait for its upload to arrive.
     pub upload_start: Duration,
@@ -101,7 +105,7 @@ pub enum Status<R> {
     Reserved,
     /// Waiting for a running slot.
     Waiting {
-        /// 1 for the next job to run.
+        /// 1 for the next job to run in its queue.
         position: usize,
     },
     /// Running.
@@ -167,15 +171,109 @@ pub enum Rejection {
     NoReservation,
 }
 
+/// Running slots that several queues share, so together they run at most `limit` jobs.
+/// Clones share the slots.
+#[derive(Clone)]
+pub struct Slots {
+    /// Held while jobs join a line and while jobs start, so a start always sees every
+    /// waiting job. Lock it before a queue, never while holding one.
+    scheduler: Arc<Mutex<Scheduler>>,
+}
+
+struct Scheduler {
+    limit: usize,
+    /// The queues sharing the slots.
+    queues: Vec<Weak<dyn Line>>,
+    /// Numbers jobs in the order they join any queue's line.
+    turns: u64,
+}
+
+impl Slots {
+    pub fn new(limit: usize) -> Self {
+        Self {
+            scheduler: Arc::new(Mutex::new(Scheduler {
+                limit,
+                queues: Vec::new(),
+                turns: 0,
+            })),
+        }
+    }
+
+    fn join(&self, queue: Weak<dyn Line>) {
+        let mut scheduler = self.lock();
+        scheduler.queues.retain(|queue| queue.strong_count() > 0);
+        scheduler.queues.push(queue);
+    }
+
+    fn fill(&self) {
+        self.lock().fill();
+    }
+
+    fn lock(&self) -> MutexGuard<'_, Scheduler> {
+        lock(&self.scheduler)
+    }
+}
+
+impl Scheduler {
+    fn take_turn(&mut self) -> u64 {
+        let turn = self.turns;
+        self.turns += 1;
+        turn
+    }
+
+    /// Starts waiting jobs while slots are free, the one that has waited longest first.
+    fn fill(&self) {
+        let queues: Vec<Arc<dyn Line>> = self.queues.iter().filter_map(Weak::upgrade).collect();
+        while queues.iter().map(|queue| queue.running()).sum::<usize>() < self.limit {
+            let Some((turn, queue)) = queues
+                .iter()
+                .filter_map(|queue| Some((queue.next_turn()?, queue)))
+                .min_by_key(|(turn, _)| *turn)
+            else {
+                break;
+            };
+            // If the job was cancelled since, nothing starts and the next round looks again.
+            queue.start(turn);
+        }
+    }
+}
+
+/// What [`Slots`] need from a queue, whatever its jobs produce.
+trait Line: Send + Sync {
+    /// Jobs the queue runs now.
+    fn running(&self) -> usize;
+    /// The turn of the job at the front of the line, if the queue may start it now.
+    fn next_turn(&self) -> Option<u64>;
+    /// Starts the job with `turn`, if it is still at the front of the line and the queue may
+    /// start it now.
+    fn start(&self, turn: u64);
+}
+
+impl<R: Send + Sync> Line for Mutex<State<R>> {
+    fn running(&self) -> usize {
+        *lock(self).running.borrow()
+    }
+
+    fn next_turn(&self) -> Option<u64> {
+        lock(self).next_turn()
+    }
+
+    fn start(&self, turn: u64) {
+        lock(self).start(turn);
+    }
+}
+
 /// A queue of jobs producing results of type `R`. Clones share the queue.
 pub struct Queue<R> {
     state: Arc<Mutex<State<R>>>,
+    slots: Slots,
 }
 
 impl<R> Clone for Queue<R> {
     fn clone(&self) -> Self {
         Self {
             state: Arc::clone(&self.state),
+            slots: self.slots.clone(),
         }
     }
 }
@@ -183,9 +281,9 @@ impl<R> Clone for Queue<R> {
 struct State<R> {
     limits: Limits,
     jobs: HashMap<JobId, Job<R>>,
-    /// Waiting jobs, next to run first. Jobs start in exactly this order.
-    waiting: VecDeque<JobId>,
-    /// How many running slots are taken. Shutdown waits for it to reach zero.
+    /// Waiting jobs with their turns, next to run first. Jobs start in exactly this order.
+    waiting: VecDeque<(u64, JobId)>,
+    /// How many running slots this queue takes. Shutdown waits for it to reach zero.
     running: watch::Sender<usize>,
     /// Set on shutdown: nothing new is accepted or started.
     closed: bool,
@@ -211,15 +309,20 @@ struct Job<R> {
 }
 
 impl<R: Send + Sync + 'static> Queue<R> {
-    pub fn new(limits: Limits) -> Self {
+    /// A queue running its jobs in the shared `slots`.
+    pub fn new(limits: Limits, slots: &Slots) -> Self {
+        let state = Arc::new(Mutex::new(State {
+            limits,
+            jobs: HashMap::new(),
+            waiting: VecDeque::new(),
+            running: watch::Sender::new(0),
+            closed: false,
+        }));
+        let line: Weak<Mutex<State<R>>> = Arc::downgrade(&state);
+        slots.join(line);
         Self {
-            state: Arc::new(Mutex::new(State {
-                limits,
-                jobs: HashMap::new(),
-                waiting: VecDeque::new(),
-                running: watch::Sender::new(0),
-                closed: false,
-            })),
+            state,
+            slots: slots.clone(),
         }
     }
 
@@ -402,17 +505,22 @@ impl<R: Send + Sync + 'static> Queue<R> {
         F: Future<Output = anyhow::Result<R>> + Send,
     {
         let mut status = {
-            let mut state = self.lock();
-            if state.closed {
-                return Err(Rejection::Closed);
-            }
-            let job = state.jobs.get_mut(id).ok_or(Rejection::NoReservation)?;
-            job.uploading = false;
-            job.status_since = Instant::now();
-            job.unwatched_since = Instant::now();
-            let status = job.status.subscribe();
-            state.waiting.push_back(id.clone());
-            state.start_waiting();
+            let mut scheduler = self.slots.lock();
+            let status = {
+                let mut state = self.lock();
+                if state.closed {
+                    return Err(Rejection::Closed);
+                }
+                let job = state.jobs.get_mut(id).ok_or(Rejection::NoReservation)?;
+                job.uploading = false;
+                job.status_since = Instant::now();
+                job.unwatched_since = Instant::now();
+                let status = job.status.subscribe();
+                state.waiting.push_back((scheduler.take_turn(), id.clone()));
+                state.number_waiting();
+                status
+            };
+            scheduler.fill();
             status
         };
         let queue = self.clone();
@@ -451,9 +559,18 @@ impl<R: Send + Sync + 'static> Queue<R> {
         Ok(())
     }
 
-    fn lock(&self) -> MutexGuard<'_, State<R>> {
-        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+    /// The running slots this queue shares.
+    pub fn slots(&self) -> &Slots {
+        &self.slots
     }
+
+    fn lock(&self) -> MutexGuard<'_, State<R>> {
+        lock(&self.state)
+    }
+}
+
+fn lock<T: ?Sized>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 impl<R> Job<R> {
@@ -492,15 +609,24 @@ impl<R> State<R> {
         Ok(())
     }
 
-    /// Starts jobs from the front of the line while running slots are free.
-    fn start_waiting(&mut self) {
-        while !self.closed && *self.running.borrow() < self.limits.running {
-            let Some(id) = self.waiting.pop_front() else {
-                break;
-            };
-            let Some(job) = self.jobs.get_mut(&id) else {
-                continue;
-            };
+    /// The turn of the job at the front of the line, if this queue may start it now.
+    fn next_turn(&self) -> Option<u64> {
+        if self.closed || *self.running.borrow() >= self.limits.running {
+            return None;
+        }
+        self.waiting.front().map(|(turn, _)| *turn)
+    }
+
+    /// Starts the job with `turn`, if it is still at the front of the line and this queue may
+    /// start it now. Only [`Scheduler::fill`] calls this, so the shared limit holds.
+    fn start(&mut self, turn: u64) {
+        if self.next_turn() != Some(turn) {
+            return;
+        }
+        let Some((_, id)) = self.waiting.pop_front() else {
+            return;
+        };
+        if let Some(job) = self.jobs.get_mut(&id) {
             let waited = job.status_since.elapsed();
             job.status.send_replace(Status::Running {
                 percent: 0,
@@ -520,8 +646,8 @@ impl<R> State<R> {
         self.number_waiting();
     }
 
-    /// Frees the running slot of job `id`, whose work has been dropped, and starts the next
-    /// job in line.
+    /// Frees the running slot of job `id`, whose work has been dropped. The caller then lets
+    /// the shared slots start the next job.
     fn free_slot(&mut self, id: &JobId) {
         let Some(job) = self.jobs.get_mut(id).filter(|job| job.has_slot) else {
             return;
@@ -535,7 +661,6 @@ impl<R> State<R> {
             job.status_since = Instant::now();
         }
         self.running.send_modify(|running| *running -= 1);
-        self.start_waiting();
     }
 
     fn finish(&mut self, id: &JobId, outcome: anyhow::Result<R>) {
@@ -563,7 +688,7 @@ impl<R> State<R> {
 
     /// Cancels job `id`. A running job keeps its slot until its task has dropped the work.
     fn cancel(&mut self, id: &JobId, reason: CancelReason) {
-        self.waiting.retain(|waiting| waiting != id);
+        self.waiting.retain(|(_, waiting)| waiting != id);
         let Some(job) = self
             .jobs
             .get_mut(id)
@@ -585,7 +710,7 @@ impl<R> State<R> {
 
     /// Tells every waiting job its current position.
     fn number_waiting(&self) {
-        for (index, id) in self.waiting.iter().enumerate() {
+        for (index, (_, id)) in self.waiting.iter().enumerate() {
             let position = index + 1;
             if let Some(job) = self.jobs.get(id) {
                 job.status.send_if_modified(|status| match status {
@@ -655,6 +780,7 @@ struct Slot<R: Send + Sync + 'static> {
 impl<R: Send + Sync + 'static> Drop for Slot<R> {
     fn drop(&mut self) {
         self.queue.lock().free_slot(&self.id);
+        self.queue.slots.fill();
     }
 }
 
@@ -739,7 +865,7 @@ mod tests {
 
     use super::*;
 
-    type Outcome = anyhow::Result<&'static str>;
+    type Outcome<R = &'static str> = anyhow::Result<R>;
 
     fn queue() -> Queue<&'static str> {
         queue_for(3)
@@ -747,13 +873,21 @@ mod tests {
 
     /// A queue taking `jobs` jobs at once and running one at a time.
     fn queue_for(jobs: usize) -> Queue<&'static str> {
-        Queue::new(Limits {
-            jobs,
-            running: 1,
-            upload_start: Duration::from_secs(60),
-            unwatched: Duration::from_secs(30),
-            keep_finished: Duration::from_secs(600),
-        })
+        sharing(&Slots::new(1), jobs, 1)
+    }
+
+    /// A queue taking `jobs` jobs at once and running up to `running` of them in `slots`.
+    fn sharing<R: Send + Sync + 'static>(slots: &Slots, jobs: usize, running: usize) -> Queue<R> {
+        Queue::new(
+            Limits {
+                jobs,
+                running,
+                upload_start: Duration::from_secs(60),
+                unwatched: Duration::from_secs(30),
+                keep_finished: Duration::from_secs(600),
+            },
+            slots,
+        )
     }
 
     /// A client address in the optional form `client_ip` gives.
@@ -768,9 +902,12 @@ mod tests {
     }
 
     /// Reserves and uploads a job for client `n`; its work ends with what the sender sends.
-    fn submit(queue: &Queue<&'static str>, n: u8) -> (JobId, oneshot::Sender<Outcome>) {
+    fn submit<R: Send + Sync + 'static>(
+        queue: &Queue<R>,
+        n: u8,
+    ) -> (JobId, oneshot::Sender<Outcome<R>>) {
         let id = queue.reserve(client(n), None).unwrap();
-        let (finish, finished) = oneshot::channel::<Outcome>();
+        let (finish, finished) = oneshot::channel::<Outcome<R>>();
         queue
             .begin_upload(&id)
             .unwrap()
@@ -779,7 +916,7 @@ mod tests {
         (id, finish)
     }
 
-    fn status(queue: &Queue<&'static str>, id: &JobId) -> String {
+    fn status<R: fmt::Debug + Send + Sync + 'static>(queue: &Queue<R>, id: &JobId) -> String {
         queue.lock().jobs.get(id).map_or_else(
             || "forgotten".to_owned(),
             |job| format!("{:?}", *job.status.borrow()),
@@ -850,6 +987,115 @@ mod tests {
             assert_eq!(starts.recv().await, Some(n));
             finish.send(Ok("done")).unwrap();
         }
+    }
+
+    // Tools with different results share the slots. When one frees, the job that has waited
+    // longest starts, even if another queue freed the slot.
+    #[tokio::test(start_paused = true)]
+    async fn a_free_slot_goes_to_the_job_that_has_waited_longest_in_any_queue() {
+        let slots = Slots::new(2);
+        let transcripts = sharing::<&'static str>(&slots, 10, 2);
+        let documents = sharing::<u32>(&slots, 10, 2);
+        let (t1, finish_t1) = submit(&transcripts, 1);
+        let (_t2, finish_t2) = submit(&transcripts, 2);
+        let (d1, _finish_d1) = submit(&documents, 3);
+        let (t3, _finish_t3) = submit(&transcripts, 4);
+        settle().await;
+        assert_eq!(
+            status(&transcripts, &t1),
+            "Running { percent: 0, pages: None }"
+        );
+        assert_eq!(status(&documents, &d1), "Waiting { position: 1 }");
+        assert_eq!(status(&transcripts, &t3), "Waiting { position: 1 }");
+
+        finish_t1.send(Ok("t1")).unwrap();
+        settle().await;
+        assert_eq!(
+            status(&documents, &d1),
+            "Running { percent: 0, pages: None }"
+        );
+        assert_eq!(status(&transcripts, &t3), "Waiting { position: 1 }");
+
+        finish_t2.send(Ok("t2")).unwrap();
+        settle().await;
+        assert_eq!(
+            status(&transcripts, &t3),
+            "Running { percent: 0, pages: None }"
+        );
+    }
+
+    // A queue that runs as many jobs as its own limit allows leaves the remaining slots to
+    // the others, even when its own jobs have waited longer.
+    #[tokio::test(start_paused = true)]
+    async fn a_queue_runs_no_more_jobs_than_its_own_limit_in_shared_slots() {
+        let slots = Slots::new(4);
+        let transcripts = sharing::<&'static str>(&slots, 10, 3);
+        let documents = sharing::<u32>(&slots, 10, 3);
+        let mut finish_transcripts = Vec::new();
+        for n in 1..=3 {
+            let (id, finish) = submit(&transcripts, n);
+            settle().await;
+            assert_eq!(
+                status(&transcripts, &id),
+                "Running { percent: 0, pages: None }"
+            );
+            finish_transcripts.push(finish);
+        }
+        let (t4, _finish_t4) = submit(&transcripts, 4);
+        let (d1, finish_d1) = submit(&documents, 5);
+        let (d2, _finish_d2) = submit(&documents, 6);
+        settle().await;
+        assert_eq!(status(&transcripts, &t4), "Waiting { position: 1 }");
+        assert_eq!(
+            status(&documents, &d1),
+            "Running { percent: 0, pages: None }"
+        );
+        assert_eq!(status(&documents, &d2), "Waiting { position: 1 }");
+
+        finish_d1.send(Ok(1)).unwrap();
+        settle().await;
+        assert_eq!(
+            status(&documents, &d2),
+            "Running { percent: 0, pages: None }"
+        );
+        assert_eq!(status(&transcripts, &t4), "Waiting { position: 1 }");
+
+        finish_transcripts.remove(0).send(Ok("t1")).unwrap();
+        settle().await;
+        assert_eq!(
+            status(&transcripts, &t4),
+            "Running { percent: 0, pages: None }"
+        );
+    }
+
+    // The scheduler picks a job by its turn, then starts it. If the job is cancelled in
+    // between, the job behind it must not start in its place: an older job in another queue
+    // may be next.
+    #[tokio::test(start_paused = true)]
+    async fn a_job_cancelled_after_being_picked_is_not_replaced_by_the_one_behind_it() {
+        let slots = Slots::new(2);
+        let transcripts = sharing::<&'static str>(&slots, 10, 2);
+        let documents = sharing::<u32>(&slots, 10, 2);
+        let (_t1, _finish_t1) = submit(&transcripts, 1);
+        let (_d1, finish_d1) = submit(&documents, 2);
+        let (t2, _finish_t2) = submit(&transcripts, 3);
+        let (d2, _finish_d2) = submit(&documents, 4);
+        let (t3, _finish_t3) = submit(&transcripts, 5);
+        settle().await;
+
+        // Replay the scheduler's two steps with a cancellation in between.
+        let picked = transcripts.lock().next_turn().unwrap();
+        transcripts.lock().cancel(&t2, CancelReason::Unwatched);
+        transcripts.lock().start(picked);
+        assert_eq!(status(&transcripts, &t3), "Waiting { position: 1 }");
+
+        finish_d1.send(Ok(1)).unwrap();
+        settle().await;
+        assert_eq!(
+            status(&documents, &d2),
+            "Running { percent: 0, pages: None }"
+        );
+        assert_eq!(status(&transcripts, &t3), "Waiting { position: 1 }");
     }
 
     #[tokio::test(start_paused = true)]
