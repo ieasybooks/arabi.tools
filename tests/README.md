@@ -16,7 +16,7 @@ topcoat asset bundle --bin arlang-tools
 npm test --prefix tests/browser
 ```
 
-It starts mock Wit on port 9804, the site with mock Drive on port 3204, and the site without OCR credentials on port 3205. All three ports must be free. Set `TAHWEEL_TEST_PDFIUM` to the pinned PDFium library for OCR browser tests. CI runs it on pull requests and keeps traces and screenshots of failures as the `browser-failures` artifact.
+It starts mock Wit on port 9804, the site with mock Drive and real diacritization on port 3204, and the site without OCR or diacritization on port 3205. All three ports must be free. Set `TAHWEEL_TEST_PDFIUM` to the pinned PDFium library for OCR browser tests, and provision the diacritization models and runtime as described below before running the browser suite. CI runs it on pull requests and keeps traces and screenshots of failures as the `browser-failures` artifact.
 
 `examples/mock_wit.rs` explains how to try the site by hand without Wit tokens.
 
@@ -25,3 +25,19 @@ It starts mock Wit on port 9804, the site with mock Drive on port 3204, and the 
 `tests/ocr.rs` uses a local Drive mock with fresh generated keys, PNG/JPEG images and generated PDFs. Set `TAHWEEL_TEST_PDFIUM` to include PDF validation, the 1,000-page limit recheck and cancellation cleanup tests. CI installs the pinned library using `deploy/pdfium.sh`. The tests cover both interface languages, all three downloads, progress, queue limits, invalid uploads, unavailable credentials and upload deletion. They never use production credentials. `tests/browser/ocr.spec.js` covers both languages in Chromium, including PDF uploads, live progress, page previews, TXT/DOCX/JSON downloads, errors and unavailable OCR with working transcription. Set `OCR_SCREENSHOT_DIR` to an existing directory to save successful upload/result screenshots.
 
 `python3 tests/deploy_env.py` verifies generated credential JSON through the installed Docker Compose parser, without starting containers or accessing real keys.
+
+## Diacritization tests
+
+The library tests cover queue cancellation, bounded engine reuse, Unicode text streaming, document validation, temporary-file cleanup, and download lifetime without loading models. `tests/tashkeel.rs` adds HTTP coverage for discovery, unavailable service, private results, and request limits. The ignored tests use both real models to check reference diacritics, text limits, source preservation, TXT/DOCX downloads, validation errors, and cancellation.
+
+Provision the pinned artifacts and run the real-model tests on Linux x64:
+
+```sh
+sh deploy/onnxruntime.sh amd64 /tmp/arabi-onnxruntime
+sh deploy/tashkeel-models.sh /tmp/arabi-tashkeel-models
+export ORT_DYLIB_PATH=/tmp/arabi-onnxruntime/libonnxruntime.so
+export TASHKEEL_MODEL_CACHE=/tmp/arabi-tashkeel-models
+cargo test --locked -- --ignored --test-threads=1
+```
+
+Keep these variables set for the browser suite. `tests/browser/diacritization.spec.js` covers both languages, model switching without losing the source, copy/download, Unicode limits, TXT/DOCX uploads, validation errors, cancellation, privacy, and unavailable service. It uses real CPU inference. Set `DIACRITIZATION_SCREENSHOT_DIR` to an existing directory to save successful desktop and mobile screenshots.

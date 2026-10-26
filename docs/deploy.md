@@ -72,4 +72,45 @@ Store `DRIVE_SERVICE_ACCOUNTS` as a JSON array, not a JSON string containing an 
 
 The app initializes one shared Drive recognizer using all configured accounts, automatic language detection and tahweel's default eight page operations per account. Startup converts, exports and deletes one blank page to verify storage is usable. The site serves transcription while this check runs; OCR becomes available when it completes. Missing or invalid credentials, or no account with storage, leave OCR temporarily unavailable while transcription continues. For development, `TAHWEEL_PDFIUM` may point to the shared library explicitly.
 
-The tools run four jobs at once in total, and each tool runs at most three of them, so a busy tool always leaves a slot for the other. When a slot frees, the job that has waited longest starts, unless its tool already runs three. Each tool accepts 100 jobs, waiting and running, and one active job per IP address. OCR accepts one PDF, JPG/JPEG or PNG up to 99,000,000 bytes and 1,000 pages, checks the count before queueing and again during conversion, and retains text previews and TXT/DOCX/JSON downloads for 30 minutes. Upload directories are removed when jobs end. Pages are rendered on one blocking thread per running job. Closing the page cancels an abandoned job after one minute; active Drive calls finish and delete their files before the slot is released. During shutdown OCR stops starting pages immediately and waits for active calls to clean up. Docker's five-minute forced stop still applies if the upstream does not finish in time.
+The tools run four jobs at once in total, and each tool runs at most three of them, so a busy tool leaves a slot available to other tools. When a slot frees, the job that has waited longest starts, unless its tool already runs three. Each tool accepts 100 jobs, waiting and running, and one active job per IP address. OCR accepts one PDF, JPG/JPEG or PNG up to 99,000,000 bytes and 1,000 pages, checks the count before queueing and again during conversion, and retains text previews and TXT/DOCX/JSON downloads for 30 minutes. Upload directories are removed when jobs end. Pages are rendered on one blocking thread per running job. Closing the page cancels an abandoned job after one minute; active Drive calls finish and delete their files before the slot is released. During shutdown OCR stops starting pages immediately and waits for active calls to clean up. Docker's five-minute forced stop still applies if the upstream does not finish in time.
+
+## Diacritization runtime and models
+
+Diacritization uses the exact released [`tashkeel` 0.1.0](https://github.com/ieasybooks/tashkeel-rs/releases/tag/v0.1.0) Rust library and the official CPU ONNX Runtime 1.31.0 shared library (API 31). `deploy/onnxruntime.sh` pins the Linux x86-64 and ARM64 release archives by byte count and SHA-256. It installs `libonnxruntime.so`, `LICENSE`, and `ThirdPartyNotices.txt`. The release image still targets x86-64; an ARM64 image build can use the same helper with `arm64`.
+
+`deploy/tashkeel-models.sh` downloads the official [Shakkelha sigmoid conversion from models-v1](https://github.com/ieasybooks/tashkeel-rs/releases/tag/models-v1) and the upstream [CATT v2 encoder-only archive](https://github.com/abjadai/catt/releases/tag/v2). Their byte counts and SHA-256 digests match the 0.1.0 crate's model catalog. It checks the CATT archive before extracting its two named files, then verifies every extracted model. Reusing a cache also verifies every file; a corrupt cache fails without replacing its files. Use a fresh cache directory to repair it. Completed model directories are published only after verification. Keep the cache on persistent disk and share it between both models and all jobs; it contains about 89 MB of weights.
+
+The container build provisions everything before the image is published. It sets `TASHKEEL_MODEL_CACHE=/app/models` and `ORT_DYLIB_PATH=/app/libonnxruntime.so`, and keeps models readable by the unprivileged app user. The shared cache has this layout:
+
+```text
+/app/models/
+  shakkelha/v1/model.onnx
+  catt/v1/encoder.onnx
+  catt/v1/decoder.onnx
+```
+
+No new production secrets or credentials are required. Docker image layers retain the models across container replacement; no writable model volume is needed. A custom model volume must already contain the verified layout above, because mounting an empty directory over `/app/models` hides the packaged files. Model and library notices are retained under `/usr/share/doc/tashkeel`, including Shakkelha's MIT license and CATT's Apache-2.0 license; the native runtime's MIT license and third-party notices are under `/usr/share/doc/onnxruntime`.
+
+The app verifies these local files and initializes the models at startup. If the cache is unset, missing or corrupt, or the runtime fails to load, the site still starts and diacritization shows a clear temporarily unavailable message in Arabic and English. Other configured tools continue working. `ORT_DYLIB_PATH` is optional when the library is beside the executable, but an explicit absolute path is recommended for local development. Initialization and inference never download model files, and no Python inference process is used. After repairing missing files, restart the app to initialize them.
+
+For local Linux development, install `curl`, `tar`, `unzip`, and the standard coreutils tools, then provision once outside the request path. Choose `arm64` instead of `amd64` on ARM64 hosts:
+
+```sh
+sh deploy/onnxruntime.sh amd64 "$PWD/target/onnxruntime"
+sh deploy/tashkeel-models.sh "$PWD/target/tashkeel-models"
+export ORT_DYLIB_PATH="$PWD/target/onnxruntime/libonnxruntime.so"
+export TASHKEEL_MODEL_CACHE="$PWD/target/tashkeel-models"
+topcoat dev
+```
+
+Run ordinary checks with `cargo test --locked`; they do not require a native runtime or weights. With the environment above, run all opt-in unit and integration tests against real downloaded files:
+
+```sh
+cargo test --locked -- --ignored --test-threads=1
+```
+
+CI runs the ordinary tests first, provisions and verifies both models and the runtime, then runs these ignored tests for deterministic references and text/document preservation. The browser job waits for those checks, verifies its restored model cache again, and runs the Arabic and English diacritization flow with the real models. Its separate unavailable server omits the model environment. Wit and OCR remain mocked in browser tests. No live credentials are needed for either test suite.
+
+Diacritization shares the existing four-job global queue and three-job per-tool maximum. File uploads keep the 99,000,000-byte limit and completed results expire after 30 minutes. The model cache contains immutable weights, not uploaded text or document results; those remain subject to the normal job cleanup and deployment lifecycle above.
+
+Cancellation requires the signed cookie issued to the browser that reserved the job. The signing key is generated at startup and lives as long as the in-memory jobs; it requires no additional deployment secret. A result URL alone does not authorize cancellation.

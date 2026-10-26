@@ -4,7 +4,7 @@ use arlang_tools::{
     app,
     config::Config,
     queue::Slots,
-    tools::{RUNNING_JOBS, ocr::Ocr, transcription::Transcription},
+    tools::{RUNNING_JOBS, diacritization::Diacritization, ocr::Ocr, transcription::Transcription},
 };
 use std::time::Duration;
 use tafrigh_wit::WitConfig;
@@ -29,6 +29,16 @@ async fn main() -> anyhow::Result<()> {
     wit.api_url = "http://127.0.0.1:9804".into();
     let transcription = Transcription::new(vec![("ar".into(), wit)], &slots).await?;
     transcription.queue.spawn_sweeper();
+    let diacritization = Diacritization::unavailable(&slots);
+    if let Some(cache) = std::env::var_os("TASHKEEL_MODEL_CACHE") {
+        diacritization
+            .initialize(
+                std::path::Path::new(&cache),
+                std::env::var_os("ORT_DYLIB_PATH").map(Into::into),
+            )
+            .await?;
+    }
+    diacritization.queue.spawn_sweeper();
     let config = Config {
         host: "127.0.0.1".into(),
         port: 3204,
@@ -37,6 +47,8 @@ async fn main() -> anyhow::Result<()> {
         client_ip_header: None,
         drive: None,
         pdfium_library: None,
+        tashkeel_model_cache: None,
+        onnxruntime_library: None,
     };
     // The example serves the same app assets as the normal binary. Topcoat's bundler
     // accepts binary targets, so load that bundle beside the examples directory.
@@ -47,7 +59,13 @@ async fn main() -> anyhow::Result<()> {
             .context("example directory")?
             .join("../assets"),
     )?;
-    let router = app::router(&config, transcription.clone(), ocr.clone(), assets)?;
+    let router = app::router(
+        &config,
+        transcription.clone(),
+        ocr.clone(),
+        diacritization.clone(),
+        assets,
+    )?;
     let listener = tokio::net::TcpListener::bind((config.host.as_str(), config.port)).await?;
     topcoat::serve_until(
         listener,
@@ -56,7 +74,8 @@ async fn main() -> anyhow::Result<()> {
             let _ = tokio::signal::ctrl_c().await;
             tokio::join!(
                 transcription.queue.shutdown(Duration::ZERO),
-                ocr.queue.shutdown(Duration::ZERO)
+                ocr.queue.shutdown(Duration::ZERO),
+                diacritization.queue.shutdown(Duration::ZERO)
             );
         },
     )

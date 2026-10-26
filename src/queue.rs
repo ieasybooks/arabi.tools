@@ -152,6 +152,8 @@ impl<R> Clone for Status<R> {
 /// Why a job was cancelled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CancelReason {
+    /// The visitor explicitly stopped the job.
+    User,
     /// Nobody had its page open for too long.
     Unwatched,
     /// The server is shutting down.
@@ -415,6 +417,24 @@ impl<R: Send + Sync + 'static> Queue<R> {
         }
     }
 
+    /// Stops an unfinished job at the visitor's request. Cooperative work retains its
+    /// running slot and client reservation until it has actually stopped.
+    pub fn cancel(&self, id: &JobId) -> bool {
+        {
+            let mut state = self.lock();
+            if state
+                .jobs
+                .get(id)
+                .is_none_or(|job| job.status.borrow().is_finished())
+            {
+                return false;
+            }
+            state.cancel(id, CancelReason::User);
+        }
+        self.slots.fill();
+        true
+    }
+
     /// Cancels jobs nobody is watching and forgets expired reservations and finished jobs.
     pub fn sweep(&self) {
         let now = Instant::now();
@@ -432,7 +452,7 @@ impl<R: Send + Sync + 'static> Queue<R> {
                     }
                     true
                 }
-                _ => job.has_slot || in_status < limits.keep_finished,
+                _ => job.uploading || job.has_slot || in_status < limits.keep_finished,
             }
         });
         for id in unwatched_jobs {
@@ -512,6 +532,9 @@ impl<R: Send + Sync + 'static> Queue<R> {
                     return Err(Rejection::Closed);
                 }
                 let job = state.jobs.get_mut(id).ok_or(Rejection::NoReservation)?;
+                if !job.uploading || !matches!(*job.status.borrow(), Status::Reserved) {
+                    return Err(Rejection::NoReservation);
+                }
                 job.uploading = false;
                 job.status_since = Instant::now();
                 job.unwatched_since = Instant::now();
@@ -592,7 +615,7 @@ impl<R> State<R> {
         }
         let mut active = 0;
         for job in self.jobs.values() {
-            if job.status.borrow().is_finished() && !job.has_slot {
+            if job.status.borrow().is_finished() && !job.has_slot && !job.uploading {
                 continue;
             }
             if job.client == client {
@@ -1234,6 +1257,71 @@ mod tests {
         tokio::time::advance(Duration::from_secs(1)).await;
         queue.sweep();
         assert_eq!(status(&queue, &b), "Cancelled(Unwatched)");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn visitor_cancellation_removes_waiting_work_and_renumbers_the_line() {
+        let queue = queue();
+        let (running, finish) = submit(&queue, 1);
+        let (cancelled, cancelled_work) = submit(&queue, 2);
+        let (next, _next_work) = submit(&queue, 3);
+        settle().await;
+        assert!(queue.cancel(&cancelled));
+        assert!(!queue.cancel(&cancelled));
+        settle().await;
+        assert_eq!(status(&queue, &cancelled), "Cancelled(User)");
+        assert!(cancelled_work.is_closed());
+        assert_eq!(status(&queue, &next), "Waiting { position: 1 }");
+        finish.send(Ok("done")).unwrap();
+        settle().await;
+        assert!(!queue.cancel(&running));
+        assert_eq!(status(&queue, &next), "Running { percent: 0, pages: None }");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_cancelled_upload_cannot_submit_work_after_the_request_finishes() {
+        let queue = queue();
+        let id = queue.reserve(client(1), None).unwrap();
+        let upload = queue.begin_upload(&id).unwrap();
+        assert!(queue.cancel(&id));
+        assert_eq!(queue.availability(client(1)), Err(Rejection::ActiveJob));
+        assert_eq!(
+            upload.submit(|_| async { panic!("cancelled upload must not run") }),
+            Err(Rejection::NoReservation)
+        );
+        settle().await;
+        assert!(queue.result(&id).is_none());
+        assert_eq!(queue.availability(client(1)), Ok(()));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn visitor_cancellation_keeps_a_cooperative_job_slot_until_cleanup_finishes() {
+        let queue = queue();
+        let id = queue.reserve(client(1), None).unwrap();
+        let (observed, stopped) = oneshot::channel();
+        let (cleanup, cleaned) = oneshot::channel();
+        queue
+            .begin_upload(&id)
+            .unwrap()
+            .submit_cancellable(move |_, token| async move {
+                token.cancelled().await;
+                observed.send(()).unwrap();
+                cleaned.await.unwrap();
+                Ok("must not publish")
+            })
+            .unwrap();
+        let (next, _finish_next) = submit(&queue, 2);
+        settle().await;
+        assert!(queue.cancel(&id));
+        stopped.await.unwrap();
+        assert_eq!(status(&queue, &id), "Cancelled(User)");
+        assert_eq!(queue.availability(client(1)), Err(Rejection::ActiveJob));
+        assert_eq!(status(&queue, &next), "Waiting { position: 1 }");
+        cleanup.send(()).unwrap();
+        settle().await;
+        assert_eq!(queue.availability(client(1)), Ok(()));
+        assert!(queue.result(&id).is_none());
+        assert_eq!(status(&queue, &next), "Running { percent: 0, pages: None }");
     }
 
     #[tokio::test(start_paused = true)]
