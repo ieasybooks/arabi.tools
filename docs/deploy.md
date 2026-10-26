@@ -109,7 +109,7 @@ Run ordinary checks with `cargo test --locked`; they do not require a native run
 cargo test --locked -- --ignored --test-threads=1
 ```
 
-CI runs the ordinary tests first, provisions and verifies both models and the runtime, then runs these ignored tests for deterministic references and text/document preservation. The browser job waits for those checks, verifies its restored model cache again, and runs the Arabic and English diacritization flow with the real models. Its separate unavailable server omits the model environment. Wit and OCR remain mocked in browser tests. No live credentials are needed for either test suite.
+CI runs the ordinary tests first, provisions and verifies both models and the runtime, then runs these ignored tests for deterministic references and text/document preservation. The browser job waits for those checks, verifies its restored model cache again, and runs the Arabic and English diacritization flow with the real models. Its separate unavailable server omits the model environment. Wit and OCR remain mocked in browser tests. The container workflow also submits a text job to each packaged model and checks its download through the built image's HTTP interface. No live credentials are needed for these checks.
 
 Diacritization shares the existing four-job global queue and three-job per-tool maximum. File uploads keep the 99,000,000-byte limit and completed results expire after 30 minutes. The model cache contains immutable weights, not uploaded text or document results; those remain subject to the normal job cleanup and deployment lifecycle above.
 
