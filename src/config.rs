@@ -31,6 +31,10 @@ pub struct Config {
     pub drive: Option<DriveConfig>,
     /// Optional `PDFium` path for local development (`TAHWEEL_PDFIUM`).
     pub pdfium_library: Option<PathBuf>,
+    /// Pre-provisioned diacritization model cache (`TASHKEEL_MODEL_CACHE`).
+    pub tashkeel_model_cache: Option<PathBuf>,
+    /// Optional explicit native runtime (`ORT_DYLIB_PATH`).
+    pub onnxruntime_library: Option<PathBuf>,
 }
 
 /// The Wit tokens of one language.
@@ -78,6 +82,12 @@ impl Config {
                 }
             }),
             pdfium_library: env::var_os("TAHWEEL_PDFIUM").map(PathBuf::from),
+            tashkeel_model_cache: env::var_os("TASHKEEL_MODEL_CACHE")
+                .filter(|path| !path.is_empty())
+                .map(PathBuf::from),
+            onnxruntime_library: env::var_os("ORT_DYLIB_PATH")
+                .filter(|path| !path.is_empty())
+                .map(PathBuf::from),
         })
     }
 }

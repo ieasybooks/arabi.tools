@@ -30,10 +30,10 @@ jobs:
           # toolchain the runner image happens to ship changes the key between image updates,
           # so the cache was never found.
           add-rust-environment-hash-key: false
-      - name: Install ffmpeg and ffprobe
+      - name: Install ffmpeg, ffprobe, and model archive tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg
+          sudo apt-get install -y --no-install-recommends ffmpeg unzip
       - name: Cache Topcoat CLI
         id: topcoat
         uses: actions/cache@v6.1.0
@@ -52,9 +52,23 @@ jobs:
       - run: topcoat fmt --check src
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
+      - name: Cache pinned diacritization models
+        uses: actions/cache@v6.1.0
+        with:
+          path: ${{ runner.temp }}/tashkeel-models
+          key: tashkeel-models-v1-${{ hashFiles('deploy/tashkeel-models.sh', 'deploy/licenses/tashkeel/**') }}
+      - name: Provision and verify diacritization runtime and models
+        run: |
+          sh deploy/onnxruntime.sh amd64 "$RUNNER_TEMP/onnxruntime"
+          sh deploy/tashkeel-models.sh "$RUNNER_TEMP/tashkeel-models"
+          echo "ORT_DYLIB_PATH=$RUNNER_TEMP/onnxruntime/libonnxruntime.so" >> "$GITHUB_ENV"
+          echo "TASHKEEL_MODEL_CACHE=$RUNNER_TEMP/tashkeel-models" >> "$GITHUB_ENV"
+      - name: Test real diacritization models and document preservation
+        run: cargo test --locked -- --ignored --test-threads=1
 
   browser:
     name: browser (Arabic and English)
+    needs: check
     # The quick check job covers pushes to main; the browser flow is checked before merging.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
@@ -75,10 +89,10 @@ jobs:
           node-version: '24.22.1'
           cache: npm
           cache-dependency-path: tests/browser/package-lock.json
-      - name: Install ffmpeg and ffprobe
+      - name: Install ffmpeg, ffprobe, and model archive tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg
+          sudo apt-get install -y --no-install-recommends ffmpeg unzip
       - name: Cache Topcoat CLI
         id: topcoat
         uses: actions/cache@v6.1.0
@@ -103,11 +117,22 @@ jobs:
         run: |
           sh deploy/pdfium.sh amd64 "$RUNNER_TEMP/pdfium"
           echo "TAHWEEL_TEST_PDFIUM=$RUNNER_TEMP/pdfium/lib/libpdfium.so" >> "$GITHUB_ENV"
+      - name: Cache pinned diacritization models
+        uses: actions/cache@v6.1.0
+        with:
+          path: ${{ runner.temp }}/tashkeel-models
+          key: tashkeel-models-v1-${{ hashFiles('deploy/tashkeel-models.sh', 'deploy/licenses/tashkeel/**') }}
+      - name: Provision and verify diacritization runtime and models
+        run: |
+          sh deploy/onnxruntime.sh amd64 "$RUNNER_TEMP/onnxruntime"
+          sh deploy/tashkeel-models.sh "$RUNNER_TEMP/tashkeel-models"
+          echo "ORT_DYLIB_PATH=$RUNNER_TEMP/onnxruntime/libonnxruntime.so" >> "$GITHUB_ENV"
+          echo "TASHKEEL_MODEL_CACHE=$RUNNER_TEMP/tashkeel-models" >> "$GITHUB_ENV"
       - name: Build the app, mocks, and assets
         run: |
           cargo build --locked --bin arlang-tools --example mock_wit --example mock_ocr
           topcoat asset bundle --bin arlang-tools
-      - name: Test the live transcription and OCR flows
+      - name: Test the live transcription, OCR, and diacritization flows
         run: npm test --prefix tests/browser
       - name: Save browser failure traces and screenshots
         if: failure()

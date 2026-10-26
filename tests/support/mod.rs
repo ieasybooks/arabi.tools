@@ -7,6 +7,7 @@ use arlang_tools::app;
 use arlang_tools::config::Config;
 use arlang_tools::queue::{JobId, Limits, Queue, Slots, Status, Upload};
 use arlang_tools::tools::RUNNING_JOBS;
+use arlang_tools::tools::diacritization::Diacritization;
 use arlang_tools::tools::ocr::Ocr;
 use arlang_tools::tools::transcription::{self, MAX_DURATION, Transcript, Transcription};
 use reqwest::{Client, Response, StatusCode, multipart};
@@ -84,6 +85,7 @@ pub struct TestApp {
     pub transcription: Transcription,
     pub wit: MockServer,
     pub ocr: Ocr,
+    pub diacritization: Diacritization,
     base_url: String,
     shutdown: Option<oneshot::Sender<()>>,
     server: JoinHandle<std::io::Result<()>>,
@@ -101,6 +103,21 @@ impl TestApp {
     }
 
     pub async fn start_with_ocr(setup: Setup<'_>, ocr: Ocr) -> anyhow::Result<Self> {
+        let diacritization = Diacritization::unavailable(ocr.queue.slots());
+        Self::start_with_tools(setup, ocr, diacritization).await
+    }
+
+    #[allow(dead_code)] // Only the real-model integration suite initializes this tool.
+    pub async fn start_with_diacritization(diacritization: Diacritization) -> anyhow::Result<Self> {
+        let ocr = Ocr::unavailable(diacritization.queue.slots());
+        Self::start_with_tools(Setup::default(), ocr, diacritization).await
+    }
+
+    async fn start_with_tools(
+        setup: Setup<'_>,
+        ocr: Ocr,
+        diacritization: Diacritization,
+    ) -> anyhow::Result<Self> {
         let wit = MockServer::start().await;
         let mut configured = Vec::new();
         for &(code, token, text) in setup.languages {
@@ -138,12 +155,15 @@ impl TestApp {
             client_ip_header: None,
             drive: None,
             pdfium_library: None,
+            tashkeel_model_cache: None,
+            onnxruntime_library: None,
         };
         let assets = tokio::task::spawn_blocking(Assets::load).await??;
         let router = app::router(
             &config,
             transcription.clone(),
             ocr.clone(),
+            diacritization.clone(),
             assets.bundle.clone(),
         )?;
         let listener = TcpListener::bind((config.host.as_str(), config.port)).await?;
@@ -162,6 +182,7 @@ impl TestApp {
             client,
             transcription,
             ocr,
+            diacritization,
             wit,
             base_url,
             shutdown: Some(shutdown),
@@ -252,6 +273,7 @@ impl TestApp {
     pub async fn stop(mut self) -> anyhow::Result<()> {
         self.transcription.queue.shutdown(Duration::ZERO).await;
         self.ocr.queue.shutdown(Duration::ZERO).await;
+        self.diacritization.queue.shutdown(Duration::ZERO).await;
         if let Some(shutdown) = self.shutdown.take() {
             let _ = shutdown.send(());
         }

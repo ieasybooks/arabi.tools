@@ -1,5 +1,6 @@
 //! The site's pages. Each module under `app/` serves the URL of its module path.
 
+mod diacritize;
 mod download;
 mod health;
 mod language;
@@ -13,7 +14,7 @@ use topcoat::{
     Result,
     asset::{Asset, AssetBundle, AssetConfig, RouterBuilderAssetExt, asset},
     context::{Cx, app_context},
-    cookie::RouterBuilderCookieExt,
+    cookie::{Key, RouterBuilderCookieExt},
     font::{Font, UnicodeRange, UnicodeRanges, font},
     icon::icon,
     router::{
@@ -36,6 +37,7 @@ use crate::i18n::Locale;
 use crate::icons;
 use crate::meta::{PageMeta, origin};
 use crate::tools::MAX_UPLOAD_BYTES;
+use crate::tools::diacritization::Diacritization;
 use crate::tools::ocr::Ocr;
 use crate::tools::transcription::Transcription;
 
@@ -68,6 +70,7 @@ pub fn router(
     config: &Config,
     transcription: Transcription,
     ocr: Ocr,
+    diacritization: Diacritization,
     assets: AssetBundle,
 ) -> anyhow::Result<Router> {
     let upload_limit = usize::try_from(MAX_UPLOAD_BYTES)? + FORM_OVERHEAD;
@@ -75,8 +78,15 @@ pub fn router(
         .discover()
         .assets(assets)
         .cookies()
+        // Jobs do not survive a restart, so their cookie-signing key need not either.
+        .app_context(Key::generate())
         .app_context(transcription)
         .app_context(ocr)
+        .app_context(diacritization)
+        // Text is at most 1,000 Unicode scalars; only document uploads need the
+        // large body allowance. Leave room for URL-encoded characters and fields.
+        .layer(BodyLimit::max(FORM_OVERHEAD).at("/diacritize/jobs"))
+        .layer(BodyLimit::max(upload_limit).at("/diacritize/jobs/{id}/document"))
         .layer(BodyLimit::max(upload_limit).at("/ocr/jobs"))
         .layer(BodyLimit::max(upload_limit).at("/transcribe/jobs"));
     if let Some(header) = &config.client_ip_header {
@@ -312,6 +322,7 @@ fn page_meta(cx: &Cx, locale: Locale, origin: &str) -> PageMeta {
     }
     transcribe::meta(cx, locale, origin)
         .or_else(|| ocr::meta(cx, locale, origin))
+        .or_else(|| diacritize::meta(cx, locale, origin))
         .unwrap_or_else(|| {
             PageMeta::private(
                 locale.page_title(text.not_found_title),
@@ -364,6 +375,7 @@ async fn sitemap(cx: &Cx) -> Result<Typed> {
         href!(home).resolve(cx),
         href!(transcribe::page).resolve(cx),
         href!(ocr::page).resolve(cx),
+        href!(diacritize::page).resolve(cx),
     ] {
         let _ = writeln!(xml, "  <url><loc>{origin}{path}</loc></url>");
     }
@@ -519,6 +531,14 @@ async fn home(cx: &Cx) -> Result<impl View> {
                         action: text.open_tool,
                         inputs: text.ocr.input_formats,
                         outputs: text.ocr.output_formats
+                    )
+                    tool_card(
+                        href: href!(diacritize::page).resolve(cx),
+                        name: text.diacritization.name,
+                        description: text.diacritization.description,
+                        action: text.open_tool,
+                        inputs: text.diacritization.input_formats,
+                        outputs: text.diacritization.output_formats
                     )
                     <li class="tool-soon"><p>(text.more_tools)</p></li>
                 </ul>

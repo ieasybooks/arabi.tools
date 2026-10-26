@@ -5,6 +5,7 @@ use arlang_tools::app;
 use arlang_tools::config::Config;
 use arlang_tools::queue::Slots;
 use arlang_tools::tools::RUNNING_JOBS;
+use arlang_tools::tools::diacritization::Diacritization;
 use arlang_tools::tools::ocr::Ocr;
 use arlang_tools::tools::transcription::Transcription;
 use tafrigh_wit::WitConfig;
@@ -44,9 +45,18 @@ async fn main() -> anyhow::Result<()> {
     let ocr = Ocr::unavailable(&slots).with_pdfium_library(config.pdfium_library.clone());
     ocr.queue.spawn_sweeper();
 
+    let diacritization = Diacritization::unavailable(&slots);
+    diacritization.queue.spawn_sweeper();
+
     let assets =
         AssetBundle::load().context("loading the asset bundle (run `topcoat asset bundle`)")?;
-    let router = app::router(&config, transcription.clone(), ocr.clone(), assets)?;
+    let router = app::router(
+        &config,
+        transcription.clone(),
+        ocr.clone(),
+        diacritization.clone(),
+        assets,
+    )?;
     let listener = TcpListener::bind((config.host.as_str(), config.port))
         .await
         .with_context(|| format!("listening on {}:{}", config.host, config.port))?;
@@ -64,6 +74,19 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    let model_initialization = tokio::spawn({
+        let diacritization = diacritization.clone();
+        let cache = config.tashkeel_model_cache.clone();
+        let runtime = config.onnxruntime_library.clone();
+        async move {
+            if let Some(cache) = cache
+                && let Err(error) = diacritization.initialize(&cache, runtime).await
+            {
+                tracing::warn!("Diacritization unavailable: {error:#}");
+            }
+        }
+    });
+
     // Status pages hold their connections open; once jobs are done, close them quickly.
     let service = RouterService::new(router).shutdown_timeout(Duration::from_secs(5));
     topcoat::serve_until(listener, service, async move {
@@ -73,9 +96,13 @@ async fn main() -> anyhow::Result<()> {
             transcription.queue.shutdown(SHUTDOWN_GRACE),
             // Stop new OCR pages immediately and let active Drive calls clean up.
             ocr.queue.shutdown(Duration::ZERO),
+            diacritization.queue.shutdown(Duration::ZERO),
             // The startup probe also gets to finish deleting its Drive document.
             async {
                 let _ = initialization.await;
+            },
+            async {
+                let _ = model_initialization.await;
             },
         );
     })

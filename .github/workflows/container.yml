@@ -13,6 +13,7 @@ on:
       - Cargo.lock
       - rust-toolchain.toml
       - .github/workflows/container.yml
+      - .github/scripts/diacritization-smoke.py
   workflow_dispatch:
 
 permissions:
@@ -89,5 +90,6 @@ jobs:
                   assert response.read(), f"empty asset: {asset}"
           print("Arabic and English pages and their bundled assets are available.")
           PY
+          python3 .github/scripts/diacritization-smoke.py
           docker stop --time 300 arlang-ci
           test "$(docker inspect --format '{{.State.ExitCode}}' arlang-ci)" = 0

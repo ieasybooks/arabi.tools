@@ -1,6 +1,7 @@
 //! The tools the site offers. Each one owns its limits, its job queue and its work; the
 //! queues share the running slots. The pages that use a tool live under `src/app/`.
 
+pub mod diacritization;
 pub mod ocr;
 pub mod transcription;
 

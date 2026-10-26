@@ -9,6 +9,10 @@ const env = Object.fromEntries(
 );
 const mode = process.argv[2];
 if (!["app", "mock", "unavailable"].includes(mode)) throw new Error("Expected app, mock or unavailable");
+if (mode !== "app") {
+  delete env.TASHKEEL_MODEL_CACHE;
+  delete env.ORT_DYLIB_PATH;
+}
 const target = resolve(process.env.CARGO_TARGET_DIR || "target", "debug");
 const binary = mode === "mock" ? "examples/mock_wit" : mode === "app" ? "examples/mock_ocr" : "arlang-tools";
 // Binaries and assets are built before the suite; browser tests never start cargo builds.

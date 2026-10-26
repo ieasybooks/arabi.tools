@@ -84,6 +84,7 @@ async fn job_status(locale: Locale, id: JobId, status: Status<Transcript>) -> Re
         Status::Running { .. } => text.running.to_owned(),
         Status::Done(_) => text.done.to_owned(),
         Status::Failed => text.failed.to_owned(),
+        Status::Cancelled(CancelReason::User) => locale.text().cancelled_user.to_owned(),
         Status::Cancelled(CancelReason::Unwatched) => text.cancelled_unwatched.to_owned(),
         Status::Cancelled(CancelReason::Shutdown) => text.cancelled_shutdown.to_owned(),
     };

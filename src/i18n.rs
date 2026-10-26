@@ -5,6 +5,7 @@ use topcoat::context::Cx;
 use topcoat::cookie::{Cookies, cookies};
 
 use crate::queue::Rejection;
+use crate::tools::diacritization::{MAX_TEXT_CHARACTERS, Model, Problem};
 use crate::tools::ocr::{DocumentProblem, MAX_PAGES};
 use crate::tools::transcription::{AudioProblem, MAX_DURATION};
 use crate::tools::{KEEP_FINISHED, MAX_UPLOAD_BYTES};
@@ -232,6 +233,98 @@ impl Locale {
             ),
         }
     }
+
+    pub fn diacritization_rejection(self, rejection: Rejection) -> &'static str {
+        let text = &self.text().diacritization;
+        match rejection {
+            Rejection::Closed => text.closed,
+            Rejection::Full => text.full,
+            Rejection::ActiveJob => text.active_job,
+            Rejection::NoReservation => text.no_reservation,
+        }
+    }
+
+    pub fn diacritization_problem(self, problem: Problem) -> String {
+        let text = &self.text().diacritization;
+        match problem {
+            Problem::Missing => text.missing.into(),
+            Problem::WrongType => text.wrong_type.into(),
+            Problem::TooLarge => self.too_large(),
+            Problem::InvalidUtf8 => text.invalid_utf8.into(),
+            Problem::InvalidDocx => text.invalid_docx.into(),
+            Problem::UnsupportedDocx => text.unsupported_docx.into(),
+            Problem::DocxLimits => text.docx_limits.into(),
+            Problem::TextTooLong => self.diacritization_text_limit(),
+            Problem::Unreadable => text.unreadable.into(),
+        }
+    }
+
+    pub fn diacritization_model(self, model: Model) -> &'static str {
+        let text = &self.text().diacritization;
+        match model {
+            Model::Shakkelha => text.shakkelha,
+            Model::Catt => text.catt,
+        }
+    }
+
+    pub fn diacritization_text_limit(self) -> String {
+        match self {
+            Self::Ar => {
+                format!("أدخل نصًا لا يتجاوز {MAX_TEXT_CHARACTERS} حرفًا، بما فيها الحركات والمسافات.")
+            }
+            Self::En => format!(
+                "Enter up to {MAX_TEXT_CHARACTERS} characters, including diacritics and spaces."
+            ),
+        }
+    }
+
+    pub fn diacritization_count(self, count: usize) -> String {
+        self.text()
+            .diacritization
+            .character_count
+            .replace("{count}", &count.to_string())
+            .replace("{max}", &MAX_TEXT_CHARACTERS.to_string())
+    }
+
+    pub fn diacritization_limits(self) -> String {
+        match self {
+            Self::Ar => format!(
+                "ملف TXT بترميز UTF-8 أو DOCX واحد، حتى {} ميغابايت.",
+                max_megabytes()
+            ),
+            Self::En => format!("One UTF-8 TXT or DOCX file, up to {} MB.", max_megabytes()),
+        }
+    }
+
+    pub fn diacritization_waiting(self, position: usize) -> String {
+        match self {
+            Self::Ar => format!("طلبك في الطابور، وترتيبك {position}."),
+            Self::En => format!("Your request is in the queue, at position {position}."),
+        }
+    }
+
+    pub fn diacritization_privacy(self) -> String {
+        match self {
+            Self::Ar => format!(
+                "تُعالَج النصوص والملفات على خادمنا. نحذف الأصل والنتيجة بعد {} دقيقة من انتهاء المهمة.",
+                keep_minutes()
+            ),
+            Self::En => format!(
+                "Text and documents are processed on our server. We delete the original and result {} minutes after the job ends.",
+                keep_minutes()
+            ),
+        }
+    }
+
+    pub fn diacritization_kept_for(self) -> String {
+        match self {
+            Self::Ar => format!("يبقى الأصل والنتيجة متاحين لمدة {} دقيقة.", keep_minutes()),
+            Self::En => format!(
+                "The original and result stay available for {} minutes.",
+                keep_minutes()
+            ),
+        }
+    }
 }
 
 fn max_megabytes() -> u64 {
@@ -277,6 +370,8 @@ pub struct Text {
     pub back_home: &'static str,
     pub transcription: TranscriptionText,
     pub ocr: OcrText,
+    pub diacritization: DiacritizationText,
+    pub cancelled_user: &'static str,
 }
 
 /// Names of the initiative's accounts, linked from the footer.
@@ -378,13 +473,84 @@ pub struct OcrText {
     pub kept_for: &'static str,
 }
 
+/// Fixed text of the Arabic diacritization tool, including messages used by its script.
+pub struct DiacritizationText {
+    pub name: &'static str,
+    pub description: &'static str,
+    pub input_formats: &'static str,
+    pub output_formats: &'static str,
+    pub all_tools: &'static str,
+    pub steps_label: &'static str,
+    pub step_input: &'static str,
+    pub step_diacritize: &'static str,
+    pub step_download: &'static str,
+    pub before_you_start: &'static str,
+    pub replaces_marks: &'static str,
+    pub same_format: &'static str,
+    pub input_mode: &'static str,
+    pub text_mode: &'static str,
+    pub document_mode: &'static str,
+    pub model: &'static str,
+    pub shakkelha: &'static str,
+    pub catt: &'static str,
+    pub choose_model: &'static str,
+    pub model_unavailable: &'static str,
+    pub source_label: &'static str,
+    pub placeholder: &'static str,
+    pub character_count: &'static str,
+    pub text_missing: &'static str,
+    pub result_label: &'static str,
+    pub submit_text: &'static str,
+    pub submit_document: &'static str,
+    pub file_label: &'static str,
+    pub choose_file: &'static str,
+    pub no_file: &'static str,
+    pub uploading: &'static str,
+    pub submitting: &'static str,
+    pub upload_failed: &'static str,
+    pub needs_javascript: &'static str,
+    pub keep_open: &'static str,
+    pub reserved: &'static str,
+    pub running: &'static str,
+    pub done: &'static str,
+    pub failed: &'static str,
+    pub cancelled_unwatched: &'static str,
+    pub cancelled_shutdown: &'static str,
+    pub cancel: &'static str,
+    pub cancelling: &'static str,
+    pub cancel_failed: &'static str,
+    pub copy: &'static str,
+    pub copied: &'static str,
+    pub copy_failed: &'static str,
+    pub download_text: &'static str,
+    pub download_docx: &'static str,
+    pub download_original: &'static str,
+    pub another: &'static str,
+    pub try_again: &'static str,
+    pub closed: &'static str,
+    pub full: &'static str,
+    pub active_job: &'static str,
+    pub back_to_job: &'static str,
+    pub no_reservation: &'static str,
+    pub missing: &'static str,
+    pub wrong_type: &'static str,
+    pub invalid_utf8: &'static str,
+    pub invalid_docx: &'static str,
+    pub unsupported_docx: &'static str,
+    pub docx_limits: &'static str,
+    pub unreadable: &'static str,
+    pub unavailable: &'static str,
+}
+
+// Preserve the requested Arabic model spelling and its combining-mark order.
+#[allow(clippy::unicode_not_nfc)]
 static AR: Text = Text {
     name: "العربية",
     site_name: "أدوات العربية",
     home_label: "الصفحة الرئيسية",
     tagline: "أدوات مجانية للغة العربية",
     lead: "أدوات بسيطة لمن يعمل بالعربية: ارفع ملفك واحصل على النتيجة، دون حساب أو تثبيت.",
-    description: "أدوات مجانية لتفريغ الصوت واستخراج النص من ملفات PDF والصور، دون حساب أو تثبيت.",
+    description: "أدوات مجانية لتفريغ الصوت واستخراج النص من ملفات PDF والصور وتشكيل النص العربي، دون حساب أو تثبيت.",
     preview_alt: "شعار أدوات العربية، وتحته: أدوات مجانية للغة العربية.",
     free: "مجانية بلا حساب",
     files_deleted: "تُحذف ملفاتك تلقائيًا",
@@ -408,6 +574,74 @@ static AR: Text = Text {
     not_found_title: "الصفحة غير موجودة",
     not_found: "هذه الصفحة غير موجودة، أو انتهت صلاحيتها.",
     back_home: "العودة إلى الرئيسية",
+    cancelled_user: "أُلغيت المهمة بطلبك.",
+    diacritization: DiacritizationText {
+        name: "تشكيل النص العربي",
+        description: "أضف التشكيل إلى نص عربي أو مستند TXT أو DOCX، باستخدام شكِّلها أو CATT.",
+        input_formats: "نص · TXT · DOCX",
+        output_formats: "نص مشكول · TXT · DOCX",
+        all_tools: "كل الأدوات",
+        steps_label: "مراحل التشكيل",
+        step_input: "الإدخال",
+        step_diacritize: "التشكيل",
+        step_download: "النتيجة",
+        before_you_start: "قبل أن تبدأ",
+        replaces_marks: "تُستبدل الحركات الشائعة الموجودة في النص بتشكيل جديد. راجع النتيجة قبل استخدامها.",
+        same_format: "نزّل المستند المشكول بنفس صيغة الملف الأصلي: TXT أو DOCX. ملفات DOC غير مدعومة. قد تحتاج مستندات Word الكبيرة أو المعقدة إلى التقسيم قبل معالجتها.",
+        input_mode: "طريقة الإدخال",
+        text_mode: "نص",
+        document_mode: "مستند",
+        model: "نموذج التشكيل",
+        shakkelha: "شكِّلها",
+        catt: "CATT",
+        choose_model: "اختر نموذج التشكيل: شكِّلها أو CATT.",
+        model_unavailable: "النموذج المختار غير متاح مؤقتًا. جرّب النموذج الآخر أو عُد لاحقًا.",
+        source_label: "النص الأصلي",
+        placeholder: "اكتب النص العربي أو ألصقه هنا…",
+        character_count: "{count} / {max} حرف",
+        text_missing: "أدخل نصًا أولًا.",
+        result_label: "النص المشكول",
+        submit_text: "شكِّل النص",
+        submit_document: "شكِّل المستند",
+        file_label: "ملف TXT أو DOCX",
+        choose_file: "اختر مستندًا، أو اسحبه وأفلته هنا",
+        no_file: "لم تختر ملفًا بعد.",
+        uploading: "جارٍ رفع الملف…",
+        submitting: "جارٍ إرسال النص…",
+        upload_failed: "تعذّر إرسال الطلب. تحقّق من اتصالك وحاول مرة أخرى.",
+        needs_javascript: "تحتاج هذه الصفحة إلى JavaScript.",
+        keep_open: "أبقِ هذه الصفحة مفتوحة حتى ينتهي التشكيل، فإغلاقها يلغي المهمة.",
+        reserved: "ننتظر وصول النص أو المستند…",
+        running: "جارٍ التشكيل…",
+        done: "اكتمل التشكيل.",
+        failed: "تعذّر إكمال التشكيل. حاول مرة أخرى لاحقًا.",
+        cancelled_unwatched: "أُلغي التشكيل لأن صفحته أُغلقت.",
+        cancelled_shutdown: "أُلغي التشكيل أثناء تحديث الموقع. حاول مرة أخرى بعد بضع دقائق.",
+        cancel: "إلغاء المهمة",
+        cancelling: "جارٍ الإلغاء…",
+        cancel_failed: "تعذّر تأكيد الإلغاء. حاول مرة أخرى.",
+        copy: "نسخ النص",
+        copied: "نُسخ النص.",
+        copy_failed: "تعذّر النسخ. حدّد النص وانسخه يدويًا.",
+        download_text: "تنزيل النص (TXT)",
+        download_docx: "تنزيل مستند Word (DOCX)",
+        download_original: "تنزيل الملف الأصلي",
+        another: "تشكيل نص أو مستند آخر",
+        try_again: "جرّب نموذجًا آخر أو عدّل النص الأصلي.",
+        closed: "نحدّث الموقع الآن. حاول مرة أخرى بعد بضع دقائق.",
+        full: "الطابور ممتلئ الآن. حاول مرة أخرى بعد بضع دقائق.",
+        active_job: "يوجد تشكيل قيد التنفيذ من اتصالك بالإنترنت. انتظر حتى ينتهي أو ألغِه قبل بدء طلب آخر.",
+        back_to_job: "العودة إلى التشكيل",
+        no_reservation: "انتهت مهلة هذا الطلب. حاول مرة أخرى.",
+        missing: "اختر مستندًا أولًا.",
+        wrong_type: "نقبل ملف TXT أو DOCX واحدًا فقط. ملفات DOC غير مدعومة.",
+        invalid_utf8: "تعذّر قراءة ترميز النص. احفظ ملف TXT بترميز UTF-8 ثم حاول مرة أخرى.",
+        invalid_docx: "تعذّر قراءة مستند Word. تأكد أنه ملف DOCX سليم وغير محمي بكلمة مرور.",
+        unsupported_docx: "يحتوي مستند Word على عناصر لا نستطيع الحفاظ عليها أثناء التشكيل. احفظ نسخة DOCX بتنسيق أبسط أو حوّل النص إلى ملف TXT.",
+        docx_limits: "يتجاوز محتوى مستند Word أو ناتج تشكيله حدود المعالجة. قسّمه إلى مستندات أصغر وفقرات أقصر ثم حاول مرة أخرى.",
+        unreadable: "لم نتمكن من قراءة الملف. تأكد من سلامته وحاول مرة أخرى.",
+        unavailable: "أداة التشكيل غير متاحة مؤقتًا. حاول مرة أخرى لاحقًا.",
+    },
     transcription: TranscriptionText {
         input_formats: "MP3 · M4A",
         output_formats: "TXT · SRT",
@@ -493,13 +727,15 @@ static AR: Text = Text {
     },
 };
 
+// Preserve the requested Arabic model spelling and its combining-mark order.
+#[allow(clippy::unicode_not_nfc)]
 static EN: Text = Text {
     name: "English",
     site_name: "arabi.tools",
     home_label: "Homepage",
     tagline: "Free tools for the Arabic language",
     lead: "Simple tools for working in Arabic. Upload a file and get the result, with no account and nothing to install.",
-    description: "Free tools for audio transcription and extracting text from PDFs and images, with no account and nothing to install.",
+    description: "Free tools for audio transcription, extracting text from PDFs and images, and Arabic diacritization, with no account and nothing to install.",
     preview_alt: "The arabi.tools logo above the words: Free tools for the Arabic language.",
     free: "Free, no account",
     files_deleted: "Files deleted automatically",
@@ -523,6 +759,74 @@ static EN: Text = Text {
     not_found_title: "Page not found",
     not_found: "This page doesn't exist, or it has expired.",
     back_home: "Back to home",
+    cancelled_user: "You cancelled this job.",
+    diacritization: DiacritizationText {
+        name: "Arabic diacritization",
+        description: "Add diacritics to Arabic text or a TXT or DOCX document using شكِّلها or CATT.",
+        input_formats: "Text · TXT · DOCX",
+        output_formats: "Diacritized text · TXT · DOCX",
+        all_tools: "All tools",
+        steps_label: "Diacritization steps",
+        step_input: "Input",
+        step_diacritize: "Diacritize",
+        step_download: "Result",
+        before_you_start: "Before you start",
+        replaces_marks: "Existing common diacritics are replaced with new ones. Review the result before using it.",
+        same_format: "Download the diacritized document in its original format: TXT or DOCX. DOC files are not supported. Large or complex Word documents may need to be split before processing.",
+        input_mode: "Input method",
+        text_mode: "Text",
+        document_mode: "Document",
+        model: "Diacritization model",
+        shakkelha: "شكِّلها",
+        catt: "CATT",
+        choose_model: "Choose a diacritization model: شكِّلها or CATT.",
+        model_unavailable: "The selected model is temporarily unavailable. Try the other model or return later.",
+        source_label: "Original text",
+        placeholder: "Type or paste Arabic text here…",
+        character_count: "{count} / {max} characters",
+        text_missing: "Enter some text first.",
+        result_label: "Diacritized text",
+        submit_text: "Diacritize text",
+        submit_document: "Diacritize document",
+        file_label: "TXT or DOCX file",
+        choose_file: "Choose a document, or drop it here",
+        no_file: "No file chosen yet.",
+        uploading: "Uploading…",
+        submitting: "Sending text…",
+        upload_failed: "The request failed. Check your connection and try again.",
+        needs_javascript: "This page needs JavaScript.",
+        keep_open: "Keep this page open until diacritization finishes. Closing it cancels the job.",
+        reserved: "Waiting for your text or document…",
+        running: "Adding diacritics…",
+        done: "Diacritization complete.",
+        failed: "Diacritization could not be completed. Please try again later.",
+        cancelled_unwatched: "Diacritization was cancelled because its page was closed.",
+        cancelled_shutdown: "Diacritization was cancelled while we updated the site. Please try again in a few minutes.",
+        cancel: "Cancel job",
+        cancelling: "Cancelling…",
+        cancel_failed: "We could not confirm cancellation. Please try again.",
+        copy: "Copy text",
+        copied: "Text copied.",
+        copy_failed: "Copying failed. Select the text and copy it manually.",
+        download_text: "Download text (.txt)",
+        download_docx: "Download Word document (.docx)",
+        download_original: "Download original file",
+        another: "Diacritize another text or document",
+        try_again: "Try another model or edit the original text.",
+        closed: "We are updating the site. Please try again in a few minutes.",
+        full: "The queue is full right now. Please try again in a few minutes.",
+        active_job: "Diacritization from your connection is already in progress. Wait for it to finish or cancel it before starting another request.",
+        back_to_job: "Back to your diacritization",
+        no_reservation: "This request expired. Please try again.",
+        missing: "Choose a document first.",
+        wrong_type: "Choose exactly one TXT or DOCX file. DOC files are not supported.",
+        invalid_utf8: "We could not read the text encoding. Save the TXT file as UTF-8 and try again.",
+        invalid_docx: "We could not read this Word document. Check that it is a valid DOCX file and is not password protected.",
+        unsupported_docx: "This Word document contains content we cannot preserve during diacritization. Save a simpler DOCX copy or convert the text to TXT.",
+        docx_limits: "This Word document's content or diacritized output exceeds processing limits. Split it into smaller documents and shorter paragraphs, then try again.",
+        unreadable: "We could not read this file. Check that it is valid and try again.",
+        unavailable: "Arabic diacritization is temporarily unavailable. Please try again later.",
+    },
     transcription: TranscriptionText {
         input_formats: "MP3 · M4A",
         output_formats: "TXT · SRT",

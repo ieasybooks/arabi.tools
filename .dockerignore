@@ -8,3 +8,7 @@
 !crates/**
 !deploy/
 !deploy/pdfium.sh
+!deploy/onnxruntime.sh
+!deploy/tashkeel-models.sh
+!deploy/licenses/
+!deploy/licenses/**
