@@ -15,9 +15,10 @@ use topcoat::{
             Form, Json,
             multipart::{Field, Multipart},
         },
-        error::{RouterErrorExt, SeeOther, not_found, see_other},
+        error::{RouterErrorExt, not_found, see_other},
         href, module_param, page, path_param,
-        response::Response,
+        request::headers,
+        response::{IntoResponse, Response},
         route,
     },
     runtime::connected,
@@ -82,6 +83,7 @@ pub(super) async fn page(cx: &Cx) -> Result<impl View> {
 
 #[component]
 async fn job_status(
+    cx: &Cx,
     locale: Locale,
     id: JobId,
     status: Status<Document>,
@@ -94,7 +96,14 @@ async fn job_status(
         Status::Waiting { position } => locale.diacritization_waiting(*position),
         Status::Running { .. } => text.running.into(),
         Status::Done(_) => text.done.into(),
-        Status::Failed => text.failed.into(),
+        Status::Failed => app_context::<Diacritization>(cx)
+            .queue
+            .failure(&id)
+            .and_then(|error| error.downcast_ref::<Problem>().copied())
+            .map_or_else(
+                || text.failed.into(),
+                |problem| locale.diacritization_problem(problem),
+            ),
         Status::Cancelled(CancelReason::Unwatched) => text.cancelled_unwatched.into(),
         Status::Cancelled(CancelReason::Shutdown) => text.cancelled_shutdown.into(),
         Status::Cancelled(CancelReason::User) => locale.text().cancelled_user.into(),
@@ -423,13 +432,21 @@ fn owns_job(cx: &Cx, id: &JobId) -> bool {
 }
 
 #[route(POST "./cancel")]
-pub(super) async fn cancel(cx: &Cx) -> Result<SeeOther> {
+pub(super) async fn cancel(cx: &Cx) -> Result<Response> {
     let id = path_param::<Id>(cx)?;
     if !owns_job(cx, id) {
         return Err(not_found().into());
     }
-    app_context::<Diacritization>(cx).queue.cancel(id);
-    Ok(see_other(href!(page, Id(id.clone())).resolve(cx)))
+    let cancelled = app_context::<Diacritization>(cx).queue.cancel(id);
+    let next = href!(page, Id(id.clone())).resolve(cx);
+    if headers(cx)
+        .get("accept")
+        .is_some_and(|value| value == "application/json")
+    {
+        Json(serde_json::json!({ "cancelled": cancelled, "next": next })).into_response(cx)
+    } else {
+        see_other(next).into_response(cx)
+    }
 }
 
 #[route(GET "./result")]

@@ -40,4 +40,4 @@ export TASHKEEL_MODEL_CACHE=/tmp/arabi-tashkeel-models
 cargo test --locked -- --ignored --test-threads=1
 ```
 
-Keep these variables set for the browser suite. `tests/browser/diacritization.spec.js` covers both languages, model switching without losing the source, copy/download, Unicode limits, TXT/DOCX uploads, validation errors, cancellation, privacy, and unavailable service. It uses real CPU inference. Set `DIACRITIZATION_SCREENSHOT_DIR` to an existing directory to save successful desktop and mobile screenshots.
+Keep these variables set for the browser suite. `tests/browser/diacritization.spec.js` covers both languages, model switching without losing the source, copy/download, Unicode limits, TXT/DOCX uploads, validation errors, cancellation retries after network failures, completion winning a cancellation race, privacy, and unavailable service. DOCX regressions distinguish unsupported Word content from input/output limits and check that internal diagnostics never appear in the page. It uses real CPU inference. Set `DIACRITIZATION_SCREENSHOT_DIR` to an existing directory to save successful desktop and mobile screenshots.

@@ -116,8 +116,33 @@ pub enum Problem {
     TooLarge,
     InvalidUtf8,
     InvalidDocx,
+    UnsupportedDocx,
+    DocxLimits,
     TextTooLong,
     Unreadable,
+}
+
+impl std::fmt::Display for Problem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::error::Error for Problem {}
+
+/// The pinned library groups malformed content, unsupported Word structures and
+/// resource limits in `Document`. Translate only known categories, never raw text.
+fn docx_problem(error: &tashkeel::Error) -> Option<Problem> {
+    match error {
+        tashkeel::Error::Document(message) => Some(if message.contains("limit") {
+            Problem::DocxLimits
+        } else if message.contains("unsupported") && !message.starts_with("invalid ") {
+            Problem::UnsupportedDocx
+        } else {
+            Problem::InvalidDocx
+        }),
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -291,7 +316,7 @@ fn check_document(upload: &UploadedDocument) -> Result<usize, Problem> {
             paragraphs += 1;
             Ok(text.to_owned())
         })
-        .map_err(|_| Problem::InvalidDocx)?;
+        .map_err(|error| docx_problem(&error).unwrap_or(Problem::Unreadable))?;
         Ok(paragraphs)
     } else {
         let file = input_file(&upload.path)?;
@@ -430,6 +455,10 @@ fn transform_docx(
         done += 1;
         progress.set(percent(done, paragraphs as u128));
         Ok(result)
+    })
+    .map_err(|error| match docx_problem(&error) {
+        Some(problem) => anyhow::Error::new(problem).context(error),
+        None => error.into(),
     })?;
     check_cancelled(cancellation)?;
     fs::write(output, result).context("saving diacritized DOCX")

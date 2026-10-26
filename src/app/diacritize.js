@@ -38,6 +38,7 @@ function initialize(form) {
   const extensions = form.dataset.extensions.split(",");
   let inProgress = false;
   let cancelled = false;
+  let cancelling = false;
   let request = null;
   let reservation = null;
   let attempt = stored(attemptKey);
@@ -131,16 +132,51 @@ function initialize(form) {
   }
 
   async function cancelReservation() {
-    const response = await fetch(reservation.cancel, { method: "POST", redirect: "manual" });
-    // A successful native form cancellation redirects to the job's status page.
-    if (response.type !== "opaqueredirect" && !response.ok) throw new Error();
-    reservation = null;
-    attempt = null;
-    store(attemptKey, null);
+    if (cancelling) return;
+    const pending = reservation;
+    cancelling = true;
+    cancel.disabled = true;
+    error.hidden = true;
+    back.hidden = true;
+    status.textContent = form.dataset.cancelling;
+    try {
+      const response = await fetch(pending.cancel, {
+        method: "POST", headers: { Accept: "application/json" }, redirect: "error",
+      });
+      if (!response.ok) throw new Error();
+      const reply = await response.json();
+      if (typeof reply.cancelled !== "boolean" || typeof reply.next !== "string") throw new Error();
+      reservation = null;
+      attempt = null;
+      store(attemptKey, null);
+      if (!reply.cancelled) {
+        // Completion (or another terminal state) won the race. Show the server's state.
+        window.location.assign(reply.next);
+        return;
+      }
+      status.textContent = form.dataset.cancelled;
+      bar.hidden = true;
+      cancel.hidden = true;
+      setInProgress(false);
+    } catch {
+      // Keep this reservation locked to its source and expose both recovery paths.
+      // A retry calls this function directly; there is no submission left to abort.
+      reservation = pending;
+      status.textContent = "";
+      showError(form.dataset.cancelFailed, pending.cancel.replace(/\/cancel$/, ""));
+      bar.hidden = true;
+      cancel.disabled = false;
+    } finally {
+      cancelling = false;
+    }
   }
 
   cancel.addEventListener("click", () => {
-    if (!inProgress || cancelled) return;
+    if (!inProgress || cancelling) return;
+    if (cancelled) {
+      if (reservation) void cancelReservation();
+      return;
+    }
     cancelled = true;
     cancel.disabled = true;
     status.textContent = form.dataset.cancelling;
@@ -212,20 +248,12 @@ function initialize(form) {
       window.location.assign(reply.next);
     } catch (failure) {
       if (cancelled && reservation) {
-        try {
-          await cancelReservation();
-          status.textContent = form.dataset.cancelled;
-          bar.hidden = true;
-          cancel.hidden = true;
-        } catch {
-          showError(form.dataset.cancelFailed);
-          progress.hidden = true;
-        }
+        await cancelReservation();
       } else {
         progress.hidden = true;
         showError(failure?.error || form.dataset.failed, failure?.job);
+        setInProgress(false);
       }
-      setInProgress(false);
     }
   });
   form.addEventListener("submit", () => { cancel.hidden = false; });

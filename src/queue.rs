@@ -296,6 +296,9 @@ struct Job<R> {
     /// The attempt that reserved the job, if the browser named one.
     attempt: Option<Attempt>,
     status: watch::Sender<Status<R>>,
+    /// Kept with the job so tools can translate known error types without displaying
+    /// raw diagnostics. Removed along with the finished job.
+    failure: Option<Arc<anyhow::Error>>,
     /// Open job pages.
     watchers: usize,
     /// An upload request is filling this reservation.
@@ -354,6 +357,7 @@ impl<R: Send + Sync + 'static> Queue<R> {
         state.jobs.insert(
             id.clone(),
             Job {
+                failure: None,
                 client,
                 attempt,
                 status: watch::Sender::new(Status::Reserved),
@@ -415,6 +419,12 @@ impl<R: Send + Sync + 'static> Queue<R> {
             Status::Done(result) => Some(Arc::clone(result)),
             _ => None,
         }
+    }
+
+    /// A failed worker's error, for tool-specific classification. Never display its
+    /// raw message to visitors; it may contain internal diagnostics.
+    pub fn failure(&self, id: &JobId) -> Option<Arc<anyhow::Error>> {
+        self.lock().jobs.get(id)?.failure.clone()
     }
 
     /// Stops an unfinished job at the visitor's request. Cooperative work retains its
@@ -702,6 +712,7 @@ impl<R> State<R> {
             }
             Err(error) => {
                 tracing::warn!(job = %id, ran_secs, "failed: {error:#}");
+                job.failure = Some(Arc::new(error));
                 Status::Failed
             }
         };
@@ -1125,6 +1136,7 @@ mod tests {
     async fn reports_progress_and_failures() {
         let queue = queue();
         let id = queue.reserve(client(1), None).unwrap();
+        assert!(queue.failure(&id).is_none());
         let (fail, failed) = oneshot::channel::<()>();
         queue
             .begin_upload(&id)
@@ -1140,7 +1152,12 @@ mod tests {
         fail.send(()).unwrap();
         settle().await;
         assert_eq!(status(&queue, &id), "Failed");
+        assert_eq!(queue.failure(&id).unwrap().to_string(), "Wit is down");
         assert_eq!(queue.availability(client(1)), Ok(()));
+        let retention = queue.lock().limits.keep_finished;
+        tokio::time::advance(retention + Duration::from_secs(1)).await;
+        queue.sweep();
+        assert!(queue.failure(&id).is_none());
     }
 
     #[tokio::test(start_paused = true)]

@@ -16,7 +16,7 @@ use arlang_tools::{
     queue::{CancelReason, JobId, Slots, Status},
     tools::{
         RUNNING_JOBS,
-        diacritization::{Diacritization, Document, Model},
+        diacritization::{Diacritization, Document, Model, Problem},
     },
 };
 use reqwest::{Client, StatusCode, multipart};
@@ -140,6 +140,51 @@ async fn a_job_url_cannot_be_forged_into_a_cancellation_cookie() -> anyhow::Resu
     app.stop().await
 }
 
+#[tokio::test]
+async fn failed_documents_show_localized_categories_without_internal_diagnostics()
+-> anyhow::Result<()> {
+    let app = TestApp::start().await?;
+    for problem in [Problem::DocxLimits, Problem::UnsupportedDocx] {
+        let id = app.diacritization.queue.reserve(None, None).unwrap();
+        let mut watch = app.diacritization.queue.watch(&id).unwrap();
+        app.diacritization
+            .queue
+            .begin_upload(&id)
+            .unwrap()
+            .submit(move |_| async move {
+                Err(anyhow::Error::new(problem)
+                    .context("private diagnostic: /tmp/private-document.docx"))
+            })
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while !watch.status().is_finished() {
+                assert!(watch.changed().await);
+            }
+        })
+        .await?;
+        for locale in ["ar", "en"] {
+            let response = app
+                .client
+                .get(app.url(&format!("/diacritize/jobs/{id}")))
+                .header("cookie", format!("lang={locale}"))
+                .send()
+                .await?;
+            assert_eq!(response.status(), StatusCode::OK);
+            let html = response.text().await?;
+            let expected = match (locale, problem) {
+                ("ar", Problem::DocxLimits) => "حدود المعالجة",
+                ("ar", _) => "عناصر لا نستطيع الحفاظ عليها",
+                (_, Problem::DocxLimits) => "exceeds processing limits",
+                (_, _) => "content we cannot preserve",
+            };
+            assert!(html.contains(expected), "{html}");
+            assert!(!html.contains("private diagnostic"));
+            assert!(!html.contains("private-document.docx"));
+        }
+    }
+    app.stop().await
+}
+
 async fn real_app() -> anyhow::Result<TestApp> {
     let cache = PathBuf::from(
         std::env::var_os("TASHKEEL_MODEL_CACHE")
@@ -255,6 +300,23 @@ async fn real_http_models_match_reference_outputs_and_retain_the_original_text()
         let page = app.client.get(app.url(&job)).send().await?.text().await?;
         assert!(page.contains("noindex"));
         assert!(page.contains(source));
+        let cancellation = json_reply(
+            app.client
+                .post(app.url(&format!("{job}/cancel")))
+                .header("accept", "application/json")
+                .send()
+                .await?,
+            StatusCode::OK,
+        )
+        .await?;
+        assert_eq!(cancellation["cancelled"], false);
+        assert_eq!(cancellation["next"], job);
+        assert!(
+            app.diacritization
+                .queue
+                .result(&job.rsplit('/').next().unwrap().parse()?)
+                .is_some()
+        );
     }
     // The limit is Unicode scalars, not UTF-8 bytes or UTF-16 code units.
     let boundary = format!("{}ا", "🙂".repeat(999));
@@ -401,6 +463,21 @@ async fn real_http_rejections_release_reservations_and_cancel_requires_the_job_c
         StatusCode::CONFLICT,
     )
     .await?;
+    let reservation = reserve(&app).await?;
+    let endpoint = reservation["cancel"].as_str().unwrap();
+    for cancelled in [true, false] {
+        let reply = json_reply(
+            app.client
+                .post(app.url(endpoint))
+                .header("accept", "application/json")
+                .send()
+                .await?,
+            StatusCode::OK,
+        )
+        .await?;
+        assert_eq!(reply["cancelled"], cancelled);
+        assert_eq!(reply["next"], endpoint.trim_end_matches("/cancel"));
+    }
     app.stop().await
 }
 

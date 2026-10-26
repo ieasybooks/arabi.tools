@@ -207,10 +207,61 @@ async fn docx_validation_retains_the_librarys_default_paragraph_bound() {
     let tool = test_tool();
     let too_long = "x".repeat(tashkeel::docx::Limits::default().max_paragraph_bytes + 1);
     let upload = upload("bounded.docx", &docx(&too_long)).await;
+    assert_eq!(tool.validate(upload).await.err(), Some(Problem::DocxLimits));
+}
+
+#[tokio::test]
+async fn unsupported_word_content_has_a_distinct_problem() {
+    let tool = test_tool();
+    let ruby = "</w:t></w:r><w:ruby><w:rt><w:r><w:t>شرح</w:t></w:r></w:rt><w:rubyBase><w:r><w:t>نص</w:t></w:r></w:rubyBase></w:ruby><w:r><w:t>";
     assert_eq!(
-        tool.validate(upload).await.err(),
-        Some(Problem::InvalidDocx)
+        tool.validate(upload("ruby.docx", &docx(ruby)).await)
+            .await
+            .err(),
+        Some(Problem::UnsupportedDocx)
     );
+}
+
+struct MarkEveryLetter;
+
+impl Engine for MarkEveryLetter {
+    fn diacritize(
+        &mut self,
+        text: &str,
+        _progress: &mut dyn FnMut(tashkeel::Progress) -> ControlFlow<()>,
+    ) -> tashkeel::Result<String> {
+        Ok(text.replace('ا', "اَ"))
+    }
+}
+
+#[tokio::test]
+async fn docx_output_growth_retains_a_limit_error_and_cleans_up() {
+    let tool = with_engine(&Slots::new(1), |_| Ok(Box::new(MarkEveryLetter)));
+    let text = "ا".repeat(tashkeel::docx::Limits::default().max_paragraph_bytes / 2);
+    let upload = upload("growth.docx", &docx(&text)).await;
+    let directory = upload.directory.path().to_owned();
+    let document = tool.validate(upload).await.unwrap();
+    let id = tool.queue.reserve(client(1), None).unwrap();
+    let mut watch = tool.queue.watch(&id).unwrap();
+    tool.submit_document(
+        tool.queue.begin_upload(&id).unwrap(),
+        Model::Shakkelha,
+        document,
+        "growth".into(),
+    )
+    .unwrap();
+    tokio::time::timeout(Duration::from_secs(30), async {
+        while !watch.status().is_finished() {
+            assert!(watch.changed().await);
+        }
+    })
+    .await
+    .unwrap();
+    assert!(matches!(watch.status(), Status::Failed));
+    let error = tool.queue.failure(&id).unwrap();
+    assert_eq!(error.downcast_ref::<Problem>(), Some(&Problem::DocxLimits));
+    assert!(tool.queue.result(&id).is_none());
+    assert!(!directory.exists());
 }
 
 #[tokio::test]

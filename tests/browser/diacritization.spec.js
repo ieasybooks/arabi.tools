@@ -7,7 +7,8 @@ const source = "\n  اللُّغة العربية جميلة، API 2026.\nهذا
 const stripMarks = (text) => text.replace(/[\u064b-\u0652]/gu, "");
 
 // A real Word package with a bold run, a second run, and an untouched styles part.
-const docx = execFileSync("python3", ["-c", `
+function wordFixture(kind = "normal") {
+  return execFileSync("python3", ["-c", `
 import io, sys, zipfile
 files = {
     '[Content_Types].xml': '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>',
@@ -15,11 +16,20 @@ files = {
     'word/document.xml': '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">  اللغة العربية </w:t></w:r><w:r><w:t>جميلة، API 2026.</w:t></w:r></w:p></w:body></w:document>',
     'word/styles.xml': '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:styleId="Normal"/></w:styles>',
 }
+if sys.argv[1] == 'large':
+    files['word/document.xml'] = files['word/document.xml'].replace('  اللغة العربية ', 'x' * (1024 * 1024 + 1))
+elif sys.argv[1] == 'unsupported':
+    ruby = '<w:ruby><w:rt><w:r><w:t>شرح</w:t></w:r></w:rt><w:rubyBase><w:r><w:t>نص</w:t></w:r></w:rubyBase></w:ruby>'
+    files['word/document.xml'] = files['word/document.xml'].replace('<w:p>', '<w:p>' + ruby)
 output = io.BytesIO()
-with zipfile.ZipFile(output, 'w') as archive:
+with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
     for name, content in files.items(): archive.writestr(name, content)
 sys.stdout.buffer.write(output.getvalue())
-`]);
+`, kind]);
+}
+const docx = wordFixture();
+const largeDocx = wordFixture("large");
+const unsupportedDocx = wordFixture("unsupported");
 
 function docxPart(bytes, name) {
   return execFileSync("python3", ["-c", "import io, sys, zipfile; sys.stdout.buffer.write(zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())).read(sys.argv[1]))", name], { input: bytes }).toString();
@@ -48,7 +58,10 @@ for (const locale of [
     wrongType: "نقبل ملف TXT أو DOCX واحدًا فقط. ملفات DOC غير مدعومة.",
     invalidUtf8: "تعذّر قراءة ترميز النص. احفظ ملف TXT بترميز UTF-8 ثم حاول مرة أخرى.",
     invalidDocx: "تعذّر قراءة مستند Word. تأكد أنه ملف DOCX سليم وغير محمي بكلمة مرور.",
+    docxLimits: "يتجاوز محتوى مستند Word أو ناتج تشكيله حدود المعالجة. قسّمه إلى مستندات أصغر وفقرات أقصر ثم حاول مرة أخرى.",
+    unsupportedDocx: "يحتوي مستند Word على عناصر لا نستطيع الحفاظ عليها أثناء التشكيل. احفظ نسخة DOCX بتنسيق أبسط أو حوّل النص إلى ملف TXT.",
     tooLarge: "حجم الملف أكبر من 99 ميغابايت.",
+    cancelFailed: "تعذّر تأكيد الإلغاء. حاول مرة أخرى.",
     cancel: "إلغاء المهمة", cancelled: "أُلغيت المهمة بطلبك.", back: "العودة إلى التشكيل",
     unavailable: "أداة التشكيل غير متاحة مؤقتًا. حاول مرة أخرى لاحقًا.",
   },
@@ -61,7 +74,10 @@ for (const locale of [
     wrongType: "Choose exactly one TXT or DOCX file. DOC files are not supported.",
     invalidUtf8: "We could not read the text encoding. Save the TXT file as UTF-8 and try again.",
     invalidDocx: "We could not read this Word document. Check that it is a valid DOCX file and is not password protected.",
+    docxLimits: "This Word document's content or diacritized output exceeds processing limits. Split it into smaller documents and shorter paragraphs, then try again.",
+    unsupportedDocx: "This Word document contains content we cannot preserve during diacritization. Save a simpler DOCX copy or convert the text to TXT.",
     tooLarge: "The file is larger than 99 MB.",
+    cancelFailed: "We could not confirm cancellation. Please try again.",
     cancel: "Cancel job", cancelled: "You cancelled this job.", back: "Back to your diacritization",
     unavailable: "Arabic diacritization is temporarily unavailable. Please try again later.",
   },
@@ -228,7 +244,12 @@ for (const locale of [
     await input.evaluate((element) => Object.defineProperty(element.files[0], "size", { value: 99_000_001 }));
     await page.getByRole("button", { name: locale.upload, exact: true }).click();
     await expect(page.getByRole("alert")).toHaveText(locale.tooLarge);
-    for (const [name, bytes, message] of [["invalid.txt", Buffer.from([0xff]), locale.invalidUtf8], ["invalid.docx", Buffer.from("broken"), locale.invalidDocx]]) {
+    for (const [name, bytes, message] of [
+      ["invalid.txt", Buffer.from([0xff]), locale.invalidUtf8],
+      ["invalid.docx", Buffer.from("broken"), locale.invalidDocx],
+      ["large.docx", largeDocx, locale.docxLimits],
+      ["unsupported.docx", unsupportedDocx, locale.unsupportedDocx],
+    ]) {
       await input.setInputFiles({ name, mimeType: "application/octet-stream", buffer: bytes });
       await page.getByRole("button", { name: locale.upload, exact: true }).click();
       await expect(page.getByRole("alert")).toHaveText(message);
@@ -275,6 +296,78 @@ for (const locale of [
     } finally {
       releaseUpload();
       await outsider.close();
+    }
+  });
+
+  test(`Diacritization retries uncertain cancellation without resubmitting in ${locale.code}`, async ({ page }) => {
+    await open(page);
+    await page.getByRole("radio", { name: locale.document, exact: true }).check();
+    await page.getByLabel(locale.file, { exact: true }).setInputFiles({ name: "cancel.txt", mimeType: "text/plain", buffer: Buffer.from(source) });
+    let releaseUpload;
+    const held = new Promise((resolve) => { releaseUpload = resolve; });
+    let uploadUrl;
+    let submissions = 0;
+    let cancellations = 0;
+    await page.route("**/diacritize/jobs/*/document", async (route) => {
+      submissions++;
+      uploadUrl = route.request().url();
+      await held;
+      await route.abort().catch(() => {});
+    });
+    await page.route("**/diacritize/jobs/*/cancel", async (route) => {
+      cancellations++;
+      if (cancellations === 1) await route.abort("failed");
+      else await route.continue();
+    });
+    try {
+      await page.getByRole("button", { name: locale.upload, exact: true }).click();
+      await expect.poll(() => uploadUrl).toBeTruthy();
+      const cancel = page.getByRole("button", { name: locale.cancel, exact: true });
+      await cancel.click();
+      await expect(page.getByRole("alert")).toHaveText(locale.cancelFailed);
+      await expect(cancel).toBeVisible();
+      await expect(cancel).toBeEnabled();
+      await expect(page.getByRole("link", { name: locale.back, exact: true })).toHaveAttribute("href", new URL(uploadUrl).pathname.replace(/\/document$/, ""));
+      await cancel.click();
+      await expect(page.locator(".submission-status")).toHaveText(locale.cancelled);
+      await expect(page.getByLabel(locale.file, { exact: true })).toBeEnabled();
+      await expect(page.getByRole("alert")).toBeHidden();
+      expect(cancellations).toBe(2);
+      expect(submissions).toBe(1);
+    } finally {
+      releaseUpload();
+      // Also release the server's reservation when this regression fails before retrying.
+      if (uploadUrl) await page.request.post(uploadUrl.replace(/\/document$/, "/cancel"));
+    }
+  });
+
+  test(`Diacritization shows the completed result when completion wins cancellation in ${locale.code}`, async ({ page }) => {
+    await open(page);
+    await page.getByLabel(locale.original, { exact: true }).fill(source);
+    let releaseResponse;
+    const held = new Promise((resolve) => { releaseResponse = resolve; });
+    let completedUrl;
+    await page.route("**/diacritize/jobs/*/text", async (route) => {
+      const response = await route.fetch();
+      expect(response.ok()).toBe(true);
+      const reply = await response.json();
+      // The real worker must have published its result before the user clicks Cancel.
+      await expect.poll(async () => (await page.request.get(`${reply.next}/result`)).status()).toBe(200);
+      completedUrl = reply.next;
+      await held;
+      await route.fulfill({ response }).catch(() => {});
+    });
+    try {
+      await page.getByRole("button", { name: locale.submit, exact: true }).click();
+      await expect.poll(() => completedUrl).toBeTruthy();
+      await page.getByRole("button", { name: locale.cancel, exact: true }).click();
+      await expect(page).toHaveURL(new RegExp(`${completedUrl}$`));
+      await expect(page.locator("#job-status")).toHaveText(locale.done);
+      const output = await page.getByLabel(locale.result, { exact: true }).inputValue();
+      expect(stripMarks(output)).toBe(stripMarks(source));
+      await expect(page.getByLabel(locale.original, { exact: true })).toHaveValue(source);
+    } finally {
+      releaseResponse();
     }
   });
 
