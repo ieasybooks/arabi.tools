@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/ieasybooks/arabi.tools/compare/v0.7.0...v0.8.0) (2026-10-26)
+
+
+### Features
+
+* add Arabic diacritization with شكِّلها and CATT ([#29](https://github.com/ieasybooks/arabi.tools/issues/29)) ([c818571](https://github.com/ieasybooks/arabi.tools/commit/c8185711c62c9631820c066d1a871a7b6edb1636))
+
 ## [0.7.0](https://github.com/ieasybooks/arabi.tools/compare/v0.6.0...v0.7.0) (2026-10-26)
 
 
