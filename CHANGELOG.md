@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/ieasybooks/arabi.tools/compare/v0.6.0...v0.7.0) (2026-10-26)
+
+
+### Features
+
+* **queue:** share four running jobs across the tools ([#27](https://github.com/ieasybooks/arabi.tools/issues/27)) ([2e147cb](https://github.com/ieasybooks/arabi.tools/commit/2e147cb7752f106c0c9a3ce708fd0d144eeec5a3))
+
 ## [0.6.0](https://github.com/ieasybooks/arabi.tools/compare/v0.5.0...v0.6.0) (2026-10-25)
 
 
