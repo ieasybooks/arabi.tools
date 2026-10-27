@@ -44,3 +44,44 @@ for (const locale of [
     await expect(page.locator("[data-ocr-position]")).toContainText("3");
     await expect(page.locator(".ocr-pages .ocr-page")).toHaveCount(1);
     await expect(page.locator("[data-ocr-page-text]").first()).toHaveText(text);
+    if (process.env.OCR_SCREENSHOT_DIR) await page.screenshot({ path: join(process.env.OCR_SCREENSHOT_DIR, `ocr-result-${locale.code}.png`), fullPage: true });
+    for (const [i, extension] of ["txt", "docx", "json"].entries()) {
+      const link = page.getByRole("link", { name: locale.downloads[i], exact: true });
+      const started = page.waitForEvent("download");
+      await link.click();
+      const download = await started;
+      expect(download.suggestedFilename()).toBe(`book.${extension}`);
+      expect(await download.failure()).toBeNull();
+      const body = await readFile(await download.path());
+      if (extension === "docx") expect(body.subarray(0, 2).toString()).toBe("PK");
+      else if (extension === "json") expect(JSON.parse(body)).toEqual([1, 2, 3].map((page) => ({ page, content: text })));
+      else expect(body.toString()).toBe([text, text, text].join("\n\nPAGE_SEPARATOR\n\n"));
+    }
+    if (process.env.OCR_SCREENSHOT_DIR) {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.screenshot({ path: join(process.env.OCR_SCREENSHOT_DIR, `ocr-result-mobile-${locale.code}.png`), fullPage: true });
+    }
+    expect(errors).toEqual([]);
+  });
+
+  test(`OCR upload errors in ${locale.code}`, async ({ page }) => {
+    await open(page);
+    const file = page.getByLabel(locale.file, { exact: true });
+    await file.setInputFiles({ name: "bad.gif", mimeType: "image/gif", buffer: Buffer.from("bad") });
+    await expect(page.getByRole("alert")).toHaveText(locale.invalid);
+    await file.setInputFiles({ name: "broken.pdf", mimeType: "application/pdf", buffer: Buffer.from("broken") });
+    await page.getByRole("button", { name: locale.submit, exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText(locale.unreadable);
+    await file.setInputFiles({ name: "too-many.pdf", mimeType: "application/pdf", buffer: pdf(1001) });
+    await page.getByRole("button", { name: locale.submit, exact: true }).click();
+    await expect(page.getByRole("alert")).toHaveText(locale.pageCap);
+  });
+
+  test(`OCR unavailable in ${locale.code}, transcription still available`, async ({ page }) => {
+    await open(page, "http://127.0.0.1:3205/ocr");
+    await expect(page.getByRole("status")).toContainText(locale.unavailable);
+    await expect(page.locator("#upload-form")).toHaveCount(0);
+    await page.goto("http://127.0.0.1:3205/transcribe");
+    await expect(page.locator("#upload-form")).toBeVisible();
+  });
+}
