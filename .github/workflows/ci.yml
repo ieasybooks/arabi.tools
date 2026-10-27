@@ -104,15 +104,17 @@ jobs:
         run: cargo install --locked --version 0.10.0 topcoat-cli
       - name: Install browser test dependencies
         run: npm ci --prefix tests/browser
-      - name: Cache Playwright Chromium
+      - name: Cache Playwright browsers
         uses: actions/cache@v6.1.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tests/browser/package-lock.json') }}
-      - name: Install Chromium and its system dependencies
+          key: playwright-webkit-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tests/browser/package-lock.json') }}
+      - name: Install Chromium, WebKit, and their system dependencies
         env:
           PLAYWRIGHT_SKIP_BROWSER_GC: '1'
-        run: node tests/browser/node_modules/@playwright/test/cli.js install --with-deps --only-shell chromium
+        run: |
+          node tests/browser/node_modules/@playwright/test/cli.js install --with-deps --only-shell chromium
+          node tests/browser/node_modules/@playwright/test/cli.js install --with-deps webkit
       - name: Install pinned PDFium for OCR browser tests
         run: |
           sh deploy/pdfium.sh amd64 "$RUNNER_TEMP/pdfium"

@@ -1204,3 +1204,191 @@ progress::-moz-progress-bar {
     flex-basis: 100%;
   }
 }
+
+/* Search and transcript review */
+.transcript-result {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.result-search,
+.transcript-actions,
+.copy-panel {
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.result-search {
+  overflow-wrap: anywhere;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+}
+
+.search-field,
+.cue-choice,
+.copy-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-inline-size: 0;
+}
+
+.search-field input,
+.cue-choice select,
+.copy-panel textarea {
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--faint);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.cue-choice select {
+  padding-inline: 0.5rem;
+}
+
+.search-options,
+.search-actions,
+.cue-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.search-options label,
+.timestamps-choice {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-block-size: 2.75rem;
+  color: var(--muted);
+}
+
+.search-options input,
+.timestamps-choice input {
+  flex: none;
+  inline-size: 1.125rem;
+  block-size: 1.125rem;
+  accent-color: var(--green);
+}
+
+.result-search .button,
+.transcript-result .button {
+  max-inline-size: 100%;
+  min-block-size: 2.75rem;
+  padding: 0.5rem 0.875rem;
+  white-space: normal;
+}
+
+.result-search .button:disabled {
+  color: var(--muted);
+  background: var(--well);
+  border-style: dashed;
+  cursor: default;
+}
+
+.search-position,
+.copy-status {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.search-position bdi {
+  display: block;
+}
+
+.copy-status:empty,
+[data-copy-fallback]:empty {
+  display: none;
+}
+
+::highlight(arabi-search-match) {
+  color: var(--text);
+  background: var(--warning-soft);
+}
+
+::highlight(arabi-search-active) {
+  color: var(--surface);
+  background: var(--green);
+  text-decoration: underline double;
+}
+
+.search-painted {
+  background-image: var(--search-backgrounds);
+  background-position: var(--search-positions);
+  background-size: var(--search-sizes);
+  background-repeat: no-repeat;
+  background-origin: border-box;
+}
+
+.transcript-result .cues {
+  max-inline-size: 65ch;
+  inline-size: 100%;
+  align-self: center;
+  overscroll-behavior: contain;
+  scroll-padding-block: 0.75rem;
+}
+
+.transcript-result .cue-heading {
+  justify-content: space-between;
+}
+
+.transcript-result .cue-time {
+  min-inline-size: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.transcript-result .cue-time bdi,
+.transcript-result .downloads {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.transcript-result .cue-number {
+  color: var(--gold-text, var(--muted));
+}
+
+.transcript-result .cue-text {
+  white-space: pre-wrap;
+  unicode-bidi: plaintext;
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+
+.transcript-result.timestamps-hidden .cue-time {
+  display: none;
+}
+
+.copy-panel textarea {
+  min-block-size: 10rem;
+  resize: vertical;
+  line-height: 1.9;
+}
+
+@media (max-width: 39.999rem) {
+  .transcript-result .downloads {
+    inline-size: 100%;
+  }
+
+  .transcript-result .downloads .button {
+    flex-basis: 100%;
+  }
+}
+
+@media (min-width: 40rem) {
+  .transcript-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+}

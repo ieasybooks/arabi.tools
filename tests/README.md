@@ -11,6 +11,7 @@ Run `cargo test --locked` with `ffmpeg` (built with libopus) and `ffprobe` on PA
 ```sh
 npm ci --prefix tests/browser
 npx --prefix tests/browser playwright install --with-deps --only-shell chromium
+npx --prefix tests/browser playwright install --with-deps webkit
 cargo build --locked --bin arlang-tools --example mock_wit --example mock_ocr
 topcoat asset bundle --bin arlang-tools
 npm test --prefix tests/browser
@@ -41,3 +42,11 @@ cargo test --locked -- --ignored --test-threads=1
 ```
 
 Keep these variables set for the browser suite. `tests/browser/diacritization.spec.js` covers both languages, model switching without losing the source, copy/download, Unicode limits, TXT/DOCX uploads, validation errors, cancellation retries after network failures, completion winning a cancellation race, privacy, and unavailable service. DOCX regressions distinguish unsupported Word content from input/output limits and check that internal diagnostics never appear in the page. It uses real CPU inference. Set `DIACRITIZATION_SCREENSHOT_DIR` to an existing directory to save successful desktop and mobile screenshots.
+
+## Search and transcript review
+
+`search.spec.js` calls the bundled `arabiTools.search.find` on a real result page in Chromium and WebKit. It covers literal matching, exact/harakat/tatweel options, canonical equivalence, original UTF-16 grapheme spans, emoji, retained marks and letter distinctions, blank content and segment boundaries. Adapter tests cover unmounted pages, complete counts, focus, wraparound and stale work. WebKit must be installed for these focused cases (`npx --prefix tests/browser playwright install webkit`).
+
+Highlights use CSS Custom Highlight ranges when available, with range-positioned backgrounds as the fallback; neither path splits text nodes or changes Arabic shaping. The fallback repaints after resizing and font loading. Browsers without `Intl.Segmenter` show a localized search-unavailable explanation while keeping reading, copy and downloads available. Copy-all reconstructs the TXT representation from immutable cue text, with an exceptional server-provided payload when SRT cue parsing folded original line breaks. Clipboard failure creates a selectable panel for the requested scope and reveals it with minimal scrolling; closing it or removing the result discards the panel.
+
+`transcript.spec.js` checks both locales at desktop and 320 CSS pixels, initial/live result enhancement and disposal, copy scopes and denied/missing clipboard fallback, timestamp preferences, original TXT/SRT bytes and filenames, successful silence, and both highlight implementations in Chromium and WebKit. It generates 2160 five-second cues (a three-hour, roughly 26,000-word transcript) in the actual viewer, reports rendering/search measurements, and checks that the final cue remains searchable and copy-all contains every cue. No real recognition service is used. The mock's varied text is described in [fixtures/README.md](fixtures/README.md).

@@ -93,7 +93,7 @@ async fn transcribe_fixture(
                 let mut lines = cue.lines().skip(1);
                 let times = lines.next().context("missing cue times")?;
                 let shown = format!(
-                    "<span class=\"cue-number\">{number}</span>{}",
+                    "<span class=\"cue-number\">{number}</span><bdi dir=\"ltr\" data-cue-time=\"\">{}</bdi>",
                     times.replace(" --> ", " → ")
                 );
                 assert!(page.contains(&shown), "missing {shown:?}: {page}");
@@ -396,7 +396,9 @@ async fn uploads_in_each_language_use_its_tokens_and_transcript() -> anyhow::Res
             .text()
             .await?;
         assert!(
-            page.contains(&format!("lang=\"{language}\" dir=\"auto\"")),
+            page.contains(&format!(
+                "class=\"cue-text\" dir=\"auto\" lang=\"{language}\""
+            )),
             "{page}"
         );
         assert!(

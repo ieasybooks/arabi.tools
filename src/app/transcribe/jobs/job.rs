@@ -7,6 +7,7 @@ use tempfile::TempPath;
 use tokio::io::AsyncWriteExt;
 use topcoat::{
     Result,
+    asset::{Asset, asset},
     context::{Cx, app_context},
     cookie::{Cookies, cookie, cookies, time},
     icon::icon,
@@ -29,6 +30,7 @@ use crate::app::transcribe;
 use crate::i18n::Locale;
 use crate::icons;
 use crate::queue::{CancelReason, JobId, Status};
+use crate::result_controls::{self, COPY_SCRIPT, SEARCH_SCRIPT};
 use crate::tools::transcription::{
     AudioProblem, MAX_UPLOAD_BYTES, Transcript, Transcription, check_audio, download_name,
     has_accepted_extension,
@@ -38,6 +40,7 @@ module_param!(pub id: JobId, error = not_found);
 
 /// How often an idle status page is sent again, so proxies keep its connection open.
 const HEARTBEAT: Duration = Duration::from_secs(30);
+const TRANSCRIPT_SCRIPT: Asset = asset!("../../transcript.js");
 
 #[page]
 pub(super) async fn page(cx: &Cx) -> Result<impl View> {
@@ -48,6 +51,9 @@ pub(super) async fn page(cx: &Cx) -> Result<impl View> {
         .watch(&id)
         .ok_or_not_found()?;
     Ok(view! {
+        <script src=(SEARCH_SCRIPT) defer=(true)></script>
+        <script src=(COPY_SCRIPT) defer=(true)></script>
+        <script src=(TRANSCRIPT_SCRIPT) defer=(true)></script>
         transcribe::tool_hero(locale: locale, lead: false)
         <section class="workspace">
             <div class="container workspace-layout">
@@ -156,8 +162,18 @@ async fn job_status(locale: Locale, id: JobId, status: Status<Transcript>) -> Re
 #[component]
 async fn result(locale: Locale, id: JobId, transcript: Arc<Transcript>) -> Result<impl View> {
     let text = &locale.text().transcription;
+    let review = &locale.text().review;
+    // JSON escapes line endings that HTML attribute parsing would normalize.
+    let copy_override = transcript_copy_override(&transcript)
+        .map(serde_json::to_string)
+        .transpose()?;
     Ok(view! {
-        <div class="result">
+        <div
+            class="result transcript-result"
+            data-result="transcript"
+            data-job-id=(id.to_string())
+            data-copy-text=(copy_override)
+        >
             <div class="result-heading">
                 <p class="result-name">
                     icon(data: icons::TRANSCRIPT, size: 20)
@@ -183,35 +199,140 @@ async fn result(locale: Locale, id: JobId, transcript: Arc<Transcript>) -> Resul
                 </div>
             </div>
             <p class="hint">(locale.kept_for())</p>
+            result_controls::search_toolbar(locale: locale)
+            reading_controls(locale: locale, transcript: transcript.clone())
+            result_controls::copy_feedback(locale: locale)
             if transcript.text.trim().is_empty() {
                 <p>(text.no_speech)</p>
             } else {
                 <h2 class="transcript-title">(text.transcript_title)</h2>
-                // The cues of the SRT file. Their direction follows the transcript's text, while
-                // each number and time range stays left to right.
                 <ol
                     class="cues"
                     role="list"
-                    lang=(transcript.language.as_str())
-                    dir="auto"
+                    aria-label=(text.transcript_title)
+                    tabindex="0"
                 >
                     for (number, cue) in (1..).zip(&transcript.cues) {
-                        <li class="cue">
-                            <p class="cue-time">
-                                <span dir="ltr">
+                        <li
+                            class="cue"
+                            data-cue=(number.to_string())
+                            id=(format!("transcript-{id}-cue-{number}"))
+                        >
+                            <div class="cue-heading">
+                                <p class="cue-time">
                                     <span class="cue-number">(number.to_string())</span>
-                                    (cue.start.as_str())
-                                    " → "
-                                    (cue.end.as_str())
-                                </span>
+                                    <bdi dir="ltr" data-cue-time=(true)>
+                                        (cue.start.as_str())
+                                        " → "
+                                        (cue.end.as_str())
+                                    </bdi>
+                                </p>
+                                <button
+                                    type="button"
+                                    class="button secondary copy-cue"
+                                    data-copy-cue=(true)
+                                    hidden=(true)
+                                >
+                                    (review.copy_cue)
+                                </button>
+                            </div>
+                            <p
+                                class="cue-text"
+                                dir="auto"
+                                lang=(transcript.language.as_str())
+                            >
+                                (cue.text.as_str())
                             </p>
-                            <p class="cue-text">(cue.text.as_str())</p>
                         </li>
                     }
                 </ol>
             }
         </div>
     })
+}
+
+#[component]
+async fn reading_controls(locale: Locale, transcript: Arc<Transcript>) -> Result<impl View> {
+    let text = &locale.text().review;
+    Ok(view! {
+        <div class="transcript-actions" data-transcript-controls=(true) hidden=(true)>
+            <button type="button" class="button secondary" data-copy-all=(true)>
+                (text.copy_all)
+            </button>
+            if !transcript.cues.is_empty() {
+                <label class="timestamps-choice">
+                    <input type="checkbox" data-show-timestamps=(true) checked=(true)>
+                    (text.show_timestamps)
+                </label>
+                <label class="cue-choice">
+                    <span>(text.go_to_cue)</span>
+                    <select data-cue-select=(true)>
+                        for (number, cue) in (1..).zip(&transcript.cues) {
+                            <option value=(number.to_string())>
+                                (text
+                                    .cue_at
+                                    .replace("{number}", &number.to_string())
+                                    .replace(
+                                        "{time}",
+                                        &format!("\u{2066}{}\u{2069}", cue.start),
+                                    ))
+                            </option>
+                        }
+                    </select>
+                </label>
+            }
+        </div>
+    })
+}
+
+/// Normally TXT is the cue text plus a newline per cue. SRT parsing can fold
+/// internal newlines, so retain the exact TXT only when it cannot be rebuilt.
+/// This avoids a second full transcript in ordinary result markup.
+fn transcript_copy_override(transcript: &Transcript) -> Option<&str> {
+    let mut remaining = transcript.text.as_str();
+    for cue in &transcript.cues {
+        let Some(rest) = remaining
+            .strip_prefix(&cue.text)
+            .and_then(|rest| rest.strip_prefix('\n'))
+        else {
+            return Some(&transcript.text);
+        };
+        remaining = rest;
+    }
+    (!remaining.is_empty()).then_some(transcript.text.as_str())
+}
+
+#[cfg(test)]
+mod review_tests {
+    use super::*;
+    use crate::tools::transcription::Cue;
+
+    #[test]
+    fn copy_preserves_txt_even_when_srt_cues_fold_lines() {
+        let mut transcript = Transcript {
+            name: "lesson".into(),
+            language: "ar".into(),
+            text: "كِتَاب\nhello & <b>\n".into(),
+            srt: String::new(),
+            cues: ["كِتَاب", "hello & <b>"]
+                .into_iter()
+                .map(|text| Cue {
+                    start: "00:00:00,000".into(),
+                    end: "00:00:01,000".into(),
+                    text: text.into(),
+                })
+                .collect(),
+        };
+        assert_eq!(transcript_copy_override(&transcript), None);
+        transcript.text = "كِتَاب\nhello &\n<b>\n".into();
+        assert_eq!(
+            transcript_copy_override(&transcript),
+            Some("كِتَاب\nhello &\n<b>\n")
+        );
+        transcript.cues.clear();
+        transcript.text.clear();
+        assert_eq!(transcript_copy_override(&transcript), None);
+    }
 }
 
 /// Receives the file for a reserved job and queues the job.
