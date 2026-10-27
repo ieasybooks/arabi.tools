@@ -12,7 +12,7 @@ For OCR, set `DRIVE_SERVICE_ACCOUNTS` to a JSON array of service-account keys wi
 
 For diacritization, provision the pinned models and ONNX Runtime 1.31.0 before starting the site, then set `TASHKEEL_MODEL_CACHE` to the shared model cache and `ORT_DYLIB_PATH` to the runtime library. The container includes both; local setup and real-model test commands are in [deployment](docs/deploy.md#diacritization-runtime-and-models). Missing or invalid files leave diacritization temporarily unavailable while other configured tools keep working. Inference uses the `tashkeel` 0.1.0 Rust library on the CPU; submitting a job never downloads models.
 
-Inter and IBM Plex Sans Arabic are [vendored with their licenses](src/app/fonts/README.md), so asset bundling needs no font downloads.
+Gilroy, Noto Naskh Arabic UI, Thmanyah Serif Display and Kitab are [bundled locally](src/app/fonts/README.md), so asset bundling needs no font downloads.
 
 Run the checks listed in [AGENTS.md](AGENTS.md#verification) before sending changes; [tests/README.md](tests/README.md) describes the integration tests.
 

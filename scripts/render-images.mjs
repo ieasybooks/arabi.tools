@@ -22,20 +22,29 @@ const gilroyBold = await font("gilroy/Gilroy-Bold.woff2");
 const naskh = await font("noto-naskh-arabic-ui/NotoNaskhArabicUI.woff2");
 const thmanyah = await font("thmanyah/ThmanyahSerifDisplay-Medium.woff2");
 
+// Keep the collection copy in the same bilingual source as the interface.
+const translations = await readFile(new URL("../src/i18n.rs", import.meta.url), "utf8");
+const previewTools = (locale) => {
+  const block = translations.split(`static ${locale}: Text = Text {`)[1]?.split("\n};")[0];
+  const literal = block?.match(/^\s+preview_tools: ("(?:[^"\\]|\\.)*"),$/m)?.[1];
+  if (!literal) throw new Error(`Missing ${locale} preview_tools in src/i18n.rs`);
+  return JSON.parse(literal);
+};
+
 // The text of each card, in the site's two languages.
 const cards = {
   ar: {
     dir: "rtl",
     title: "أدوات العربية",
     tagline: "أدوات مجانية للغة العربية",
-    tool: "تفريغ الصوت إلى نص مكتوب وملف ترجمة SRT",
+    tool: previewTools("AR"),
     initiative: "مشروع من مبادرة الكتب الميسّرة",
   },
   en: {
     dir: "ltr",
     title: "arabi.tools",
     tagline: "Free tools for the Arabic language",
-    tool: "Turn audio into text and SRT subtitles",
+    tool: previewTools("EN"),
     initiative: "A project of the iEasyBooks initiative",
   },
 };

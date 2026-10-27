@@ -5,7 +5,7 @@ version = "0.8.0"
 edition = "2024"
 rust-version = "1.99"
 license = "MIT"
-repository = "https://github.com/ieasybooks/arlang.tools"
+repository = "https://github.com/ieasybooks/arabi.tools"
 publish = false
 
 [dependencies]

@@ -11,13 +11,14 @@
   --well: #f1ebdd;
   --text: #2b2119;
   --muted: #5f5245;
-  --faint: #7d6e5e;
+  --faint: #6e5f50;
   --line: rgb(74 52 30 / 0.16);
   --line-soft: rgb(74 52 30 / 0.09);
   --green: #1f5c49;
   --green-strong: #164536;
   --green-soft: #e4ede6;
   --gold: #a4824a;
+  --gold-text: #7d6232;
   --danger: #9f2a1d;
   --danger-soft: #f7e6df;
   --warning: #8a5a14;
@@ -110,6 +111,40 @@ a:hover {
 :focus-visible {
   outline: 2px solid var(--green);
   outline-offset: 2px;
+}
+
+/* Shared shell: keyboard access and reduced motion. */
+
+.skip-link {
+  position: fixed;
+  inset-block-start: 1rem;
+  inset-inline-start: 1rem;
+  z-index: 10;
+  max-inline-size: calc(100% - 2rem);
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--green);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-weight: 500;
+}
+
+.skip-link:not(:focus) {
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation: none !important;
+  }
 }
 
 svg {
@@ -464,7 +499,7 @@ svg {
   height: 2rem;
   border-radius: 999px;
   box-shadow: inset 0 0 0 1px var(--gold);
-  color: var(--gold);
+  color: var(--gold-text);
   font-family: "Gilroy", sans-serif;
   font-size: 0.875rem;
   font-weight: 500;
@@ -843,7 +878,7 @@ progress::-moz-progress-bar {
 /* 404 */
 
 .not-found .error-code {
-  color: var(--gold);
+  color: var(--gold-text);
   font-family: "Gilroy", sans-serif;
   font-size: 4.5rem;
   font-weight: 500;
