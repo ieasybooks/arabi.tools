@@ -34,9 +34,16 @@ use crate::tools::ocr::{
     Document, DocumentProblem, MAX_UPLOAD_BYTES, Ocr, UploadedDocument, download_name,
 };
 
-const PDF_MODULE: Asset = asset!("../../vendor/pdfjs/pdf.mjs");
-const PDF_WORKER: Asset = asset!("../../vendor/pdfjs/pdf.worker.mjs");
-include!("../../vendor/pdfjs/assets.rs");
+const PDF_MODULE: Asset = asset!("../../vendor/pdfjs/pdf.min.mjs");
+const PDF_WORKER: Asset = asset!("../../vendor/pdfjs/pdf.worker.min.mjs");
+/// The image decoders PDF.js requests by filename for JBIG2 and JPEG 2000 scans.
+const PDF_RESOURCES: &[(&str, Asset)] = &[
+    ("jbig2.wasm", asset!("../../vendor/pdfjs/wasm/jbig2.wasm")),
+    (
+        "openjpeg.wasm",
+        asset!("../../vendor/pdfjs/wasm/openjpeg.wasm"),
+    ),
+];
 
 module_param!(pub id: JobId, error = not_found);
 

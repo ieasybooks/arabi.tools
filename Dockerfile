@@ -48,8 +48,6 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=builder /out/ ./
 COPY src/app/vendor/pdfjs/LICENSE /usr/share/doc/pdfjs/LICENSE
-COPY src/app/vendor/pdfjs/cmaps/LICENSE /usr/share/doc/pdfjs/cmaps/LICENSE
-COPY src/app/vendor/pdfjs/standard_fonts/LICENSE_* /usr/share/doc/pdfjs/standard_fonts/
 COPY src/app/vendor/pdfjs/wasm/LICENSE_* /usr/share/doc/pdfjs/wasm/
 COPY --from=pdfium /pdfium/lib/libpdfium.so ./libpdfium.so
 COPY --from=pdfium /pdfium/LICENSE /usr/share/doc/pdfium/LICENSE

@@ -275,9 +275,8 @@
           owner.task = library.getDocument({
             data,
             useWorkerFetch: false,
-            useSystemFonts: false,
-            // PDF.js asks for fonts, character maps and image decoders by filename.
-            // Resolve those requests through Topcoat's content-hashed local bundle.
+            // PDF.js asks for image decoders by filename. Resolve those requests through
+            // Topcoat's content-hashed local bundle. Fonts a PDF does not embed use system fonts.
             BinaryDataFactory: class {
               async fetch({ filename }) {
                 const url = resources[filename];

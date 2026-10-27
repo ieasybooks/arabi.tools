@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { readFile, mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
@@ -16,19 +17,30 @@ test.beforeEach(async ({ page }) => {
   page.on('pageerror', (error) => { throw error; });
 });
 
-function pdf(count, { largeLast = false } = {}) {
+// Text in fonts the PDF does not embed: two standard fonts, and a CJK font whose
+// character map is not bundled.
+const UNEMBEDDED_FONTS = '/Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Symbol >> /F3 << /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 4 >> /FontDescriptor << /Type /FontDescriptor /FontName /STSong-Light /Flags 4 /FontBBox [0 -200 1000 900] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 880 /StemV 80 >> >>] >> >>';
+const UNEMBEDDED_TEXT = 'BT /F1 48 Tf 60 400 Td (Helvetica) Tj /F2 48 Tf 0 -80 Td (abc) Tj /F3 48 Tf 0 -80 Td <4E2D6587> Tj ET';
+
+// `jpx` is a JPEG 2000 codestream drawn over each 600-point page, like a scanned book.
+function pdf(count, { largeLast = false, unembeddedFonts = false, jpx = null } = {}) {
   const objects = ['<< /Type /Catalog /Pages 2 0 R >>', `<< /Type /Pages /Kids [${Array.from({ length: count }, (_, i) => `${i + 3} 0 R`).join(' ')}] /Count ${count} >>`];
+  const contents = count + 3;
+  const resources = unembeddedFonts ? UNEMBEDDED_FONTS : jpx ? `/XObject << /Im1 ${contents + 1} 0 R >>` : '';
+  const text = unembeddedFonts ? UNEMBEDDED_TEXT : jpx ? 'q 600 0 0 600 0 0 cm /Im1 Do Q' : null;
   for (let i = 0; i < count; i++) {
     const side = largeLast && i === count - 1 ? 14400 : 600;
-    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${side} ${side}] /Resources << >> >>`);
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${side} ${side}] /Resources << ${resources} >>${text ? ` /Contents ${contents} 0 R` : ''} >>`);
   }
+  if (text) objects.push(`<< /Length ${text.length} >>\nstream\n${text}\nendstream`);
+  if (jpx) objects.push(`<< /Type /XObject /Subtype /Image /Width 600 /Height 600 /Filter /JPXDecode /Length ${jpx.length} >>\nstream\n${jpx.toString('latin1')}\nendstream`);
   let output = '%PDF-1.4\n';
   const offsets = [];
   objects.forEach((object, i) => { offsets.push(output.length); output += `${i + 1} 0 obj\n${object}\nendobj\n`; });
   const xref = output.length;
   output += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
   offsets.forEach((offset) => { output += `${String(offset).padStart(10, '0')} 00000 n \n`; });
-  return Buffer.from(`${output}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  return Buffer.from(`${output}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`, 'latin1');
 }
 
 async function openResult(page, { locale = 'en', source = false, bytes, name = 'review.pdf', type = 'application/pdf' } = {}) {
@@ -224,7 +236,7 @@ test('OCR preview failures and denied clipboard keep text and exact copy scopes'
   await expect(root.locator('[data-ocr-source-error]')).toContainText('local preview could not be displayed');
   await screenshot(page, 'en-desktop-ocr-preview-failure');
   await expect(root.locator('[data-ocr-page-text]')).toHaveText(first);
-  await page.route('**/pdf.worker-*.mjs', (route) => route.abort());
+  await page.route('**/pdf.worker.min-*.mjs', (route) => route.abort());
   await restore(page, await original());
   await expect(root.locator('[data-ocr-source-error]')).toContainText('local preview could not be displayed');
   await expect(root.locator('a[download]')).toHaveCount(3);
@@ -318,7 +330,32 @@ test('OCR all-blank document keeps every page and never copies placeholder text'
   await expect(root.locator('textarea')).toHaveValue('\n\n\n\n');
 });
 
-test('OCR bundle modules, fonts and worker load from a deep route and dispose on removal', async ({ page }) => {
+test('OCR preview renders a page whose fonts and character maps are not bundled', async ({ page }) => {
+  await openResult(page, { bytes: pdf(1, { unembeddedFonts: true }), source: true });
+  const root = resultRoot(page);
+  await rendered(page, 1);
+  await expect(root.locator('[data-ocr-source-error]')).toBeHidden();
+  const inked = await root.locator('canvas').evaluate((canvas) => {
+    const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+    let count = 0;
+    for (let i = 0; i < data.length; i += 4) if (data[i] < 128) count++;
+    return count;
+  });
+  expect(inked).toBeGreaterThan(100);
+});
+
+test('OCR preview decodes a JPEG 2000 scan with the bundled decoder only when needed', async ({ page }, testInfo) => {
+  const image = testInfo.outputPath('red.j2k');
+  execFileSync('ffmpeg', ['-nostdin', '-v', 'error', '-f', 'lavfi', '-i', 'color=c=red:s=600x600', '-frames:v', '1', '-pix_fmt', 'rgb24', '-c:v', 'jpeg2000', '-f', 'image2', '-y', image]);
+  const decoders = [];
+  page.on('request', (request) => { if (request.url().endsWith('.wasm')) decoders.push(request.url().split('/').pop().split('-')[0]); });
+  await openResult(page, { bytes: pdf(1, { jpx: await readFile(image) }), source: true });
+  await rendered(page, 1);
+  expect(await colour(page)).toBe('red');
+  expect(decoders).toEqual(['openjpeg']);
+});
+
+test('OCR bundle modules, decoders and worker load from a deep route and dispose on removal', async ({ page }) => {
   await trackResources(page);
   await openResult(page);
   const root = resultRoot(page);
@@ -331,7 +368,8 @@ test('OCR bundle modules, fonts and worker load from a deep route and dispose on
     expect((await response.body()).length).toBeGreaterThan(100_000);
   }
   const resources = JSON.parse(await root.getAttribute('data-pdf-resources'));
-  for (const name of ['LiberationSans-Regular.ttf', 'Adobe-Japan1-UCS2.bcmap', 'jbig2.wasm', 'openjpeg.wasm']) {
+  expect(Object.keys(resources).sort()).toEqual(['jbig2.wasm', 'openjpeg.wasm']);
+  for (const name of ['jbig2.wasm', 'openjpeg.wasm']) {
     const response = await page.request.get(resources[name]);
     expect(response.ok()).toBeTruthy();
     expect((await response.body()).length).toBeGreaterThan(100);

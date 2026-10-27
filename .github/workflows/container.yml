@@ -95,8 +95,7 @@ jobs:
           manifest = tomllib.loads(subprocess.check_output(
               ["docker", "exec", "arlang-ci", "cat", "/app/assets/manifest.toml"], text=True))
           entries = manifest["assets"]
-          for stem, extension in (("ocr-review", "js"), ("pdf", "mjs"), ("pdf.worker", "mjs"),
-                                  ("LiberationSans-Regular", "ttf"), ("Adobe-Japan1-UCS2", "bcmap"),
+          for stem, extension in (("ocr-review", "js"), ("pdf.min", "mjs"), ("pdf.worker.min", "mjs"),
                                   ("jbig2", "wasm"), ("openjpeg", "wasm")):
               matches = [entry for entry in entries if re.fullmatch(rf"{re.escape(stem)}-[0-9a-f]+\.{extension}", entry["file"])]
               assert len(matches) == 1, f"missing or duplicated PDF viewer asset: {stem}"
@@ -110,7 +109,7 @@ jobs:
                   assert response.read(), f"empty asset: {asset}"
                   if asset.endswith((".js", ".mjs")):
                       assert response.headers.get_content_type() in ("application/javascript", "text/javascript")
-          print("Arabic and English pages, OCR viewer, worker, fonts and decoders are bundled and available.")
+          print("Arabic and English pages, OCR viewer, worker and image decoders are bundled and available.")
           PY
           python3 .github/scripts/diacritization-smoke.py
           docker stop --time 300 arlang-ci
