@@ -1,6 +1,6 @@
 //! Reserves a slot before accepting text or uploading a document.
 
-mod job;
+pub(super) mod job;
 
 use serde::{Deserialize, Serialize};
 use topcoat::{
@@ -28,11 +28,14 @@ const COOKIE: &str = "diacritize_job";
 #[serde(untagged)]
 enum Reply {
     Upload {
+        job_id: String,
+        next: String,
         upload: String,
         text: String,
         cancel: String,
     },
     Next {
+        job_id: String,
         next: String,
     },
     Error {
@@ -65,6 +68,8 @@ pub(super) async fn reserve(
             (
                 StatusCode::OK,
                 Json(Reply::Upload {
+                    job_id: id.to_string(),
+                    next: href!(job::page, job::Id(id.clone())).resolve(cx),
                     upload: href!(job::upload, job::Id(id.clone())).resolve(cx),
                     text: href!(job::submit_text, job::Id(id.clone())).resolve(cx),
                     cancel: href!(job::cancel, job::Id(id)).resolve(cx),

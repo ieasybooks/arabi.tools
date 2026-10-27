@@ -6,6 +6,7 @@ mod health;
 mod language;
 mod ocr;
 mod transcribe;
+mod workspace;
 
 use std::fmt::Write;
 
@@ -191,7 +192,6 @@ async fn layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                 topcoat::font::link(font: TRANSCRIPT_FONT)
                 <link rel="stylesheet" href=(STYLES)>
                 topcoat::dev::script()
-                topcoat::runtime::script()
             </head>
             <body>
                 <a class="skip-link" href="#main-content">(text.skip_to_main)</a>
@@ -250,6 +250,8 @@ async fn layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                     )
                 </main>
                 site_footer(locale: locale)
+                // Deferred tool controllers start before runtime hydration, even on a slow connection.
+                topcoat::runtime::script()
             </body>
         </html>
     })

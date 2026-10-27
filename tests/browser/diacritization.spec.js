@@ -118,10 +118,12 @@ for (const locale of [
     await expect(page.locator('bdi[lang="en"]')).toHaveAttribute("dir", "ltr");
     await page.getByLabel(locale.original, { exact: true }).fill(source);
     for (const model of ["شكِّلها", "CATT"]) {
-      const previousUrl = page.url();
+      const previousJob = await page.locator(".workspace-recovery").getAttribute("href");
+      const documentStart = await page.evaluate(() => performance.timeOrigin);
       await page.getByRole("radio", { name: model, exact: true }).check();
       await page.getByRole("button", { name: locale.submit, exact: true }).click();
-      await page.waitForURL((url) => /\/diacritize\/jobs\/[a-f0-9]{32}$/.test(url.pathname) && url.href !== previousUrl);
+      await expect(page.locator(".workspace-recovery")).toHaveAttribute("href", /\/diacritize\/jobs\/[a-f0-9]{32}$/);
+      await expect(page.locator(".workspace-recovery")).not.toHaveAttribute("href", previousJob || "");
       await expect(page.locator("#job-status")).toHaveText(locale.done, { timeout: 60_000 });
       const output = await page.getByLabel(locale.result, { exact: true }).inputValue();
       expect(stripMarks(output)).toBe(stripMarks(source));
@@ -134,15 +136,16 @@ for (const locale of [
       const result = await download(page, locale.txt);
       expect(result.name).toBe("text.txt");
       expect(result.bytes.toString()).toBe(output);
-      await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
+      expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentStart);
       await fitsViewport(page);
       // A saved result retains its own model and text mode even after this tab
       // chooses different defaults on the tool page.
-      const completedUrl = page.url();
+      const completedUrl = await page.locator(".workspace-recovery").getAttribute("href");
       await page.goto("/diacritize");
       await page.getByRole("radio", { name: model === "CATT" ? "شكِّلها" : "CATT", exact: true }).check();
       await page.getByRole("radio", { name: locale.document, exact: true }).check();
       await page.goto(completedUrl);
+      await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
       await expect(page.getByLabel(locale.original, { exact: true })).toBeVisible();
       await expect(page.getByLabel(locale.original, { exact: true })).toHaveValue(source);
       await expect(page.getByRole("radio", { name: model, exact: true })).toBeChecked();
@@ -166,12 +169,10 @@ for (const locale of [
       const page = await context.newPage();
       await page.goto(`${address}/diacritize`);
       await page.getByLabel(locale.original, { exact: true }).fill(source);
-      const [request] = await Promise.all([
-        page.waitForRequest((request) => request.isNavigationRequest()),
-        page.getByRole("button", { name: locale.submit, exact: true }).click(),
-      ]);
-      expect(request.method()).toBe("POST");
-      expect(new URL(request.url()).search).toBe("");
+      await expect(page.getByRole("button", { name: locale.submit, exact: true })).toBeDisabled();
+      await expect(page.locator("noscript")).toBeVisible();
+      await expect(page.getByLabel(locale.original, { exact: true })).toHaveValue(source);
+      expect(new URL(page.url()).search).toBe("");
     } finally {
       await context.close();
     }
@@ -191,7 +192,7 @@ for (const locale of [
     await expect(page.locator("#text-count")).toContainText("1000 / 1000");
     await expect(page.getByRole("alert")).toBeHidden();
     await page.getByRole("button", { name: locale.submit, exact: true }).click();
-    await page.waitForURL(/\/diacritize\/jobs\/[a-f0-9]{32}$/);
+    await expect(page.locator(".workspace-recovery")).toHaveAttribute("href", /\/diacritize\/jobs\/[a-f0-9]{32}$/);
     await expect(page.locator("#job-status")).toHaveText(locale.done, { timeout: 60_000 });
     await expect(page.getByLabel(locale.original, { exact: true })).toHaveValue(boundary);
   });
@@ -211,7 +212,7 @@ for (const locale of [
       await page.getByRole("radio", { name: locale.document, exact: true }).check();
       await page.getByLabel(locale.file, { exact: true }).setInputFiles({ name: `مستند.${extension}`, mimeType: extension === "txt" ? "text/plain" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: bytes });
       await page.getByRole("button", { name: locale.upload, exact: true }).click();
-      await page.waitForURL(/\/diacritize\/jobs\/[a-f0-9]{32}$/);
+      await expect(page.locator(".workspace-recovery")).toHaveAttribute("href", /\/diacritize\/jobs\/[a-f0-9]{32}$/);
       await expect(page.locator("#job-status")).toHaveText(locale.done, { timeout: 60_000 });
       await expect(page.locator(".result-heading bdi")).toHaveText(model);
       const result = await download(page, locale[extension]);
@@ -361,7 +362,8 @@ for (const locale of [
       await page.getByRole("button", { name: locale.submit, exact: true }).click();
       await expect.poll(() => completedUrl).toBeTruthy();
       await page.getByRole("button", { name: locale.cancel, exact: true }).click();
-      await expect(page).toHaveURL(new RegExp(`${completedUrl}$`));
+      await expect(page.locator(".workspace-recovery")).toHaveAttribute("href", completedUrl);
+      await expect(page).toHaveURL(/\/diacritize$/);
       await expect(page.locator("#job-status")).toHaveText(locale.done);
       const output = await page.getByLabel(locale.result, { exact: true }).inputValue();
       expect(stripMarks(output)).toBe(stripMarks(source));
@@ -376,7 +378,7 @@ for (const locale of [
     await page.getByRole("radio", { name: locale.document, exact: true }).check();
     await page.getByLabel(locale.file, { exact: true }).setInputFiles({ name: "long.txt", mimeType: "text/plain", buffer: Buffer.from("اللغة العربية جميلة وهذا نص طويل للتشكيل.\n".repeat(10_000)) });
     await page.getByRole("button", { name: locale.upload, exact: true }).click();
-    await page.waitForURL(/\/diacritize\/jobs\/[a-f0-9]{32}$/);
+    await expect(page.locator(".workspace-recovery")).toHaveAttribute("href", /\/diacritize\/jobs\/[a-f0-9]{32}$/);
     await expect(page.getByRole("progressbar")).toBeVisible();
     await page.getByRole("button", { name: locale.cancel, exact: true }).click();
     await expect(page.locator("#job-status")).toHaveText(locale.cancelled);

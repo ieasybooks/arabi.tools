@@ -376,6 +376,7 @@ pub struct Text {
     pub diacritization: DiacritizationText,
     pub cancelled_user: &'static str,
     pub review: ReviewText,
+    pub workspace: WorkspaceText,
 }
 
 /// Search and transcript review controls shared by result viewers.
@@ -399,6 +400,28 @@ pub struct ReviewText {
     pub show_timestamps: &'static str,
     pub go_to_cue: &'static str,
     pub cue_at: &'static str,
+}
+
+/// Persistent workspace controls and lifecycle messages.
+pub struct WorkspaceText {
+    pub reserving: &'static str,
+    pub validating: &'static str,
+    pub observing: &'static str,
+    pub delayed: &'static str,
+    pub retry_observation: &'static str,
+    pub recovery: &'static str,
+    pub view_result: &'static str,
+    pub previous_result: &'static str,
+    pub previous_model: &'static str,
+    pub replace_file: &'static str,
+    pub remove_file: &'static str,
+    pub bytes: &'static str,
+    pub kilobytes: &'static str,
+    pub megabytes: &'static str,
+    pub language_reload: &'static str,
+    pub source_needed: &'static str,
+    pub missing: &'static str,
+    pub result: &'static str,
 }
 
 /// Names of the initiative's accounts, linked from the footer.
@@ -642,6 +665,26 @@ static AR: Text = Text {
     not_found: "هذه الصفحة غير موجودة، أو انتهت صلاحيتها.",
     back_home: "العودة إلى الرئيسية",
     cancelled_user: "أُلغيت المهمة بطلبك.",
+    workspace: WorkspaceText {
+        reserving: "جارٍ طلب مكان في الطابور…",
+        validating: "اكتمل الرفع. جارٍ التحقق من الملف…",
+        observing: "جارٍ انتظار حالة المهمة…",
+        delayed: "تأخرت تحديثات الحالة. يمكنك إعادة المحاولة أو فتح هذه المهمة.",
+        retry_observation: "إعادة محاولة تحديث الحالة",
+        recovery: "فتح هذه المهمة",
+        view_result: "عرض النتيجة",
+        previous_result: "النتيجة السابقة",
+        previous_model: "النتيجة السابقة — {model}",
+        replace_file: "استبدال الملف",
+        remove_file: "إزالة الملف",
+        bytes: "بايت",
+        kilobytes: "كيلوبايت",
+        megabytes: "ميغابايت",
+        language_reload: "يؤدي تغيير اللغة إلى إعادة تحميل الصفحة. قد تفقد التعديلات غير المرسلة والمعاينة المحلية.",
+        source_needed: "ألصق النص أو اختر الملف مجددًا لبدء مهمة أخرى.",
+        missing: "هذه المهمة غير متاحة أو انتهت صلاحيتها. يمكنك نسخ النص المعروض هنا.",
+        result: "النتيجة",
+    },
     review: ReviewText {
         search: "ابحث في النص المستخرج",
         ignore_marks: "تجاهل الحركات الشائعة",
@@ -884,6 +927,26 @@ static EN: Text = Text {
     not_found: "This page doesn't exist, or it has expired.",
     back_home: "Back to home",
     cancelled_user: "You cancelled this job.",
+    workspace: WorkspaceText {
+        reserving: "Requesting a place in the queue…",
+        validating: "Upload complete. Checking the file…",
+        observing: "Waiting for job status…",
+        delayed: "Status updates are delayed. You can retry or open this job.",
+        retry_observation: "Retry status updates",
+        recovery: "Open this job",
+        view_result: "View result",
+        previous_result: "Previous result",
+        previous_model: "Previous result — {model}",
+        replace_file: "Replace file",
+        remove_file: "Remove file",
+        bytes: "bytes",
+        kilobytes: "KB",
+        megabytes: "MB",
+        language_reload: "Changing language reloads this page. Unsent changes and the local preview may be lost.",
+        source_needed: "Paste your text or select your file again to start another job.",
+        missing: "This job is unavailable or has expired. Text already shown here can still be copied.",
+        result: "Result",
+    },
     review: ReviewText {
         search: "Search recognized text",
         ignore_marks: "Ignore common diacritics",

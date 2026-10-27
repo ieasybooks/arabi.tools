@@ -14,6 +14,7 @@ use topcoat::{
         href, page,
         request::{client_ip, uri},
     },
+    runtime::signal,
     view::{View, component, view},
 };
 
@@ -32,8 +33,8 @@ pub async fn page(cx: &Cx) -> Result<impl View> {
     Ok(view! {
         tool_hero(locale: locale, lead: true)
         <section class="workspace">
-            <div class="container workspace-layout">
-                <div class="workspace-main">
+            <div class="container workspace-layout workspace-wide">
+                <div class="workspace-entry">
                     steps(locale: locale, current: Step::Input, failed: false)
                     if !tool.is_available() {
                         <p class="notice" role="status">(text.unavailable)</p>
@@ -53,12 +54,7 @@ pub async fn page(cx: &Cx) -> Result<impl View> {
                                 </div>
                             }
                             Ok(()) => {
-                                editor(
-                                    locale: locale,
-                                    source: String::new(),
-                                    model: Model::Shakkelha,
-                                    retry: false
-                                )
+                                editor(locale: locale, initial: None)
                             }
                         }
                     }
@@ -66,6 +62,7 @@ pub async fn page(cx: &Cx) -> Result<impl View> {
                 before_you_start(locale: locale)
             </div>
         </section>
+        <script src=(super::workspace::SCRIPT) defer=(true)></script>
         <script src=(SCRIPT) defer=(true)></script>
     })
 }
@@ -107,99 +104,197 @@ pub(crate) fn meta(cx: &Cx, locale: Locale, origin: &str) -> Option<PageMeta> {
 /// One model choice serves both modes; a completed text job retains its original input.
 #[component]
 pub(super) async fn editor(
+    cx: &Cx,
     locale: Locale,
-    source: String,
-    model: Model,
-    retry: bool,
+    initial: Option<crate::queue::JobId>,
 ) -> Result<impl View> {
     let text = &locale.text().diacritization;
+    let tool = app_context::<Diacritization>(cx);
+    let document = initial.as_ref().and_then(|id| tool.queue.result(id));
+    let source = document
+        .as_ref()
+        .and_then(|document| document.text.as_ref())
+        .map_or_else(String::new, |text| text.source.clone());
+    let model = document
+        .as_ref()
+        .map_or(Model::Shakkelha, |document| document.model);
+    let document_mode = document
+        .as_ref()
+        .is_some_and(|document| document.text.is_none());
+    let initial_job = initial
+        .as_ref()
+        .map_or_else(String::new, ToString::to_string);
+    let initial_url = initial
+        .as_ref()
+        .map(|id| href!(jobs::job::page, jobs::job::Id(id.clone())).resolve(cx));
+    let cancel_url = initial
+        .as_ref()
+        .filter(|id| jobs::job::owns_job(cx, id))
+        .map(|id| href!(jobs::job::cancel, jobs::job::Id(id.clone())).resolve(cx));
     let count = source.chars().count();
+    let job = signal(cx, || initial_job.clone());
+    let restore_source = initial.is_some() && document.is_none();
+    drop(document);
     Ok(view! {
-        <form
-            id="diacritize-form"
-            class="diacritize-form"
-            method="post"
-            action=(href!(page))
-            novalidate=(true)
-            data-reserve=(href!(jobs::reserve))
-            data-retry=(if retry { "true" } else { "false" })
-            data-extensions=(EXTENSIONS.join(","))
-            data-max-bytes=(MAX_UPLOAD_BYTES)
-            data-max-characters=(MAX_TEXT_CHARACTERS)
-            data-count=(text.character_count)
-            data-text-limit=(locale.diacritization_text_limit())
-            data-text-missing=(text.text_missing)
-            data-missing=(text.missing)
-            data-wrong-type=(text.wrong_type)
-            data-too-large=(locale.too_large())
-            data-failed=(text.upload_failed)
-            data-model-unavailable=(text.model_unavailable)
-            data-uploading=(text.uploading)
-            data-submitting=(text.submitting)
-            data-cancelling=(text.cancelling)
-            data-cancelled=(locale.text().cancelled_user)
-            data-cancel-failed=(text.cancel_failed)
-            data-no-file=(text.no_file)
+        <div
+            data-workspace="diacritization"
+            data-initial-job=(initial_job)
+            data-initial-url=(initial_url)
+            data-cancel-url=(cancel_url)
+            data-restore-source=(if restore_source { "true" } else { "false" })
+            data-previous=(locale.text().workspace.previous_result)
+            data-previous-model=(locale.text().workspace.previous_model)
         >
-            input_choices(locale: locale, model: model)
-            <div id="diacritize-text-panel" class="diacritize-panel">
-                <div class="diacritize-field-heading">
-                    <label for="source-text">(text.source_label)</label>
-                    <p id="text-count" class="diacritize-count">
-                        (locale.diacritization_count(count))
-                    </p>
-                </div>
-                <textarea
-                    id="source-text"
-                    class="diacritize-text"
-                    name="text"
-                    dir="auto"
-                    rows="7"
-                    placeholder=(text.placeholder)
-                    aria-describedby="text-limit text-count"
-                >
-                    "\n"
-                    (source)
-                </textarea>
-                <p id="text-limit" class="hint">(locale.diacritization_text_limit())</p>
-                <div class="form-actions">
-                    <button type="submit" class="button primary">
-                        (text.submit_text)
-                    </button>
-                </div>
-            </div>
-            <div id="diacritize-document-panel" class="diacritize-panel" hidden=(true)>
-                <div class="dropzone">
-                    <input
-                        id="document"
-                        type="file"
-                        name="file"
-                        accept=".txt,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                        aria-label=(text.file_label)
+            <form
+                id="diacritize-form"
+                class="diacritize-form"
+                method="post"
+                action=(href!(page))
+                novalidate=(true)
+                data-reserve=(href!(jobs::reserve))
+                data-retry=(if initial.is_some() { "true" } else { "false" })
+                data-initial-mode=(if document_mode { "document" } else { "text" })
+                data-reserving=(locale.text().workspace.reserving)
+                data-validating=(locale.text().workspace.validating)
+                data-observing=(locale.text().workspace.observing)
+                data-language-reload=(locale.text().workspace.language_reload)
+                data-bytes=(locale.text().workspace.bytes)
+                data-kilobytes=(locale.text().workspace.kilobytes)
+                data-megabytes=(locale.text().workspace.megabytes)
+                data-extensions=(EXTENSIONS.join(","))
+                data-max-bytes=(MAX_UPLOAD_BYTES)
+                data-max-characters=(MAX_TEXT_CHARACTERS)
+                data-count=(text.character_count)
+                data-text-limit=(locale.diacritization_text_limit())
+                data-text-missing=(text.text_missing)
+                data-missing=(text.missing)
+                data-wrong-type=(text.wrong_type)
+                data-too-large=(locale.too_large())
+                data-failed=(text.upload_failed)
+                data-model-unavailable=(text.model_unavailable)
+                data-uploading=(text.uploading)
+                data-submitting=(text.submitting)
+                data-cancelling=(text.cancelling)
+                data-cancelled=(locale.text().cancelled_user)
+                data-cancel-failed=(text.cancel_failed)
+                data-no-file=(text.no_file)
+            >
+                input_choices(locale: locale, model: model)
+                <div id="diacritize-text-panel" class="diacritize-panel">
+                    <div class="diacritize-field-heading">
+                        <label for="source-text">(text.source_label)</label>
+                        <p
+                            id="text-count"
+                            class="diacritize-count"
+                            aria-label=(locale.diacritization_count(count))
+                        >
+                            <bdi dir="ltr">
+                                (format!("{count} / {MAX_TEXT_CHARACTERS}"))
+                            </bdi>
+                            (text
+                                .character_count
+                                .split("{max}")
+                                .last()
+                                .unwrap_or_default())
+                        </p>
+                    </div>
+                    <textarea
+                        id="source-text"
+                        class="diacritize-text"
+                        name="text"
+                        dir="auto"
+                        rows="7"
+                        placeholder=(text.placeholder)
+                        aria-describedby="text-limit text-count diacritize-error"
                     >
-                    <span class="dropzone-icon">
-                        icon(data: icons::UPLOAD, size: 24)
-                    </span>
-                    <p class="dropzone-title">(text.choose_file)</p>
-                    <p class="dropzone-hint">(locale.diacritization_limits())</p>
-                    <p class="file-name" dir="auto">(text.no_file)</p>
+                        "\n"
+                        (source)
+                    </textarea>
+                    <p id="text-limit" class="hint">
+                        (locale.diacritization_text_limit())
+                    </p>
+                    <div class="form-actions">
+                        <button type="submit" class="button primary" disabled=(true)>
+                            (text.submit_text)
+                        </button>
+                    </div>
                 </div>
-                <div class="form-actions">
-                    <button type="submit" class="button primary">
-                        (text.submit_document)
+                <div
+                    id="diacritize-document-panel"
+                    class="diacritize-panel"
+                    hidden=(true)
+                >
+                    <div class="dropzone">
+                        <input
+                            id="document"
+                            type="file"
+                            name="file"
+                            accept=".txt,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                            aria-label=(text.file_label)
+                        >
+                        <span class="dropzone-icon">
+                            icon(data: icons::UPLOAD, size: 24)
+                        </span>
+                        <p class="dropzone-title">(text.choose_file)</p>
+                        <p class="dropzone-hint">(locale.diacritization_limits())</p>
+                        <p class="file-name" dir="auto">(text.no_file)</p>
+                    </div>
+                    super::workspace::file_actions(locale: locale)
+                    <div class="form-actions">
+                        <button type="submit" class="button primary" disabled=(true)>
+                            (text.submit_document)
+                        </button>
+                    </div>
+                </div>
+                <div class="upload-progress" hidden=(true)>
+                    <progress max="100" value="0" aria-label=(text.uploading)></progress>
+                    <p id="job-status" class="submission-status" role="status"></p>
+                    <button type="button" class="button secondary cancel-upload">
+                        (text.cancel)
                     </button>
                 </div>
+                <p id="diacritize-error" class="error" role="alert" hidden=(true)></p>
+                <a class="return-to-job" hidden=(true)>(text.back_to_job)</a>
+                <p class="hint">(text.try_again)</p>
+                if initial.is_some() {
+                    <p class="hint source-needed">
+                        (locale.text().workspace.source_needed)
+                    </p>
+                }
+            </form>
+            super::workspace::bridge(job: job.clone())
+            <div class="workspace-observer" hidden=(initial.is_none())>
+                jobs::job::observe(job: $(job.get()))
             </div>
-            <div class="upload-progress" hidden=(true)>
-                <progress max="100" value="0" aria-label=(text.uploading)></progress>
-                <p class="submission-status" role="status"></p>
-                <button type="button" class="button secondary cancel-upload">
-                    (text.cancel)
+            <section class="workspace-review">
+                <p class="observation-status notice" role="status" hidden=(true)>
+                    (locale.text().workspace.delayed)
+                </p>
+                <button
+                    type="button"
+                    class="button secondary retry-observation"
+                    hidden=(true)
+                >
+                    (locale.text().workspace.retry_observation)
                 </button>
-            </div>
-            <p class="error" role="alert" hidden=(true)></p>
-            <a class="return-to-job" hidden=(true)>(text.back_to_job)</a>
-        </form>
+                <a class="workspace-recovery" hidden=(true)>
+                    (locale.text().workspace.recovery)
+                </a>
+                <button
+                    type="button"
+                    class="button secondary view-result"
+                    hidden=(true)
+                >
+                    (locale.text().workspace.view_result)
+                </button>
+                <p class="previous-result hint" hidden=(true)></p>
+                <div
+                    class="workspace-result"
+                    tabindex="-1"
+                    aria-label=(locale.text().workspace.result)
+                ></div>
+            </section>
+        </div>
         <noscript><p class="notice">(text.needs_javascript)</p></noscript>
     })
 }

@@ -1690,3 +1690,118 @@ body:has(.ocr-review) .tool-hero .container::after {
     flex: 1 1 100%;
   }
 }
+
+/* Workspace source continuity, review panels and lifecycle controls. */
+.workspace-wide {
+  max-width: 76rem;
+}
+
+.workspace-entry,
+[data-workspace],
+.workspace-review,
+.workspace-result {
+  min-width: 0;
+}
+
+.workspace-entry,
+[data-workspace],
+.workspace-review {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+[data-workspace] .diacritize-form,
+.workspace-review:has(.result) {
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.workspace-review .button,
+.file-actions .button {
+  align-self: flex-start;
+  white-space: normal;
+}
+
+.file-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.file-size {
+  flex-basis: 100%;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+[data-workspace] .button[aria-disabled="true"],
+[data-workspace] .button:disabled {
+  border-color: var(--line);
+  background: var(--well);
+  color: var(--muted);
+  cursor: wait;
+}
+
+[data-workspace] .dropzone:has(input:disabled) {
+  border-style: solid;
+  background: var(--well);
+}
+
+[data-workspace] .hint,
+[data-workspace] .dropzone-hint {
+  color: var(--muted);
+}
+
+[data-workspace] .diacritize-choices label:has(input:disabled) {
+  opacity: 1;
+  background: var(--well);
+  color: var(--muted);
+}
+
+[data-workspace] .dropzone[data-selected="false"] .file-name {
+  padding: 0;
+  box-shadow: none;
+  background: none;
+  font-weight: 400;
+}
+
+.previous-result {
+  font-weight: 500;
+}
+
+[data-workspace] .submission-status {
+  min-block-size: 1.75em;
+}
+
+[data-workspace][data-phase="cancelled"] .submission-status {
+  color: var(--muted);
+}
+
+body:has([data-workspace]) .tool-hero {
+  padding-block: 1.5rem 0;
+}
+
+@media (min-width: 60rem) {
+  [data-workspace="diacritization"] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+@media (max-width: 39.99rem) {
+  [data-workspace] .diacritize-form,
+  .workspace-review:has(.result) {
+    padding: 1rem;
+  }
+
+  .file-actions .button {
+    flex: 1;
+    padding-inline: 1rem;
+  }
+}
