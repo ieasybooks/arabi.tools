@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { chromium, expect, test, webkit } from "@playwright/test";
-import { completedTranscript, openTranscript, countText } from "./review-helpers.js";
+import { completedTranscript, openTranscript, countText, speech } from "./review-helpers.js";
 
 let jobPath;
 test.beforeAll(async ({ browser }) => { jobPath = await completedTranscript(browser); });
@@ -316,7 +316,11 @@ test("silent audio stays successful and has no phantom search or copied explanat
   const root = page.locator('[data-result="transcript"]');
   await expect(root).toHaveAttribute("data-transcript-ready", "true", { timeout: 60_000 });
   await expect(page.getByText("لم نجد كلامًا في هذا التسجيل.")).toBeVisible();
-  await expect(page.getByRole("link", { name: "تفريغ ملف آخر", exact: true })).toBeVisible();
+  // The mounted workspace chooses another file without leaving the empty result.
+  const choosing = page.waitForEvent("filechooser");
+  await page.locator(".replace-file").click();
+  await (await choosing).setFiles(speech);
+  await expect(page.locator("#upload-form [type=submit]")).toBeEnabled();
   await page.getByRole("searchbox").fill("كلام");
   await expect(page.locator("[data-search-count]")).toHaveText("لم يُعثر على مطابقات");
   expect(await page.locator("[data-cue]").count()).toBe(0);
@@ -325,4 +329,7 @@ test("silent audio stays successful and has no phantom search or copied explanat
   await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { value: { writeText: async (text) => { window.copied = text; } } }));
   await page.locator("[data-copy-all]").click();
   expect(await page.evaluate(() => window.copied)).toBe("");
+  await page.goto(`/transcribe/jobs/${id}`);
+  await expect(root).toHaveAttribute("data-transcript-ready", "true");
+  await expect(page.getByRole("link", { name: "تفريغ ملف آخر", exact: true })).toBeVisible();
 });
