@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { expect, test, webkit } from "@playwright/test";
+import { chromium, expect, test, webkit } from "@playwright/test";
 import { completedTranscript, openTranscript, countText } from "./review-helpers.js";
 
 let jobPath;
@@ -159,8 +159,8 @@ test("live roots initialize once, release highlights and ignore late clipboard r
 
 for (const engine of ["chromium", "webkit"]) {
   for (const fallback of [false, true]) {
-    test(`${engine} ${fallback ? "background" : "custom"} highlights preserve Arabic joining and selection`, async ({ page }) => {
-      const extra = engine === "webkit" ? await webkit.launch() : null;
+    test(`${engine} ${fallback ? "background" : "custom"} highlights preserve Arabic joining and selection`, async ({ page, browserName }) => {
+      const extra = engine !== browserName ? await ({ chromium, webkit })[engine].launch() : null;
       const tab = extra ? await extra.newPage() : page;
       const errors = [];
       tab.on("pageerror", (error) => errors.push(error.message));

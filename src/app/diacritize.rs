@@ -18,6 +18,7 @@ use topcoat::{
     view::{View, component, view},
 };
 
+use crate::result_controls::COPY_SCRIPT;
 use crate::tools::diacritization::{
     Diacritization, EXTENSIONS, MAX_TEXT_CHARACTERS, MAX_UPLOAD_BYTES, Model,
 };
@@ -62,7 +63,8 @@ pub async fn page(cx: &Cx) -> Result<impl View> {
                 before_you_start(locale: locale)
             </div>
         </section>
-        <script src=(super::workspace::SCRIPT) defer=(true)></script>
+        <script src=(COPY_SCRIPT) defer=(true)></script>
+        <script src=(crate::workspace::SCRIPT) defer=(true)></script>
         <script src=(SCRIPT) defer=(true)></script>
     })
 }
@@ -151,11 +153,11 @@ pub(super) async fn editor(
                 document_mode: document_mode,
                 source_needed: restore_source || document_mode
             )
-            super::workspace::bridge(job: job.clone())
+            crate::workspace::bridge(job: job.clone())
             <div class="workspace-observer" hidden=(initial.is_none())>
                 jobs::job::observe(job: $(job.get()))
             </div>
-            super::workspace::review(locale: locale)
+            crate::workspace::review(locale: locale)
         </div>
         <noscript>
             <p class="notice">(locale.text().diacritization.needs_javascript)</p>
@@ -287,7 +289,7 @@ async fn document_input(locale: Locale) -> Result<impl View> {
                 <p class="dropzone-hint">(locale.diacritization_limits())</p>
                 <p class="file-name" dir="auto">(text.no_file)</p>
             </div>
-            super::workspace::file_actions(locale: locale)
+            crate::workspace::file_actions(locale: locale)
             <div class="form-actions">
                 <button type="submit" class="button primary" disabled=(true)>
                     (text.submit_document)

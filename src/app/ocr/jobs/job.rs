@@ -29,11 +29,11 @@ use crate::app::ocr;
 use crate::i18n::Locale;
 use crate::icons;
 use crate::queue::{CancelReason, JobId, Status};
+use crate::result_controls::{self, COPY_SCRIPT, SEARCH_SCRIPT};
 use crate::tools::ocr::{
     Document, DocumentProblem, MAX_UPLOAD_BYTES, Ocr, UploadedDocument, download_name,
 };
 
-const REVIEW_SCRIPT: Asset = asset!("../../ocr-review.js");
 const PDF_MODULE: Asset = asset!("../../vendor/pdfjs/pdf.mjs");
 const PDF_WORKER: Asset = asset!("../../vendor/pdfjs/pdf.worker.mjs");
 include!("../../vendor/pdfjs/assets.rs");
@@ -47,10 +47,12 @@ const HEARTBEAT: Duration = Duration::from_secs(30);
 pub(super) async fn page(cx: &Cx) -> Result<impl View> {
     let id = path_param::<Id>(cx)?.clone();
     let locale = Locale::of(cx);
-    crate::app::workspace::private_response(cx);
+    crate::workspace::private_response(cx);
     let exists = app_context::<Ocr>(cx).queue.watch(&id).is_some();
     Ok(view! {
-        <script src=(REVIEW_SCRIPT) defer=(true)></script>
+        <script src=(COPY_SCRIPT) defer=(true)></script>
+        <script src=(SEARCH_SCRIPT) defer=(true)></script>
+        <script src=(ocr::REVIEW_SCRIPT) defer=(true)></script>
         ocr::tool_hero(locale: locale, lead: false)
         <section class="workspace">
             <div class="container workspace-layout workspace-wide">
@@ -92,15 +94,14 @@ pub(super) async fn page(cx: &Cx) -> Result<impl View> {
                 }
             </div>
         </section>
-        <script src=(crate::app::workspace::SCRIPT) defer=(true)></script>
-        // Integration: load the ocr viewer scripts here, on the direct job page too.
+        <script src=(crate::workspace::SCRIPT) defer=(true)></script>
     })
 }
 
 /// A job link is the existing read capability. The shard observes it without starting another job.
 #[shard("/ocr/observe")]
 pub(crate) async fn observe(cx: &Cx, job: String) -> Result<impl View> {
-    crate::app::workspace::private_response(cx);
+    crate::workspace::private_response(cx);
     let locale = Locale::of(cx);
     let id = if job.is_empty() {
         None
@@ -324,8 +325,9 @@ async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> 
             if all_blank {
                 <p class="ocr-empty-document">(review.all_blank)</p>
             }
-            // Integration slot for the shared search_toolbar(locale) component.
-            <div data-ocr-search-slot=""></div>
+            <div data-ocr-search-slot="">
+                result_controls::search_toolbar(locale: locale)
+            </div>
             review_controls(locale: locale, id: id.clone())
             <div class="ocr-panels">
                 source_panel(locale: locale, id: id.clone())
@@ -416,11 +418,10 @@ async fn review_controls(locale: Locale, id: JobId) -> Result<impl View> {
                     (review.copy_page)
                 </button>
                 <button class="button secondary" type="button" data-ocr-copy-all="">
-                    (review.copy_all)
+                    (locale.text().review.copy_all)
                 </button>
             </div>
-            <p class="ocr-copy-status" data-ocr-copy-status="" aria-live="polite"></p>
-            <div data-ocr-copy-fallback=""></div>
+            result_controls::copy_feedback(locale: locale)
             <fieldset class="ocr-view-choice">
                 <legend>(review.view_label)</legend>
                 <label>

@@ -35,6 +35,7 @@ use crate::{
     i18n::Locale,
     icons,
     queue::{CancelReason, JobId, Status},
+    result_controls::{self, COPY_SCRIPT},
 };
 
 module_param!(pub id: JobId, error = not_found);
@@ -43,7 +44,7 @@ const HEARTBEAT: Duration = Duration::from_secs(30);
 
 #[page]
 pub(in crate::app::diacritize) async fn page(cx: &Cx) -> Result<impl View> {
-    crate::app::workspace::private_response(cx);
+    crate::workspace::private_response(cx);
     let id = path_param::<Id>(cx)?.clone();
     let locale = Locale::of(cx);
     let exists = app_context::<Diacritization>(cx).queue.watch(&id).is_some();
@@ -62,7 +63,8 @@ pub(in crate::app::diacritize) async fn page(cx: &Cx) -> Result<impl View> {
                 }
             </div>
         </section>
-        <script src=(crate::app::workspace::SCRIPT) defer=(true)></script>
+        <script src=(COPY_SCRIPT) defer=(true)></script>
+        <script src=(crate::workspace::SCRIPT) defer=(true)></script>
         <script src=(diacritize::SCRIPT) defer=(true)></script>
     })
 }
@@ -70,7 +72,7 @@ pub(in crate::app::diacritize) async fn page(cx: &Cx) -> Result<impl View> {
 /// A job link is the existing read capability. Cancellation stays on its HTTP route.
 #[shard("/diacritize/observe")]
 pub(crate) async fn observe(cx: &Cx, job: String) -> Result<impl View> {
-    crate::app::workspace::private_response(cx);
+    crate::workspace::private_response(cx);
     let locale = Locale::of(cx);
     let id = if job.is_empty() {
         None
@@ -261,10 +263,8 @@ async fn result(locale: Locale, id: JobId, document: Arc<Document>) -> Result<im
                         type="button"
                         class="button secondary"
                         data-copy="diacritized-text"
-                        data-copied=(text.copied)
-                        data-copy-failed=(text.copy_failed)
                     >
-                        (text.copy)
+                        (locale.text().review.copy_all)
                     </button>
                 }
                 <a
@@ -289,7 +289,7 @@ async fn result(locale: Locale, id: JobId, document: Arc<Document>) -> Result<im
                     </a>
                 }
             </div>
-            <p class="copy-status hint" role="status"></p>
+            result_controls::copy_feedback(locale: locale)
             <p class="hint">(text.replaces_marks)</p>
             <p class="hint">(locale.diacritization_kept_for())</p>
         </div>

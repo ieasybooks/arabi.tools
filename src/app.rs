@@ -6,7 +6,6 @@ mod health;
 mod language;
 mod ocr;
 mod transcribe;
-mod workspace;
 
 use std::fmt::Write;
 

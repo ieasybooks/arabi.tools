@@ -7,7 +7,6 @@ use tempfile::TempPath;
 use tokio::io::AsyncWriteExt;
 use topcoat::{
     Result,
-    asset::{Asset, asset},
     context::{Cx, app_context},
     cookie::{Cookies, cookie, cookies, time},
     icon::icon,
@@ -40,18 +39,17 @@ module_param!(pub id: JobId, error = not_found);
 
 /// How often an idle status page is sent again, so proxies keep its connection open.
 const HEARTBEAT: Duration = Duration::from_secs(30);
-const TRANSCRIPT_SCRIPT: Asset = asset!("../../transcript.js");
 
 #[page]
 pub(super) async fn page(cx: &Cx) -> Result<impl View> {
     let id = path_param::<Id>(cx)?.clone();
     let locale = Locale::of(cx);
-    crate::app::workspace::private_response(cx);
+    crate::workspace::private_response(cx);
     let exists = app_context::<Transcription>(cx).queue.watch(&id).is_some();
     Ok(view! {
         <script src=(SEARCH_SCRIPT) defer=(true)></script>
         <script src=(COPY_SCRIPT) defer=(true)></script>
-        <script src=(TRANSCRIPT_SCRIPT) defer=(true)></script>
+        <script src=(transcribe::REVIEW_SCRIPT) defer=(true)></script>
         transcribe::tool_hero(locale: locale, lead: false)
         <section class="workspace">
             <div class="container workspace-layout workspace-wide">
@@ -93,15 +91,14 @@ pub(super) async fn page(cx: &Cx) -> Result<impl View> {
                 }
             </div>
         </section>
-        <script src=(crate::app::workspace::SCRIPT) defer=(true)></script>
-        // Integration: load the transcript viewer scripts here, on the direct job page too.
+        <script src=(crate::workspace::SCRIPT) defer=(true)></script>
     })
 }
 
 /// A job link is the existing read capability. The shard observes it without starting another job.
 #[shard("/transcribe/observe")]
 pub(crate) async fn observe(cx: &Cx, job: String) -> Result<impl View> {
-    crate::app::workspace::private_response(cx);
+    crate::workspace::private_response(cx);
     let locale = Locale::of(cx);
     let id = if job.is_empty() {
         None

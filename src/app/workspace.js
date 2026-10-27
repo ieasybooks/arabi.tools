@@ -27,7 +27,8 @@
     if (!form.matches?.('.language-switch')) return;
     const localInput = document.querySelector('#source-text')?.value
       || [...document.querySelectorAll('input[type=file]')].some(input => input.files.length)
-      || app.sources.size;
+      || app.sources.size
+      || document.querySelector('[data-result="ocr"][data-source-attached]');
     if (localInput && !window.confirm(form.dataset.reloadMessage)) event.preventDefault();
   });
   app.fileSelection = (form, locked, changed, signal) => {
@@ -96,7 +97,7 @@
       const steps = observer.querySelector('.steps');
       const currentSteps = root.closest('.workspace-entry')?.querySelector(':scope > .steps');
       if (steps && currentSteps && steps.outerHTML !== currentSteps.outerHTML) currentSteps.replaceWith(steps.cloneNode(true));
-      const result = update.querySelector('[data-result], .result');
+      const result = update.querySelector('[data-result]');
       if (result) {
         if (resultId !== jobId) release(resultId);
         resultId = jobId;
@@ -153,7 +154,7 @@
         if (delayed) delayed.hidden = true;
         if (retry) retry.hidden = true;
         sync();
-        const result = output.querySelector('[data-result], .result');
+        const result = output.querySelector('[data-result]');
         if (previous && result) {
           previous.textContent = result.dataset.model
             ? root.dataset.previousModel.replace('{model}', result.dataset.model)

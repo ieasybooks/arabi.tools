@@ -1,4 +1,4 @@
-import { expect, test, webkit } from "@playwright/test";
+import { chromium, expect, test, webkit } from "@playwright/test";
 import { completedTranscript, openTranscript, countText } from "./review-helpers.js";
 
 let jobPath;
@@ -33,8 +33,8 @@ const cases = [
 ];
 
 for (const engine of ["chromium", "webkit"]) {
-  test(`search acceptance examples in ${engine}`, async ({ page, browser }, testInfo) => {
-    const extraBrowser = engine === "webkit" ? await webkit.launch() : null;
+  test(`search acceptance examples in ${engine}`, async ({ page, browser, browserName }, testInfo) => {
+    const extraBrowser = engine !== browserName ? await ({ chromium, webkit })[engine].launch() : null;
     const tab = extraBrowser ? await extraBrowser.newPage() : page;
     try {
       await openTranscript(tab, jobPath);

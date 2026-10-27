@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
+import { allowClipboard } from './review-helpers.js';
 
 const speech = fileURLToPath(new URL('../fixtures/speech.mp3', import.meta.url));
 const image = execFileSync('python3', ['-c', `
@@ -51,7 +52,9 @@ for (const tool of ['transcribe', 'ocr']) {
       const firstJob = (await page.locator('.workspace-recovery').getAttribute('href')).split('/').pop();
       expect(await page.evaluate(id => window.arabiTools.sources.get(id) === window.__file, firstJob)).toBe(true);
       expect(await page.evaluate(() => window.__sources[0])).toEqual({ id: firstJob, same: true, hasResult: false });
-      const originalResult = await page.locator('.workspace-result').innerText();
+      const recognized = page.locator('.workspace-result').locator(tool === 'ocr' ? '[data-ocr-page-text]' : '.cue-text');
+      const originalResult = await recognized.allTextContents();
+      const downloads = await page.locator('.workspace-result a[download]').evaluateAll(links => links.map(link => link.href));
       await page.evaluate(() => { window.__result = document.querySelector('.workspace-result .result'); });
       await fits(page);
       await page.setViewportSize({ width: 320, height: 740 });
@@ -63,7 +66,10 @@ for (const tool of ['transcribe', 'ocr']) {
       await submit.click();
       await expect(page.getByRole('alert')).toBeVisible();
       await expect(page.locator('.previous-result')).toBeVisible();
-      expect(await page.locator('.workspace-result').innerText()).toBe(originalResult);
+      // Responsive Source/Text controls change visibility; recognized text and
+      // its download targets must remain tied to the previous result.
+      expect(await recognized.allTextContents()).toEqual(originalResult);
+      expect(await page.locator('.workspace-result a[download]').evaluateAll(links => links.map(link => link.href))).toEqual(downloads);
       expect(await page.evaluate(() => document.querySelector('.workspace-result .result') === window.__result)).toBe(true);
       await page.unroute(`**/${tool}/jobs`);
       await page.evaluate(() => { window.__file = document.querySelector('[name=file]').files[0]; });
@@ -200,8 +206,8 @@ test('an active transcription follows language reload to its job without its loc
   expect(await page.evaluate(() => window.arabiTools.sources.size)).toBe(0);
 });
 
-test('displayed diacritization stays copyable after downloads become unavailable', async ({ page, context }) => {
-  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+test('displayed diacritization stays copyable after downloads become unavailable', async ({ page, context, browserName }) => {
+  await allowClipboard(context, browserName);
   await page.clock.install();
   await page.goto('/diacritize');
   await page.locator('#source-text').fill('اللغة العربية جميلة');
@@ -213,7 +219,7 @@ test('displayed diacritization stays copyable after downloads become unavailable
   await page.route(`**${job}/result`, route => route.fulfill({ status: 404 }));
   await page.clock.fastForward(31 * 60_000);
   expect(await page.evaluate(async job => (await fetch(`${job}/result`)).status, job)).toBe(404);
-  await page.getByRole('button', { name: 'نسخ النص', exact: true }).click();
+  await page.getByRole('button', { name: 'نسخ النص كاملًا', exact: true }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(text);
   await expect(page.locator('#source-text')).toHaveValue('اللغة العربية جميلة');
   await expect(page.locator('#diacritized-text')).toHaveValue(text);
@@ -270,9 +276,9 @@ test('clipboard fallback selects the full diacritized result without moving the 
   await page.locator('#source-text').fill('اللغة العربية جميلة');
   await page.getByRole('button', { name: 'Diacritize text', exact: true }).click();
   await expect(page.locator('.workspace-result .result')).toBeVisible();
-  await page.getByRole('button', { name: 'Copy text', exact: true }).scrollIntoViewIfNeeded();
+  await page.getByRole('button', { name: 'Copy all text', exact: true }).scrollIntoViewIfNeeded();
   const scroll = await page.evaluate(() => window.scrollY);
-  await page.getByRole('button', { name: 'Copy text', exact: true }).click();
+  await page.getByRole('button', { name: 'Copy all text', exact: true }).click();
   await expect(page.locator('.copy-status')).toHaveText('Copying was unavailable. Select the text and copy it manually.');
   expect(await page.locator('#diacritized-text').evaluate(input => input.selectionStart === 0 && input.selectionEnd === input.value.length)).toBe(true);
   expect(await page.evaluate(saved => Math.abs(window.scrollY - saved), scroll)).toBeLessThanOrEqual(1);

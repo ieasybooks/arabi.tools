@@ -4,6 +4,22 @@ import { expect } from "@playwright/test";
 export const speech = fileURLToPath(new URL("../fixtures/speech.mp3", import.meta.url));
 export const baseURL = "http://127.0.0.1:3204";
 
+// Playwright cannot grant clipboard permissions to WebKit. Keep the real
+// Chromium clipboard check and use exact-payload readback for that engine.
+export async function allowClipboard(context, browserName) {
+  if (browserName === "chromium") {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  } else {
+    await context.addInitScript(() => {
+      let copied = "";
+      Object.defineProperty(navigator, "clipboard", { configurable: true, value: {
+        writeText: async text => { copied = text; },
+        readText: async () => copied,
+      } });
+    });
+  }
+}
+
 export async function completedTranscript(browser) {
   const page = await browser.newPage();
   try {

@@ -23,8 +23,8 @@
     const confirm = find('confirm');
     const sourceStatus = find('source-status');
     const sourceError = find('source-error');
-    const copyStatus = find('copy-status');
-    const fallback = find('copy-fallback');
+    const copyStatus = root.querySelector('[data-copy-status]');
+    const fallback = root.querySelector('[data-copy-fallback]');
     const events = new AbortController();
     const on = (node, event, handler) => node.addEventListener(event, handler, { signal: events.signal });
     const phrase = (key, values = {}) => labels[key].replace(/\{(\w+)\}/g, (_, name) => values[name]);
@@ -42,7 +42,6 @@
     let zoom = 1;
     let disposed = false;
     let search;
-    let copyVersion = 0;
     let resizeFrame;
 
     function clearCanvas() {
@@ -60,6 +59,7 @@
       renderTask?.cancel();
       const old = source;
       source = null;
+      delete root.dataset.sourceAttached;
       old?.abort.abort();
       if (old?.url) URL.revokeObjectURL(old.url);
       if (old?.image) old.image.removeAttribute('src');
@@ -305,6 +305,7 @@
           return;
         }
         owner.ready = true;
+        root.dataset.sourceAttached = 'true';
         const restoreFocused = picker.contains(document.activeElement);
         picker.hidden = true;
         // The File is retained by this controller; clear the picker reference after attachment.
@@ -335,39 +336,9 @@
     });
     void attach(app.sources?.get(root.dataset.jobId), false);
 
-    // Temporary local copy helper; integration can replace it with arabiTools.copyText.
-    async function copy(text, label, button) {
-      const version = ++copyVersion;
-      fallback.replaceChildren();
-      copyStatus.textContent = '';
-      try {
-        await navigator.clipboard.writeText(text);
-        if (!disposed && version === copyVersion) copyStatus.textContent = labels.copied;
-      } catch (_) {
-        if (disposed || version !== copyVersion) return;
-        copyStatus.textContent = labels.copy_failed;
-        const field = document.createElement('textarea');
-        field.className = 'ocr-manual-copy';
-        field.readOnly = true;
-        field.dir = 'auto';
-        field.setAttribute('aria-label', label);
-        field.value = text;
-        const close = document.createElement('button');
-        close.type = 'button';
-        close.className = 'button secondary';
-        close.textContent = labels.copy_close;
-        close.addEventListener('click', () => {
-          fallback.replaceChildren();
-          copyStatus.textContent = '';
-          button.focus({ preventScroll: true });
-        }, { once: true });
-        fallback.append(field, close);
-        field.focus({ preventScroll: true });
-        field.select();
-      }
-    }
-    on(find('copy-page'), 'click', (event) => void copy(texts[current], labels.copy_page, event.currentTarget));
-    on(find('copy-all'), 'click', (event) => void copy(texts.join('\n\n'), labels.copy_all, event.currentTarget));
+    const copy = text => app.copyText(text, { status: copyStatus, fallback });
+    on(find('copy-page'), 'click', () => void copy(texts[current]));
+    on(find('copy-all'), 'click', () => void copy(texts.join('\n\n')));
 
     let lastSize = '';
     const resize = new ResizeObserver(() => {
@@ -380,7 +351,6 @@
     resize.observe(viewport);
     active.set(root, () => {
       disposed = true;
-      copyVersion++;
       events.abort();
       resize.disconnect();
       cancelAnimationFrame(resizeFrame);

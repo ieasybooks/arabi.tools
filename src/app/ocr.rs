@@ -22,7 +22,10 @@ use crate::i18n::Locale;
 use crate::icons;
 use crate::meta::PageMeta;
 use crate::queue::Rejection;
+use crate::result_controls::{COPY_SCRIPT, SEARCH_SCRIPT};
 use crate::tools::ocr::{EXTENSIONS, MAX_UPLOAD_BYTES, Ocr};
+
+pub(super) const REVIEW_SCRIPT: Asset = asset!("./ocr-review.js");
 
 pub(super) const UPLOAD_SCRIPT: Asset = asset!("./upload.js");
 
@@ -63,9 +66,11 @@ pub async fn page(cx: &Cx) -> Result<impl View> {
                 before_you_start(locale: locale)
             </div>
         </section>
-        <script src=(super::workspace::SCRIPT) defer=(true)></script>
+        <script src=(crate::workspace::SCRIPT) defer=(true)></script>
         <script src=(UPLOAD_SCRIPT) defer=(true)></script>
-        // Integration: load the ocr viewer scripts here, on the page, before runtime hydration.
+        <script src=(COPY_SCRIPT) defer=(true)></script>
+        <script src=(SEARCH_SCRIPT) defer=(true)></script>
+        <script src=(REVIEW_SCRIPT) defer=(true)></script>
     })
 }
 
@@ -116,7 +121,7 @@ async fn upload_form(cx: &Cx, locale: Locale) -> Result<impl View> {
                     <p class="dropzone-hint">(locale.ocr_limits())</p>
                     <p class="file-name" dir="auto">(text.no_file)</p>
                 </div>
-                super::workspace::file_actions(locale: locale)
+                crate::workspace::file_actions(locale: locale)
                 <div class="form-actions">
                     <button type="submit" class="button primary" disabled=(true)>
                         (text.submit)
@@ -131,11 +136,11 @@ async fn upload_form(cx: &Cx, locale: Locale) -> Result<impl View> {
                 <p id="upload-error" class="error" role="alert" hidden=(true)></p>
                 <a class="return-to-job" hidden=(true)>(text.back_to_job)</a>
             </form>
-            super::workspace::bridge(job: job.clone())
+            crate::workspace::bridge(job: job.clone())
             <div class="workspace-observer" hidden=(true)>
                 jobs::job::observe(job: $(job.get()))
             </div>
-            super::workspace::review(locale: locale)
+            crate::workspace::review(locale: locale)
         </div>
         <noscript><p class="notice">(text.needs_javascript)</p></noscript>
     })

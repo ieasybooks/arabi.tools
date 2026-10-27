@@ -279,19 +279,15 @@
     }
     return () => { disposed = true; generation++; lifetime.abort(); request?.abort(); observer.dispose(); };
   });
-  document.addEventListener('click', async event => {
+  document.addEventListener('click', event => {
     const button = event.target.closest?.('.diacritize-result button[data-copy]');
     if (!button) return;
     const result = button.closest('.result');
     const output = result.querySelector('[name=result]');
     const status = result.querySelector('.copy-status');
-    try {
-      await navigator.clipboard.writeText(output.value);
-      status.textContent = button.dataset.copied;
-    } catch {
+    void app.copyText(output.value, { status, fallback: () => {
       output.focus({ preventScroll: true });
       output.select();
-      status.textContent = button.dataset.copyFailed;
-    }
+    } });
   });
 })();

@@ -12,16 +12,16 @@ use topcoat::{
     view::{View, component, view},
 };
 
-pub(super) const SCRIPT: Asset = asset!("./workspace.js");
+pub(crate) const SCRIPT: Asset = asset!("./app/workspace.js");
 
-pub(super) fn private_response(cx: &Cx) {
+pub(crate) fn private_response(cx: &Cx) {
     response_headers(cx).append(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
 }
 
 /// A documented DOM event updates the signal; the bound acknowledgement lets a
 /// controller retry an event sent before Topcoat has hydrated the page.
 #[component]
-pub(super) async fn bridge(job: Signal<String>) -> Result<impl View> {
+pub(crate) async fn bridge(job: Signal<String>) -> Result<impl View> {
     Ok(view! {
         <input
             type="hidden"
@@ -33,7 +33,7 @@ pub(super) async fn bridge(job: Signal<String>) -> Result<impl View> {
 }
 
 #[component]
-pub(super) async fn file_actions(locale: crate::i18n::Locale) -> Result<impl View> {
+pub(crate) async fn file_actions(locale: crate::i18n::Locale) -> Result<impl View> {
     let text = &locale.text().workspace;
     Ok(view! {
         <div class="file-actions">
@@ -49,7 +49,7 @@ pub(super) async fn file_actions(locale: crate::i18n::Locale) -> Result<impl Vie
 }
 
 #[component]
-pub(super) async fn review(locale: crate::i18n::Locale) -> Result<impl View> {
+pub(crate) async fn review(locale: crate::i18n::Locale) -> Result<impl View> {
     let text = &locale.text().workspace;
     Ok(view! {
         <section class="workspace-review">

@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
+import { allowClipboard } from "./review-helpers.js";
 
 const source = "\n  اللُّغة العربية جميلة، API 2026.\nهذا نص للتشكيل.  ";
 const stripMarks = (text) => text.replace(/[\u064b-\u0652]/gu, "");
@@ -52,7 +53,7 @@ for (const locale of [
   {
     code: "ar", dir: "rtl", name: "تشكيل النص العربي", text: "نص", document: "مستند",
     original: "النص الأصلي", result: "النص المشكول", submit: "شكِّل النص", upload: "شكِّل المستند",
-    file: "ملف TXT أو DOCX", done: "اكتمل التشكيل.", copy: "نسخ النص", copied: "نُسخ النص.",
+    file: "ملف TXT أو DOCX", done: "اكتمل التشكيل.", copy: "نسخ النص كاملًا", copied: "نُسخ النص",
     txt: "تنزيل النص (TXT)", docx: "تنزيل مستند Word (DOCX)", originalFile: "تنزيل الملف الأصلي",
     limit: "أدخل نصًا لا يتجاوز 1000 حرفًا، بما فيها الحركات والمسافات.",
     wrongType: "نقبل ملف TXT أو DOCX واحدًا فقط. ملفات DOC غير مدعومة.",
@@ -68,7 +69,7 @@ for (const locale of [
   {
     code: "en", dir: "ltr", name: "Arabic diacritization", text: "Text", document: "Document",
     original: "Original text", result: "Diacritized text", submit: "Diacritize text", upload: "Diacritize document",
-    file: "TXT or DOCX file", done: "Diacritization complete.", copy: "Copy text", copied: "Text copied.",
+    file: "TXT or DOCX file", done: "Diacritization complete.", copy: "Copy all text", copied: "Text copied",
     txt: "Download text (.txt)", docx: "Download Word document (.docx)", originalFile: "Download original file",
     limit: "Enter up to 1000 characters, including diacritics and spaces.",
     wrongType: "Choose exactly one TXT or DOCX file. DOC files are not supported.",
@@ -89,10 +90,10 @@ for (const locale of [
     await expect(page.locator("html")).toHaveAttribute("dir", locale.dir);
   }
 
-  test(`Diacritization retains input, copies, downloads and retries both models in ${locale.code}`, async ({ page, context }) => {
+  test(`Diacritization retains input, copies, downloads and retries both models in ${locale.code}`, async ({ page, context, browserName }) => {
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await allowClipboard(context, browserName);
     await open(page, "/");
     await fitsViewport(page);
     if (process.env.DIACRITIZATION_SCREENSHOT_DIR) {

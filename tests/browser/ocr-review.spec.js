@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 
 // A focused WebKit run uses the same suite and servers without changing the default project.
-test.use({ browserName: process.env.OCR_REVIEW_BROWSER || 'chromium', userAgent: undefined });
+test.use({ browserName: process.env.OCR_REVIEW_BROWSER || process.env.BROWSER || 'chromium', userAgent: undefined });
 const fixture = (name) => fileURLToPath(new URL(`../fixtures/${name}`, import.meta.url));
 const original = () => readFile(fixture('ocr-review.pdf'));
 const first = 'الصفحة الأولى — كِتَاب 1\nFirst page: café 😀 <b> & نص مشترك';
@@ -124,8 +124,7 @@ for (const locale of ['ar', 'en']) {
     await root.locator('[data-ocr-fit="page"]').click();
     await rendered(page, 3);
 
-    // The real shared search toolbar is integrated on the lead branch. Its page adapter
-    // must already preserve all text, blank-page indices and last-request-wins behavior.
+    // The page adapter preserves all text, blank-page indices and last-request-wins behavior.
     expect(await root.evaluate(async (root) => {
       const adapter = window.arabiTools.ocrReview.get(root);
       const saved = [...adapter.texts];
@@ -153,7 +152,7 @@ for (const locale of ['ar', 'en']) {
     await root.locator('[data-ocr-copy-all]').click();
     expect(await page.evaluate(() => window.copied)).toEqual(['', texts.join('\n\n')]);
     await expect(root.locator('[data-ocr-copy-all]')).toBeFocused();
-    await expect(root.locator('[data-ocr-copy-status]')).toHaveText(locale === 'ar' ? 'نُسخ النص' : 'Text copied');
+    await expect(root.locator('[data-copy-status]')).toHaveText(locale === 'ar' ? 'نُسخ النص' : 'Text copied');
     for (const extension of ['txt', 'docx', 'json']) {
       const downloading = page.waitForEvent('download');
       await root.locator(`a[href$="document.${extension}"]`).click();
@@ -233,7 +232,7 @@ test('OCR preview failures and denied clipboard keep text and exact copy scopes'
   await root.locator('[data-ocr-copy-all]').click();
   await expect(root.locator('textarea')).toHaveValue(texts.join('\n\n'));
   expect(await root.locator('textarea').evaluate((field) => field.value.slice(field.selectionStart, field.selectionEnd))).toBe(texts.join('\n\n'));
-  await root.getByRole('button', { name: 'Close manual copy', exact: true }).click();
+  await root.getByRole('button', { name: 'Close copy panel', exact: true }).click();
   await expect(root.locator('textarea')).toHaveCount(0);
   await expect(root.locator('[data-ocr-copy-all]')).toBeFocused();
   await root.locator('[data-ocr-next]').click();
@@ -386,6 +385,13 @@ test('OCR 1000-page viewer bounds canvases and DOM while retaining every page te
   await rendered(page, 1);
   const root = resultRoot(page);
   const initialNodes = await root.locator('*').count();
+  const searchStart = performance.now();
+  await root.locator('[data-search-query]').fill('Final needle');
+  await expect(root.locator('[data-search-count]')).toContainText('1');
+  await rendered(page, 1000);
+  await expect(root.locator('[data-ocr-page-text]')).toContainText('Final needle');
+  const searchMs = Math.round(performance.now() - searchStart);
+  await root.locator('[data-search-clear]').click();
   const times = [];
   for (const number of [500, 999, 1, 1000, 2, 1000]) {
     const start = performance.now();
@@ -407,6 +413,11 @@ test('OCR 1000-page viewer bounds canvases and DOM while retaining every page te
     const adapter = window.arabiTools.ocrReview.get(node);
     return { count: adapter.texts.length, last: adapter.texts.findIndex((text) => text.includes('Final needle')) };
   })).toEqual({ count: 1000, last: 999 });
+  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+    writeText: async text => { window.largeOcrCopy = text; },
+  } }));
+  await root.locator('[data-ocr-copy-all]').click();
+  expect(await root.evaluate(node => window.largeOcrCopy === window.arabiTools.ocrReview.get(node).texts.join('\n\n'))).toBe(true);
   let memory = null;
   if (browserName === 'chromium') {
     const cdp = await page.context().newCDPSession(page);
@@ -414,7 +425,7 @@ test('OCR 1000-page viewer bounds canvases and DOM while retaining every page te
     memory = { ...(await cdp.send('Runtime.getHeapUsage')), ...(await cdp.send('Memory.getDOMCounters')) };
     await cdp.detach();
   }
-  const measurement = { browser: browserName, pageSwitchMs: times, resultElements: initialNodes, canvas: bounds, memory };
+  const measurement = { browser: browserName, searchMs, pageSwitchMs: times, resultElements: initialNodes, canvas: bounds, memory };
   console.log('OCR large-document measurement', JSON.stringify(measurement));
   await testInfo.attach('ocr-large-document.json', { body: JSON.stringify(measurement, null, 2), contentType: 'application/json' });
 });
