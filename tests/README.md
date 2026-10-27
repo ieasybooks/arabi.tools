@@ -4,9 +4,9 @@
 
 Run `cargo test --locked` with `ffmpeg` (built with libopus) and `ffprobe` on PATH (if `/tmp` is a small tmpfs, point `TMPDIR` at a directory on disk). Unit tests live next to the code. `tests/transcription.rs` starts the real router against a local Wit mock on ephemeral ports and drives it over HTTP: MP3 and M4A uploads through to the downloads, refusals and queue limits, upstream failures, silent recordings, Arabic and English recognition, upload-size boundaries, and both page languages. Assets are bundled from the test executable and the fonts are vendored, so the tests need no network once dependencies are fetched. See [fixtures/README.md](fixtures/README.md) for the recordings.
 
-## Browser test
+## Browser tests
 
-`tests/browser/` drives the real site in headless Chromium with Playwright, in Arabic and in English: choosing a file, the form staying locked while it is sent, the job page updating live until done, both downloads, a reloaded tab retrying after losing its reservation, and a tab opened from the upload page being refused while that page's upload is on its way. Run it from the repository root:
+`tests/browser/` drives the real site with Playwright in Arabic and English, at desktop and phone widths. It checks persistent input and same-document completion, accurate upload stages, repeated jobs and recovery, search and copy, OCR source/text pairing, downloads, and keyboard navigation. Chromium is the default; the search/highlight tests also exercise WebKit explicitly. Run from the repository root:
 
 ```sh
 npm ci --prefix tests/browser
@@ -18,6 +18,8 @@ npm test --prefix tests/browser
 ```
 
 It starts mock Wit on port 9804, the site with mock Drive and real diacritization on port 3204, and the site without OCR or diacritization on port 3205. All three ports must be free. Set `TAHWEEL_TEST_PDFIUM` to the pinned PDFium library for OCR browser tests, and provision the diacritization models and runtime as described below before running the browser suite. CI runs it on pull requests and keeps traces and screenshots of failures as the `browser-failures` artifact.
+
+Run the same suite with `BROWSER=webkit npm test --prefix tests/browser` for all changed workflows in WebKit. The named Chromium/WebKit search and highlight cases always use their named engine. Clipboard success uses the real Chromium clipboard; WebKit uses exact-payload readback because Playwright cannot grant that engine clipboard permissions. Denied and missing clipboard cases exercise the actual shared fallback in both engines. This is desktop WebKit on Linux, not a physical Safari/iOS check. On the shared fleet machine, use `browser-suite` (or `BROWSER=webkit browser-suite`) so build, bundle and tests hold the machine lock.
 
 `examples/mock_wit.rs` explains how to try the site by hand without Wit tokens.
 
@@ -53,7 +55,7 @@ Highlights use CSS Custom Highlight ranges when available, with range-positioned
 
 ## OCR review browser coverage
 
-`tests/browser/ocr-review.spec.js` covers paired source/text pages (including a blank middle page), Arabic/English desktop and 320px keyboard views, zoom/fit, PDF/image recovery without uploading, invalid page entries, clipboard fallback for the requested scope, unchanged downloads, and cleanup of workers/object URLs after a live result is removed. It exercises the public page adapter through `window.arabiTools.ocrReview.get(root)`; the shared search toolbar attaches in the `data-ocr-search-slot` integration slot. A 1,000-page fixture reports page-switch times, result element count, canvas bounds at high pixel density and Chromium heap/DOM measurements as a test attachment. Only the current source page is rasterized.
+`tests/browser/ocr-review.spec.js` covers paired source/text pages (including a blank middle page), Arabic/English desktop and 320px keyboard views, zoom/fit, PDF/image recovery without uploading, invalid page entries, clipboard fallback for the requested scope, unchanged downloads, and cleanup of workers/object URLs after a live result is removed. The shared search toolbar uses the adapter at `window.arabiTools.ocrReview.get(root)`. A 1,000-page fixture searches the unmounted final page and copies all page text; it reports search/page-switch times, result element count, canvas bounds at high pixel density and Chromium heap/DOM measurements as a test attachment. Only the current source page is rasterized.
 
 Run `npm test --prefix tests/browser -- ocr-review.spec.js` after the build and asset bundle above. For the focused WebKit run, install Playwright WebKit and use `OCR_REVIEW_BROWSER=webkit npm test --prefix tests/browser -- ocr-review.spec.js`. `OCR_SCREENSHOT_DIR` saves desktop, narrow, missing-source and preview-error evidence. On the shared fleet machine use its `browser-suite` wrapper for these commands. The synthetic source fixtures and their generator are documented in [fixtures/README.md](fixtures/README.md#ocr-review).
 
@@ -64,3 +66,9 @@ Enhanced submissions on `/diacritize`, `/transcribe` and `/ocr` keep the source 
 The `workspace_` Rust integration tests drive the real Topcoat shard/socket routes with short test-only queue intervals. They check queue-position/status rendering, no-store responses, invalid/missing IDs, survival while watched, abandonment cleanup, and release of terminal result owners while a socket stays open. Production queue intervals and result retention are unchanged. `tests/support/runtime.rs` is a minimal test socket client; application code uses Topcoat's documented event/signal bridge.
 
 Run the focused browser tests with `npm test --prefix tests/browser -- workspace.spec.js workspace-lifecycle.spec.js` after building and bundling as above. The image source for the lifecycle checks is a small PNG generated with Python's standard library; transcription uses the existing speech fixture. These checks need no additional browser or Rust dependency.
+
+## Integrated result review and shell
+
+`integration.spec.js` submits OCR and transcription through their real workspace forms and checks in-place enhancement, exact browser File ownership, search over all recognized text, shared copy payloads, and replacement of result/source/download/search state across jobs. OCR search moves the source and text together across a blank middle page and preserves zoom. Language changes return to the accepted job; reload and source reselection keep text/downloads without another recognition request. The diacritization case verifies the same copy helper with its existing read-only output-selection fallback.
+
+`shell.spec.js` checks the skip link, keyboard focus, canonical source link, both directions and 320px reflow, including skip navigation with JavaScript disabled. Production asset checks in `.github/workflows/container.yml` verify bundled scripts, the PDF.js module/worker, fonts, character maps and image decoders with a deep-job Referer. Browser tests render the actual PDF from a deep result route. See [deployment](../docs/deploy.md) and [the vendored PDF.js notes](../src/app/vendor/pdfjs/README.md) for packaging and dependency details.

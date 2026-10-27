@@ -297,10 +297,7 @@ async fn head_meta(cx: &Cx, locale: Locale) -> Result<impl View> {
         <meta property="og:image" content=(preview.as_str())>
         <meta property="og:image:width" content="1200">
         <meta property="og:image:height" content="630">
-        <meta
-            property="og:image:alt"
-            content=(format!("{} {}", text.preview_alt, text.preview_tools))
-        >
+        <meta property="og:image:alt" content=(text.preview_alt)>
         <meta property="og:locale" content=(locale.og_locale())>
         for other in Locale::ALL {
             if other != locale {

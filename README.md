@@ -2,6 +2,8 @@
 
 Free Arabic language tools on the web at [arabi.tools](https://arabi.tools): audio transcription, PDF/image text recognition, and text/TXT/DOCX diacritization with Shakkelha and CATT, with Arabic and English interfaces. A project of the nonprofit [iEasyBooks](https://ieasybooks.com) initiative.
 
+Each tool keeps your input in place while it works. Search and copy transcripts or recognized pages, compare OCR text with the original PDF/image in your browser, and review diacritized text beside its source. Results stay read-only and retain their existing downloads. The job link lets you reopen a result; OCR previews need the original file selected again after a reload.
+
 ## Run locally
 
 Install the pinned Rust toolchain and development tools with `mise install`, set `WIT_TOKENS_AR` to one or more comma-separated Wit tokens, then run `topcoat dev` and open `http://127.0.0.1:3000`. Topcoat builds the app and its assets; `ffmpeg` (built with libopus, as Wit receives Opus audio) and `ffprobe` must be on `PATH`.

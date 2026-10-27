@@ -354,8 +354,6 @@ pub struct Text {
     pub description: &'static str,
     /// What the link-preview image shows.
     pub preview_alt: &'static str,
-    /// Collection summary rendered by `scripts/render-images.mjs`.
-    pub preview_tools: &'static str,
     pub free: &'static str,
     pub files_deleted: &'static str,
     pub arabic_first: &'static str,
@@ -633,8 +631,7 @@ static AR: Text = Text {
     tagline: "أدوات مجانية للغة العربية",
     lead: "أدوات بسيطة لمن يعمل بالعربية: ارفع ملفك واحصل على النتيجة، دون حساب أو تثبيت.",
     description: "أدوات مجانية لتفريغ الصوت واستخراج النص من ملفات PDF والصور وتشكيل النص العربي، دون حساب أو تثبيت.",
-    preview_alt: "شعار أدوات العربية، وتحته: أدوات مجانية للغة العربية.",
-    preview_tools: "تفريغ الصوت · استخراج النص من PDF والصور · التشكيل التلقائي",
+    preview_alt: "شعار أدوات العربية، وتحته: أدوات مجانية للغة العربية. تفريغ الصوت · استخراج النص من PDF والصور · التشكيل التلقائي",
     free: "مجانية بلا حساب",
     files_deleted: "تُحذف ملفاتك تلقائيًا",
     arabic_first: "للعربية أولًا",
@@ -888,8 +885,7 @@ static EN: Text = Text {
     tagline: "Free tools for the Arabic language",
     lead: "Simple tools for working in Arabic. Upload a file and get the result, with no account and nothing to install.",
     description: "Free tools for audio transcription, extracting text from PDFs and images, and Arabic diacritization, with no account and nothing to install.",
-    preview_alt: "The arabi.tools logo above the words: Free tools for the Arabic language.",
-    preview_tools: "Audio transcription · PDF/image text recognition · Automatic diacritization",
+    preview_alt: "The arabi.tools logo above the words: Free tools for the Arabic language. Audio transcription · PDF/image text recognition · Automatic diacritization",
     free: "Free, no account",
     files_deleted: "Files deleted automatically",
     arabic_first: "Arabic first",

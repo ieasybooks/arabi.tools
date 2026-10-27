@@ -177,6 +177,8 @@ svg {
 
 .header-inner {
   display: flex;
+  flex-wrap: wrap;
+  padding-block: 0.75rem;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
@@ -609,7 +611,7 @@ svg {
 }
 
 /* A chosen file stands out. */
-.dropzone:has(input:valid) .file-name {
+.dropzone[data-selected="true"] .file-name {
   padding: 0.25rem 0.875rem;
   border-radius: 999px;
   background: var(--surface);
@@ -859,7 +861,7 @@ progress::-moz-progress-bar {
 .cue-number {
   display: inline-block;
   min-width: 2rem;
-  color: var(--gold);
+  color: var(--gold-text);
   font-weight: 600;
 }
 
@@ -1004,16 +1006,6 @@ progress::-moz-progress-bar {
     flex: 1;
   }
 
-  .ocr-downloads .button {
-    flex-basis: 100%;
-  }
-}
-
-/* Each line takes its own direction: OCR pages often mix Arabic text with Latin or stray characters. */
-.ocr-pages .cue-text {
-  white-space: pre-wrap;
-  unicode-bidi: plaintext;
-  text-align: start;
 }
 
 /* Diacritization shares the tool workspace, with one model choice above both modes. */
@@ -1181,10 +1173,6 @@ progress::-moz-progress-bar {
   min-width: 0;
 }
 
-.copy-status:empty {
-  display: none;
-}
-
 @media (max-width: 39.99rem) {
   .diacritize-models label {
     flex: 1;
@@ -1280,17 +1268,18 @@ progress::-moz-progress-bar {
   accent-color: var(--green);
 }
 
-.result-search .button,
-.transcript-result .button {
+.result .button {
   max-inline-size: 100%;
   min-block-size: 2.75rem;
   padding: 0.5rem 0.875rem;
   white-space: normal;
+  overflow-wrap: anywhere;
 }
 
-.result-search .button:disabled {
+.result .button:disabled {
   color: var(--muted);
   background: var(--well);
+  border-color: var(--line);
   border-style: dashed;
   cursor: default;
 }
@@ -1354,10 +1343,6 @@ progress::-moz-progress-bar {
   max-inline-size: 100%;
 }
 
-.transcript-result .cue-number {
-  color: var(--gold-text, var(--muted));
-}
-
 .transcript-result .cue-text {
   white-space: pre-wrap;
   unicode-bidi: plaintext;
@@ -1370,6 +1355,9 @@ progress::-moz-progress-bar {
 }
 
 .copy-panel textarea {
+  font-family: var(--font-transcript);
+  white-space: pre-wrap;
+  unicode-bidi: plaintext;
   min-block-size: 10rem;
   resize: vertical;
   line-height: 1.9;
@@ -1394,32 +1382,6 @@ progress::-moz-progress-bar {
 }
 
 /* OCR review */
-body:has(.ocr-review) .header-inner {
-  flex-wrap: wrap;
-  padding-block: 0.75rem;
-}
-
-.workspace-layout:has(.ocr-review) {
-  max-width: 88rem;
-  gap: 1rem;
-}
-
-body:has(.ocr-review) .tool-hero {
-  padding-block: 1rem 0;
-}
-
-body:has(.ocr-review) .tool-hero h1 {
-  font-size: 2rem;
-}
-
-body:has(.ocr-review) .tool-hero .container::after {
-  margin-block-start: 1rem;
-}
-
-.workspace:has(.ocr-review) {
-  padding-block-start: 1rem;
-}
-
 
 .job:has(> .ocr-review) {
   min-inline-size: 0;
@@ -1463,20 +1425,6 @@ body:has(.ocr-review) .tool-hero .container::after {
   min-inline-size: 0;
 }
 
-.ocr-review .button {
-  min-block-size: 2.75rem;
-  max-inline-size: 100%;
-  padding: 0.5rem 0.875rem;
-  overflow-wrap: anywhere;
-}
-
-.ocr-review button:disabled {
-  background: var(--well);
-  color: var(--muted);
-  border-color: var(--line);
-  cursor: default;
-}
-
 .ocr-review button[aria-pressed="true"] {
   background: var(--green-soft);
   border-color: var(--green);
@@ -1511,10 +1459,6 @@ body:has(.ocr-review) .tool-hero .container::after {
 
 .ocr-page-position {
   font-variant-numeric: tabular-nums;
-}
-
-.ocr-copy-status:empty {
-  display: none;
 }
 
 .ocr-panels {
@@ -1600,8 +1544,7 @@ body:has(.ocr-review) .tool-hero .container::after {
   font-size: 1rem;
 }
 
-.ocr-page-text,
-.ocr-manual-copy {
+.ocr-page-text {
   white-space: pre-wrap;
   unicode-bidi: plaintext;
   font-family: var(--font-transcript);
@@ -1613,17 +1556,6 @@ body:has(.ocr-review) .tool-hero .container::after {
 
 .ocr-page-text {
   margin-block-start: 0.5rem;
-}
-
-.ocr-manual-copy {
-  inline-size: 100%;
-  block-size: 12rem;
-  padding: 0.75rem;
-  border: 1px solid var(--muted);
-  border-radius: var(--radius-control);
-  background: var(--paper);
-  color: var(--text);
-  resize: vertical;
 }
 
 .ocr-view-choice {
@@ -1694,6 +1626,7 @@ body:has(.ocr-review) .tool-hero .container::after {
 /* Workspace source continuity, review panels and lifecycle controls. */
 .workspace-wide {
   max-width: 76rem;
+  gap: 1rem;
 }
 
 .workspace-entry,
@@ -1739,8 +1672,8 @@ body:has(.ocr-review) .tool-hero .container::after {
   overflow-wrap: anywhere;
 }
 
-[data-workspace] .button[aria-disabled="true"],
-[data-workspace] .button:disabled {
+:is(.workspace-input, .diacritize-form) .button[aria-disabled="true"],
+:is(.workspace-input, .diacritize-form) .button:disabled {
   border-color: var(--line);
   background: var(--well);
   color: var(--muted);
@@ -1763,13 +1696,6 @@ body:has(.ocr-review) .tool-hero .container::after {
   color: var(--muted);
 }
 
-[data-workspace] .dropzone[data-selected="false"] .file-name {
-  padding: 0;
-  box-shadow: none;
-  background: none;
-  font-weight: 400;
-}
-
 .previous-result {
   font-weight: 500;
 }
@@ -1784,6 +1710,18 @@ body:has(.ocr-review) .tool-hero .container::after {
 
 body:has([data-workspace], .job) .tool-hero {
   padding-block: 1.5rem 0;
+}
+
+body:has([data-workspace], .job) .tool-hero h1 {
+  font-size: 2rem;
+}
+
+body:has([data-workspace], .job) .tool-hero .container::after {
+  margin-block-start: 1rem;
+}
+
+.workspace:has([data-workspace], .job) {
+  padding-block-start: 1rem;
 }
 
 @media (min-width: 60rem) {
