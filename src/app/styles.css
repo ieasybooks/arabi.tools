@@ -1782,7 +1782,7 @@ body:has(.ocr-review) .tool-hero .container::after {
   color: var(--muted);
 }
 
-body:has([data-workspace]) .tool-hero {
+body:has([data-workspace], .job) .tool-hero {
   padding-block: 1.5rem 0;
 }
 

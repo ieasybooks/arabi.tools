@@ -1,6 +1,7 @@
 // One state owns submission, observation and cancellation. Source text stays in the DOM.
 (() => {
   const app = window.arabiTools;
+  const terminal = new Set(['completed', 'failed', 'cancelled', 'missing']);
   const active = new Set(['reserving', 'uploading', 'validating', 'submitting', 'observing', 'reserved', 'queued', 'processing', 'cancelling', 'cancel-unconfirmed']);
   app.mount('[data-workspace="diacritization"]', root => {
     const form = root.querySelector('#diacritize-form');
@@ -137,7 +138,7 @@
     }
     const observer = app.observeWorkspace(root, (phase, message, result, update) => {
       if (state.phase === 'cancelling' || state.phase === 'cancel-unconfirmed') {
-        if (!['completed', 'cancelled'].includes(phase)) return;
+        if (!terminal.has(phase)) return;
       }
       if (result && restoreSource) {
         source.value = result.dataset.source || '';
@@ -149,7 +150,7 @@
         const explanation = root.querySelector('.source-needed');
         if (explanation) explanation.hidden = result.dataset.mode === 'text';
       }
-      if (['completed', 'failed', 'cancelled', 'missing'].includes(phase)) {
+      if (terminal.has(phase)) {
         attempt = null;
         app.store(attemptKey, null);
         clearError();
@@ -176,12 +177,15 @@
           return;
         }
       }
-      request?.abort();
       try {
         const response = await fetch(pending.cancel, { method: 'POST', headers: { Accept: 'application/json' }, redirect: 'error', signal: lifetime.signal });
         const reply = await response.json();
         if (!response.ok || typeof reply.cancelled !== 'boolean' || typeof reply.next !== 'string') throw new Error();
-        if (!current(run) || state.phase === 'completed') return;
+        if (!current(run)) return;
+        // Aborting a partial upload can remove its reservation. Let the HTTP
+        // cancellation acknowledge this job before ending the transfer.
+        request?.abort();
+        if (terminal.has(state.phase)) return;
         attempt = null;
         app.store(attemptKey, null);
         if (reply.cancelled) {
@@ -192,7 +196,7 @@
           observer.watch({ ...pending, ...reply });
         }
       } catch {
-        if (!current(run) || ['completed', 'cancelled'].includes(state.phase)) return;
+        if (!current(run) || terminal.has(state.phase)) return;
         transition('cancel-unconfirmed');
         showError(form.dataset.cancelFailed, pending.next);
       }

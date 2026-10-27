@@ -144,6 +144,20 @@ pub(crate) async fn observe(cx: &Cx, job: String) -> Result<impl View> {
     .boxed())
 }
 
+fn status_message(locale: Locale, status: &Status<Document>) -> String {
+    let text = &locale.text().ocr;
+    match status {
+        Status::Reserved => text.reserved.to_owned(),
+        Status::Waiting { position } => locale.waiting(*position),
+        Status::Running { .. } => text.running.to_owned(),
+        Status::Done(_) => text.done.to_owned(),
+        Status::Failed => text.failed.to_owned(),
+        Status::Cancelled(CancelReason::User) => locale.text().cancelled_user.to_owned(),
+        Status::Cancelled(CancelReason::Unwatched) => text.cancelled_unwatched.to_owned(),
+        Status::Cancelled(CancelReason::Shutdown) => text.cancelled_shutdown.to_owned(),
+    }
+}
+
 #[component]
 async fn job_status(
     locale: Locale,
@@ -153,16 +167,7 @@ async fn job_status(
 ) -> Result<impl View> {
     let text = &locale.text().ocr;
     let finished = status.is_finished();
-    let message = match &status {
-        Status::Reserved => text.reserved.to_owned(),
-        Status::Waiting { position } => locale.waiting(*position),
-        Status::Running { .. } => text.running.to_owned(),
-        Status::Done(_) => text.done.to_owned(),
-        Status::Failed => text.failed.to_owned(),
-        Status::Cancelled(CancelReason::User) => locale.text().cancelled_user.to_owned(),
-        Status::Cancelled(CancelReason::Unwatched) => text.cancelled_unwatched.to_owned(),
-        Status::Cancelled(CancelReason::Shutdown) => text.cancelled_shutdown.to_owned(),
-    };
+    let message = status_message(locale, &status);
     let phase = match &status {
         Status::Reserved => "reserved",
         Status::Waiting { .. } => "queued",

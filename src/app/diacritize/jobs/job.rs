@@ -318,7 +318,7 @@ pub(super) async fn submit_text(
     };
     let model = match chosen_model(cx, &input.model) {
         Ok(model) => model,
-        Err(reply) => return Ok(reply),
+        Err((status, message)) => return Ok(error(status, message)),
     };
     if input.text.trim().is_empty() {
         return Ok(error(
@@ -350,7 +350,7 @@ pub(super) async fn upload(cx: &Cx, mut form: Multipart) -> Result<(StatusCode, 
     };
     let model = match chosen_model(cx, &model) {
         Ok(model) => model,
-        Err(reply) => return Ok(reply),
+        Err((status, message)) => return Ok(error(status, message)),
     };
     let upload = match tool.validate(upload).await {
         Ok(upload) => upload,
@@ -364,16 +364,13 @@ pub(super) async fn upload(cx: &Cx, mut form: Multipart) -> Result<(StatusCode, 
     )
 }
 
-fn chosen_model(cx: &Cx, value: &str) -> Result<Model, (StatusCode, Json<Reply>)> {
+fn chosen_model(cx: &Cx, value: &str) -> Result<Model, (StatusCode, &'static str)> {
     let text = &Locale::of(cx).text().diacritization;
     let model = value
         .parse()
-        .map_err(|_| error(StatusCode::UNPROCESSABLE_ENTITY, text.choose_model))?;
+        .map_err(|_| (StatusCode::UNPROCESSABLE_ENTITY, text.choose_model))?;
     if !app_context::<Diacritization>(cx).model_available(model) {
-        return Err(error(
-            StatusCode::SERVICE_UNAVAILABLE,
-            text.model_unavailable,
-        ));
+        return Err((StatusCode::SERVICE_UNAVAILABLE, text.model_unavailable));
     }
     Ok(model)
 }

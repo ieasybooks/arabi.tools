@@ -108,7 +108,6 @@ pub(super) async fn editor(
     locale: Locale,
     initial: Option<crate::queue::JobId>,
 ) -> Result<impl View> {
-    let text = &locale.text().diacritization;
     let tool = app_context::<Diacritization>(cx);
     let document = initial.as_ref().and_then(|id| tool.queue.result(id));
     let source = document
@@ -131,7 +130,6 @@ pub(super) async fn editor(
         .as_ref()
         .filter(|id| jobs::job::owns_job(cx, id))
         .map(|id| href!(jobs::job::cancel, jobs::job::Id(id.clone())).resolve(cx));
-    let count = source.chars().count();
     let job = signal(cx, || initial_job.clone());
     let restore_source = initial.is_some() && document.is_none();
     drop(document);
@@ -145,130 +143,157 @@ pub(super) async fn editor(
             data-previous=(locale.text().workspace.previous_result)
             data-previous-model=(locale.text().workspace.previous_model)
         >
-            <form
-                id="diacritize-form"
-                class="diacritize-form"
-                method="post"
-                action=(href!(page))
-                novalidate=(true)
-                data-reserve=(href!(jobs::reserve))
-                data-retry=(if initial.is_some() { "true" } else { "false" })
-                data-initial-mode=(if document_mode { "document" } else { "text" })
-                data-reserving=(locale.text().workspace.reserving)
-                data-validating=(locale.text().workspace.validating)
-                data-observing=(locale.text().workspace.observing)
-                data-bytes=(locale.text().workspace.bytes)
-                data-kilobytes=(locale.text().workspace.kilobytes)
-                data-megabytes=(locale.text().workspace.megabytes)
-                data-extensions=(EXTENSIONS.join(","))
-                data-max-bytes=(MAX_UPLOAD_BYTES)
-                data-max-characters=(MAX_TEXT_CHARACTERS)
-                data-count=(text.character_count)
-                data-text-limit=(locale.diacritization_text_limit())
-                data-text-missing=(text.text_missing)
-                data-missing=(text.missing)
-                data-wrong-type=(text.wrong_type)
-                data-too-large=(locale.too_large())
-                data-failed=(text.upload_failed)
-                data-model-unavailable=(text.model_unavailable)
-                data-uploading=(text.uploading)
-                data-submitting=(text.submitting)
-                data-cancelling=(text.cancelling)
-                data-cancelled=(locale.text().cancelled_user)
-                data-cancel-failed=(text.cancel_failed)
-                data-no-file=(text.no_file)
-            >
-                input_choices(locale: locale, model: model)
-                <div id="diacritize-text-panel" class="diacritize-panel">
-                    <div class="diacritize-field-heading">
-                        <label for="source-text">(text.source_label)</label>
-                        <p
-                            id="text-count"
-                            class="diacritize-count"
-                            aria-label=(locale.diacritization_count(count))
-                        >
-                            <bdi dir="ltr">
-                                (format!("{count} / {MAX_TEXT_CHARACTERS}"))
-                            </bdi>
-                            (text
-                                .character_count
-                                .split("{max}")
-                                .last()
-                                .unwrap_or_default())
-                        </p>
-                    </div>
-                    <textarea
-                        id="source-text"
-                        class="diacritize-text"
-                        name="text"
-                        dir="auto"
-                        rows="7"
-                        placeholder=(text.placeholder)
-                        aria-describedby="text-limit text-count diacritize-error"
-                    >
-                        "\n"
-                        (source)
-                    </textarea>
-                    <p id="text-limit" class="hint">
-                        (locale.diacritization_text_limit())
-                    </p>
-                    <div class="form-actions">
-                        <button type="submit" class="button primary" disabled=(true)>
-                            (text.submit_text)
-                        </button>
-                    </div>
-                </div>
-                <div
-                    id="diacritize-document-panel"
-                    class="diacritize-panel"
-                    hidden=(true)
-                >
-                    <div class="dropzone">
-                        <input
-                            id="document"
-                            type="file"
-                            name="file"
-                            accept=".txt,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                            aria-label=(text.file_label)
-                            aria-describedby="diacritize-error"
-                        >
-                        <span class="dropzone-icon">
-                            icon(data: icons::UPLOAD, size: 24)
-                        </span>
-                        <p class="dropzone-title">(text.choose_file)</p>
-                        <p class="dropzone-hint">(locale.diacritization_limits())</p>
-                        <p class="file-name" dir="auto">(text.no_file)</p>
-                    </div>
-                    super::workspace::file_actions(locale: locale)
-                    <div class="form-actions">
-                        <button type="submit" class="button primary" disabled=(true)>
-                            (text.submit_document)
-                        </button>
-                    </div>
-                </div>
-                <div class="upload-progress" hidden=(true)>
-                    <progress max="100" value="0" aria-label=(text.uploading)></progress>
-                    <p id="job-status" class="submission-status" role="status"></p>
-                    <button type="button" class="button secondary cancel-upload">
-                        (text.cancel)
-                    </button>
-                </div>
-                <p id="diacritize-error" class="error" role="alert" hidden=(true)></p>
-                <a class="return-to-job" hidden=(true)>(text.back_to_job)</a>
-                <p class="hint">(text.try_again)</p>
-                if restore_source || document_mode {
-                    <p class="hint source-needed">
-                        (locale.text().workspace.source_needed)
-                    </p>
-                }
-            </form>
+            input_form(
+                locale: locale,
+                source: source,
+                model: model,
+                retry: initial.is_some(),
+                document_mode: document_mode,
+                source_needed: restore_source || document_mode
+            )
             super::workspace::bridge(job: job.clone())
             <div class="workspace-observer" hidden=(initial.is_none())>
                 jobs::job::observe(job: $(job.get()))
             </div>
             super::workspace::review(locale: locale)
         </div>
-        <noscript><p class="notice">(text.needs_javascript)</p></noscript>
+        <noscript>
+            <p class="notice">(locale.text().diacritization.needs_javascript)</p>
+        </noscript>
+    })
+}
+
+#[component]
+async fn input_form(
+    locale: Locale,
+    source: String,
+    model: Model,
+    retry: bool,
+    document_mode: bool,
+    source_needed: bool,
+) -> Result<impl View> {
+    let text = &locale.text().diacritization;
+    Ok(view! {
+        <form
+            id="diacritize-form"
+            class="diacritize-form"
+            method="post"
+            action=(href!(page))
+            novalidate=(true)
+            data-reserve=(href!(jobs::reserve))
+            data-retry=(if retry { "true" } else { "false" })
+            data-initial-mode=(if document_mode { "document" } else { "text" })
+            data-reserving=(locale.text().workspace.reserving)
+            data-validating=(locale.text().workspace.validating)
+            data-observing=(locale.text().workspace.observing)
+            data-bytes=(locale.text().workspace.bytes)
+            data-kilobytes=(locale.text().workspace.kilobytes)
+            data-megabytes=(locale.text().workspace.megabytes)
+            data-extensions=(EXTENSIONS.join(","))
+            data-max-bytes=(MAX_UPLOAD_BYTES)
+            data-max-characters=(MAX_TEXT_CHARACTERS)
+            data-count=(text.character_count)
+            data-text-limit=(locale.diacritization_text_limit())
+            data-text-missing=(text.text_missing)
+            data-missing=(text.missing)
+            data-wrong-type=(text.wrong_type)
+            data-too-large=(locale.too_large())
+            data-failed=(text.upload_failed)
+            data-model-unavailable=(text.model_unavailable)
+            data-uploading=(text.uploading)
+            data-submitting=(text.submitting)
+            data-cancelling=(text.cancelling)
+            data-cancelled=(locale.text().cancelled_user)
+            data-cancel-failed=(text.cancel_failed)
+            data-no-file=(text.no_file)
+        >
+            input_choices(locale: locale, model: model)
+            text_input(locale: locale, source: source)
+            document_input(locale: locale)
+            <div class="upload-progress" hidden=(true)>
+                <progress max="100" value="0" aria-label=(text.uploading)></progress>
+                <p id="job-status" class="submission-status" role="status"></p>
+                <button type="button" class="button secondary cancel-upload">
+                    (text.cancel)
+                </button>
+            </div>
+            <p id="diacritize-error" class="error" role="alert" hidden=(true)></p>
+            <a class="return-to-job" hidden=(true)>(text.back_to_job)</a>
+            <p class="hint">(text.try_again)</p>
+            if source_needed {
+                <p class="hint source-needed">
+                    (locale.text().workspace.source_needed)
+                </p>
+            }
+        </form>
+    })
+}
+
+#[component]
+async fn text_input(locale: Locale, source: String) -> Result<impl View> {
+    let text = &locale.text().diacritization;
+    let count = source.chars().count();
+    Ok(view! {
+        <div id="diacritize-text-panel" class="diacritize-panel">
+            <div class="diacritize-field-heading">
+                <label for="source-text">(text.source_label)</label>
+                <p
+                    id="text-count"
+                    class="diacritize-count"
+                    aria-label=(locale.diacritization_count(count))
+                >
+                    <bdi dir="ltr">(format!("{count} / {MAX_TEXT_CHARACTERS}"))</bdi>
+                    (text.character_count.split("{max}").last().unwrap_or_default())
+                </p>
+            </div>
+            <textarea
+                id="source-text"
+                class="diacritize-text"
+                name="text"
+                dir="auto"
+                rows="7"
+                placeholder=(text.placeholder)
+                aria-describedby="text-limit text-count diacritize-error"
+            >
+                "\n"
+                (source)
+            </textarea>
+            <p id="text-limit" class="hint">(locale.diacritization_text_limit())</p>
+            <div class="form-actions">
+                <button type="submit" class="button primary" disabled=(true)>
+                    (text.submit_text)
+                </button>
+            </div>
+        </div>
+    })
+}
+
+#[component]
+async fn document_input(locale: Locale) -> Result<impl View> {
+    let text = &locale.text().diacritization;
+    Ok(view! {
+        <div id="diacritize-document-panel" class="diacritize-panel" hidden=(true)>
+            <div class="dropzone">
+                <input
+                    id="document"
+                    type="file"
+                    name="file"
+                    accept=".txt,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    aria-label=(text.file_label)
+                    aria-describedby="diacritize-error"
+                >
+                <span class="dropzone-icon">icon(data: icons::UPLOAD, size: 24)</span>
+                <p class="dropzone-title">(text.choose_file)</p>
+                <p class="dropzone-hint">(locale.diacritization_limits())</p>
+                <p class="file-name" dir="auto">(text.no_file)</p>
+            </div>
+            super::workspace::file_actions(locale: locale)
+            <div class="form-actions">
+                <button type="submit" class="button primary" disabled=(true)>
+                    (text.submit_document)
+                </button>
+            </div>
+        </div>
     })
 }
 

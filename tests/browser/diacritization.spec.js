@@ -373,17 +373,20 @@ for (const locale of [
     }
   });
 
-  test(`Diacritization cancels a running job in ${locale.code}`, async ({ page }) => {
-    await open(page);
-    await page.getByRole("radio", { name: locale.document, exact: true }).check();
-    await page.getByLabel(locale.file, { exact: true }).setInputFiles({ name: "long.txt", mimeType: "text/plain", buffer: Buffer.from("اللغة العربية جميلة وهذا نص طويل للتشكيل.\n".repeat(10_000)) });
-    await page.getByRole("button", { name: locale.upload, exact: true }).click();
-    await expect(page.locator(".workspace-recovery")).toHaveAttribute("href", /\/diacritize\/jobs\/[a-f0-9]{32}$/);
-    await expect(page.getByRole("progressbar")).toBeVisible();
-    await page.getByRole("button", { name: locale.cancel, exact: true }).click();
-    await expect(page.locator("#job-status")).toHaveText(locale.cancelled);
-    await expect(page.getByRole("link", { name: locale.txt, exact: true })).toHaveCount(0);
-  });
+  for (const stage of ["submission", "processing"]) {
+    test(`Diacritization cancels during ${stage} in ${locale.code}`, async ({ page }) => {
+      await open(page);
+      await page.getByRole("radio", { name: locale.document, exact: true }).check();
+      await page.getByLabel(locale.file, { exact: true }).setInputFiles({ name: "long.txt", mimeType: "text/plain", buffer: Buffer.from("اللغة العربية جميلة وهذا نص طويل للتشكيل.\n".repeat(10_000)) });
+      await page.getByRole("button", { name: locale.upload, exact: true }).click();
+      await expect(page.locator(".workspace-recovery")).toHaveAttribute("href", /\/diacritize\/jobs\/[a-f0-9]{32}$/);
+      if (stage === "processing") await expect(page.locator("[data-workspace]")).toHaveAttribute("data-phase", "processing");
+      await expect(page.getByRole("progressbar")).toBeVisible();
+      await page.getByRole("button", { name: locale.cancel, exact: true }).click();
+      await expect(page.locator("#job-status")).toHaveText(locale.cancelled);
+      await expect(page.getByRole("link", { name: locale.txt, exact: true })).toHaveCount(0);
+    });
+  }
 
   test(`Diacritization is unavailable without models in ${locale.code}`, async ({ page }) => {
     await open(page, "http://127.0.0.1:3205/diacritize");

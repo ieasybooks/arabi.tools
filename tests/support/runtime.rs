@@ -40,10 +40,7 @@ impl RuntimeSocket {
         })
         .to_string();
         let bytes = message.as_bytes();
-        ensure!(
-            bytes.len() <= usize::from(u16::MAX),
-            "oversized test request"
-        );
+        ensure!(u16::try_from(bytes.len()).is_ok(), "oversized test request");
         self.0.write_u8(0x81).await?;
         if bytes.len() < 126 {
             self.0.write_u8(0x80 | u8::try_from(bytes.len())?).await?;

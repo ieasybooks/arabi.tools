@@ -1,3 +1,4 @@
+import { createServer } from 'node:http';
 import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -95,12 +96,34 @@ test('upload stages distinguish reservation, transfer and validation and prevent
   const upload = pending();
   let reserved = 0;
   let checked = false;
-  await page.route('**/transcribe/jobs', async route => { reserved++; await reserve.promise; await route.continue(); });
-  await page.route('**/transcribe/jobs/*/audio', async route => {
+  let backendUpload;
+  const requests = [];
+  const origin = new URL(page.url()).origin;
+  // A real local HTTP receiver lets the browser finish transferring bytes while
+  // its response is held. Playwright request interception holds the transfer itself.
+  const receiver = createServer((request, response) => {
+    const handle = async () => {
+      const headers = { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
+      if (request.method === 'OPTIONS') { response.writeHead(204, headers); response.end(); return; }
+      const chunks = [];
+      for await (const chunk of request) chunks.push(chunk);
+      checked = true;
+      const accepted = await fetch(`${origin}${backendUpload}`, { method: 'POST', headers: { 'Content-Type': request.headers['content-type'] }, body: Buffer.concat(chunks) });
+      const body = await accepted.text();
+      await upload.promise;
+      response.writeHead(accepted.status, { ...headers, 'Content-Type': 'application/json' });
+      response.end(body);
+    };
+    requests.push(handle());
+  });
+  await new Promise(resolve => receiver.listen(0, '127.0.0.1', resolve));
+  await page.route('**/transcribe/jobs', async route => {
+    reserved++;
+    await reserve.promise;
     const response = await route.fetch();
-    checked = true;
-    await upload.promise;
-    await route.fulfill({ response });
+    const reply = await response.json();
+    backendUpload = reply.upload;
+    await route.fulfill({ response, json: { ...reply, upload: `http://127.0.0.1:${receiver.address().port}/audio` } });
   });
   try {
     await page.locator('[name=file]').setInputFiles(speech);
@@ -121,7 +144,13 @@ test('upload stages distinguish reservation, transfer and validation and prevent
     await expect(page.locator('.upload-progress progress')).not.toHaveAttribute('value');
     upload.release();
     await expect(page.locator('[data-workspace]')).toHaveAttribute('data-phase', 'completed');
-  } finally { reserve.release(); upload.release(); }
+  } finally {
+    reserve.release();
+    upload.release();
+    await Promise.all(requests);
+    receiver.closeAllConnections();
+    await new Promise(resolve => receiver.close(resolve));
+  }
 });
 
 test('language reload explains draft loss, returns to the accepted job and never resubmits', async ({ page }) => {
@@ -246,7 +275,7 @@ test('clipboard fallback selects the full diacritized result without moving the 
   await page.getByRole('button', { name: 'Copy text', exact: true }).click();
   await expect(page.locator('.copy-status')).toHaveText('Copying was unavailable. Select the text and copy it manually.');
   expect(await page.locator('#diacritized-text').evaluate(input => input.selectionStart === 0 && input.selectionEnd === input.value.length)).toBe(true);
-  expect(await page.evaluate(() => Math.abs(window.scrollY - scroll))).toBeLessThanOrEqual(1);
+  expect(await page.evaluate(saved => Math.abs(window.scrollY - saved), scroll)).toBeLessThanOrEqual(1);
 });
 
 test('a lost reservation response retries the same attempt without a second upload', async ({ page }) => {
@@ -312,4 +341,34 @@ test('upload attempt storage is scoped to its own tool', async ({ page }) => {
   expect(used).not.toBe(foreign);
   expect(await page.evaluate(() => sessionStorage.getItem('transcribe:attempt'))).toBe(foreign);
   expect(await page.evaluate(() => sessionStorage.getItem('ocr:attempt'))).toBeNull();
+});
+
+
+test('a missing job resolves uncertain cancellation while keeping the source and previous result', async ({ page }) => {
+  await page.clock.install();
+  await page.goto('/diacritize');
+  await page.locator('#source-text').fill('اللغة العربية جميلة');
+  await page.getByRole('button', { name: 'شكِّل النص', exact: true }).click();
+  await expect(page.locator('.workspace-result .result')).toBeVisible();
+  const previous = await page.locator('#diacritized-text').inputValue();
+  const id = '00000000000000000000000000000002';
+  const job = `/diacritize/jobs/${id}`;
+  await page.route('**/diacritize/jobs', route => route.fulfill({ json: { job_id: id, next: job, text: `${job}/text`, cancel: `${job}/cancel` } }));
+  await page.route(`**${job}/text`, route => route.fulfill({ json: { job_id: id, next: job } }));
+  await page.route(`**${job}/cancel`, route => route.fulfill({ status: 503, json: {} }));
+  let observations = 0;
+  await page.route('**/diacritize/observe', route => { observations++; return route.abort(); });
+  await page.getByRole('button', { name: 'شكِّل النص', exact: true }).click();
+  await expect.poll(() => observations).toBeGreaterThan(0);
+  await page.getByRole('button', { name: 'إلغاء المهمة', exact: true }).click();
+  await expect(page.locator('[data-workspace]')).toHaveAttribute('data-phase', 'cancel-unconfirmed');
+  await page.clock.fastForward(46_000);
+  await page.unroute('**/diacritize/observe');
+  await page.locator('.retry-observation').click();
+  await page.clock.runFor(500);
+  await expect(page.locator('[data-workspace]')).toHaveAttribute('data-phase', 'missing');
+  await expect(page.locator('#source-text')).toHaveValue('اللغة العربية جميلة');
+  await expect(page.locator('#diacritized-text')).toHaveValue(previous);
+  await expect(page.getByRole('button', { name: 'شكِّل النص', exact: true })).toBeEnabled();
+  await expect(page.getByRole('alert')).toBeHidden();
 });
