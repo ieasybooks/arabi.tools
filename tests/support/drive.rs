@@ -1,7 +1,8 @@
 //! Local Drive with fresh generated keys; never needs real credentials.
+use std::collections::HashMap;
 use std::io::{Cursor, Write};
 use std::sync::{
-    Arc, OnceLock,
+    Arc, Mutex, OnceLock,
     atomic::{AtomicUsize, Ordering},
 };
 use std::time::Duration;
@@ -20,6 +21,30 @@ use wiremock::{
 };
 
 pub const TEXT: &str = "مرحبا بالعالم\nهذا نص من صفحة كتاب.";
+pub const PAGE_ONE: &str = "الصفحة الأولى — كِتَاب 1\nFirst page: café 😀 <b> & نص مشترك";
+pub const PAGE_THREE: &str = "الصفحة الثالثة — مـدرسة 3\nThird page: آخر نص مشترك";
+
+// The three-page fixture has a red first page, blank middle and blue last page.
+// Existing small white validation fixtures keep their original mock output.
+fn review_text(body: &[u8]) -> &'static str {
+    let start = body
+        .windows(8)
+        .position(|bytes| bytes == b"\x89PNG\r\n\x1a\n")
+        .or_else(|| body.windows(3).position(|bytes| bytes == b"\xff\xd8\xff"));
+    let Some(image) = start.and_then(|start| image::load_from_memory(&body[start..]).ok()) else {
+        return TEXT;
+    };
+    let image = image.to_luma8();
+    if image.width() <= 500 || image.height() <= 500 {
+        return TEXT;
+    }
+    // The OCR pipeline uses grayscale. The backgrounds are deliberately far apart in luma.
+    match image.get_pixel(image.width() / 10, image.height() / 2).0[0] {
+        240..=255 => "",
+        160..=239 => PAGE_ONE,
+        _ => PAGE_THREE,
+    }
+}
 
 pub fn keys() -> String {
     static KEY: OnceLock<String> = OnceLock::new();
@@ -43,6 +68,11 @@ pub struct Drive {
 
 impl Drive {
     pub async fn start(delay: Duration) -> Self {
+        Self::start_with_review(delay, false).await
+    }
+
+    /// Browser review fixtures identify their pages by their rendered shade, not request order.
+    pub async fn start_with_review(delay: Duration, review: bool) -> Self {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/token"))
@@ -58,6 +88,8 @@ impl Drive {
             .await;
         let uploads = Arc::new(AtomicUsize::new(0));
         let count = Arc::clone(&uploads);
+        let contents = Arc::new(Mutex::new(HashMap::new()));
+        let page_contents = Arc::clone(&contents);
         Mock::given(method("POST"))
             .and(path("/upload/drive/v3/files"))
             .respond_with(move |request: &wiremock::Request| {
@@ -68,20 +100,38 @@ impl Drive {
                         .any(|(name, _)| name == "ocrLanguage")
                 );
                 let id = count.fetch_add(1, Ordering::SeqCst);
+                let text = if review {
+                    review_text(&request.body)
+                } else {
+                    TEXT
+                };
+                page_contents.lock().unwrap().insert(id, text);
                 ResponseTemplate::new(200).set_body_json(json!({"id":format!("page-{id}")}))
             })
             .mount(&server)
             .await;
         Mock::given(method("GET"))
             .and(path_regex(r"^/drive/v3/files/page-\d+/export$"))
-            .respond_with(
+            .respond_with(move |request: &wiremock::Request| {
+                let id: usize = request
+                    .url
+                    .path()
+                    .split('/')
+                    .nth(4)
+                    .unwrap()
+                    .strip_prefix("page-")
+                    .unwrap()
+                    .parse()
+                    .unwrap();
+                let contents = contents.lock().unwrap();
+                let text = contents[&id];
                 ResponseTemplate::new(200)
                     .set_body_string(format!(
                         "\u{feff}________________\r\n\r\n{}",
-                        TEXT.replace('\n', "\r\n")
+                        text.replace('\n', "\r\n")
                     ))
-                    .set_delay(delay),
-            )
+                    .set_delay(delay)
+            })
             .mount(&server)
             .await;
         let deletes = Arc::new(AtomicUsize::new(0));

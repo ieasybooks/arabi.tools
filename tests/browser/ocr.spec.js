@@ -39,8 +39,9 @@ for (const locale of [
     await page.waitForURL(/\/ocr\/jobs\/[a-f0-9]{32}$/);
     await expect(page.getByRole("progressbar")).toBeVisible();
     await expect(page.getByRole("status")).toHaveText(locale.done, { timeout: 30_000 });
-    await expect(page.locator(".ocr-pages .cue")).toHaveCount(3);
-    await expect(page.locator(".cue-text").first()).toHaveText(text);
+    await expect(page.locator("[data-ocr-position]")).toContainText("3");
+    await expect(page.locator(".ocr-pages .ocr-page")).toHaveCount(1);
+    await expect(page.locator("[data-ocr-page-text]").first()).toHaveText(text);
     if (process.env.OCR_SCREENSHOT_DIR) await page.screenshot({ path: join(process.env.OCR_SCREENSHOT_DIR, `ocr-result-${locale.code}.png`), fullPage: true });
     for (const [i, extension] of ["txt", "docx", "json"].entries()) {
       const link = page.getByRole("link", { name: locale.downloads[i], exact: true });

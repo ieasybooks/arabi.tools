@@ -6,6 +6,7 @@ use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 use topcoat::{
     Result,
+    asset::{Asset, asset, asset_config},
     context::{Cx, app_context},
     cookie::{Cookies, cookie, cookies, time},
     icon::icon,
@@ -32,6 +33,11 @@ use crate::tools::ocr::{
     Document, DocumentProblem, MAX_UPLOAD_BYTES, Ocr, UploadedDocument, download_name,
 };
 
+const REVIEW_SCRIPT: Asset = asset!("../../ocr-review.js");
+const PDF_MODULE: Asset = asset!("../../vendor/pdfjs/pdf.mjs");
+const PDF_WORKER: Asset = asset!("../../vendor/pdfjs/pdf.worker.mjs");
+include!("../../vendor/pdfjs/assets.rs");
+
 module_param!(pub id: JobId, error = not_found);
 
 /// How often an idle status page is sent again, so proxies keep its connection open.
@@ -43,6 +49,7 @@ pub(super) async fn page(cx: &Cx) -> Result<impl View> {
     let locale = Locale::of(cx);
     let mut watch = app_context::<Ocr>(cx).queue.watch(&id).ok_or_not_found()?;
     Ok(view! {
+        <script src=(REVIEW_SCRIPT) defer=(true)></script>
         ocr::tool_hero(locale: locale, lead: false)
         <section class="workspace">
             <div class="container workspace-layout">
@@ -154,12 +161,33 @@ async fn job_status(locale: Locale, id: JobId, status: Status<Document>) -> Resu
     })
 }
 
-/// A finished job's downloads and document.
+/// A finished job's downloads and locally enhanced document review.
 #[component]
-async fn result(locale: Locale, id: JobId, document: Arc<Document>) -> Result<impl View> {
+async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> Result<impl View> {
     let text = &locale.text().ocr;
+    let review = &text.review;
+    let labels = serde_json::to_string(review)?;
+    let resources = PDF_RESOURCES
+        .iter()
+        .map(|(name, asset)| (*name, asset_config(cx).resolve(*asset)))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let resources = serde_json::to_string(&resources)?;
+    let all_blank = document
+        .pages
+        .iter()
+        .all(|content| content.trim().is_empty());
     Ok(view! {
-        <div class="result">
+        <div
+            class="result ocr-review"
+            data-result="ocr"
+            data-job-id=(id.to_string())
+            data-labels=(labels)
+            data-pdf-module=(PDF_MODULE)
+            data-pdf-worker=(PDF_WORKER)
+            data-pdf-resources=(resources)
+            data-wrong-type=(text.wrong_type)
+            data-no-text=(text.no_text)
+        >
             <div class="result-heading">
                 <p class="result-name">
                     icon(data: icons::TRANSCRIPT, size: 20)
@@ -193,22 +221,216 @@ async fn result(locale: Locale, id: JobId, document: Arc<Document>) -> Result<im
                 </div>
             </div>
             <p class="hint">(text.kept_for)</p>
-            <h2 class="transcript-title">(text.preview_title)</h2>
-            <ol class="cues ocr-pages" role="list">
-                for (number, content) in (1..).zip(&document.pages) {
-                    <li class="cue">
-                        <h3 class="cue-time">(locale.page_number(number))</h3>
-                        <p class="cue-text" dir="auto">
-                            if content.trim().is_empty() {
-                                (text.no_text)
-                            } else {
-                                (content.as_str())
-                            }
-                        </p>
-                    </li>
-                }
-            </ol>
+            if all_blank {
+                <p class="ocr-empty-document">(review.all_blank)</p>
+            }
+            // Integration slot for the shared search_toolbar(locale) component.
+            <div data-ocr-search-slot=""></div>
+            review_controls(locale: locale, id: id.clone())
+            <div class="ocr-panels">
+                source_panel(locale: locale, id: id.clone())
+                text_panel(locale: locale, document: document.clone())
+            </div>
         </div>
+    })
+}
+
+#[component]
+async fn text_panel(locale: Locale, document: Arc<Document>) -> Result<impl View> {
+    let text = &locale.text().ocr;
+    let review = &text.review;
+    Ok(view! {
+        <section class="ocr-text-panel">
+            <h2>(review.text_title)</h2>
+            <div
+                class="ocr-text-viewport"
+                data-ocr-text-viewport=""
+                role="region"
+                aria-label=(review.text_title)
+                tabindex="0"
+            >
+                <ol
+                    class="ocr-pages"
+                    data-ocr-pages=""
+                    role="list"
+                    aria-label=(text.preview_title)
+                >
+                    for (number, content) in (1..).zip(&document.pages) {
+                        <li class="ocr-page">
+                            <h3>(locale.page_number(number))</h3>
+                            <p class="ocr-page-text" data-ocr-page-text="" dir="auto">
+                                (content.as_str())
+                            </p>
+                            if content.trim().is_empty() {
+                                <p class="ocr-no-text">(text.no_text)</p>
+                            }
+                        </li>
+                    }
+                </ol>
+            </div>
+        </section>
+    })
+}
+
+#[component]
+async fn review_controls(locale: Locale, id: JobId) -> Result<impl View> {
+    let review = &locale.text().ocr.review;
+    let page_error_id = format!("ocr-page-error-{id}");
+    Ok(view! {
+        <div class="ocr-toolbar" data-ocr-controls="" hidden=(true)>
+            <form class="ocr-page-navigation" data-ocr-navigation="" novalidate=(true)>
+                <button class="button secondary" type="button" data-ocr-previous="">
+                    (review.previous_page)
+                </button>
+                <label class="ocr-page-field">
+                    <span>(review.page_label)</span>
+                    <input
+                        type="text"
+                        inputmode="numeric"
+                        dir="ltr"
+                        value="1"
+                        data-ocr-page-number=""
+                        aria-describedby=(page_error_id.as_str())
+                        autocomplete="off"
+                    />
+                </label>
+                <button class="button secondary" type="button" data-ocr-next="">
+                    (review.next_page)
+                </button>
+                <span
+                    class="ocr-page-position"
+                    data-ocr-position=""
+                    aria-live="polite"
+                    aria-atomic="true"
+                ></span>
+            </form>
+            <p
+                class="error"
+                id=(page_error_id.as_str())
+                data-ocr-page-error=""
+                aria-live="polite"
+                hidden=(true)
+            ></p>
+            <div class="ocr-copy-actions">
+                <button class="button secondary" type="button" data-ocr-copy-page="">
+                    (review.copy_page)
+                </button>
+                <button class="button secondary" type="button" data-ocr-copy-all="">
+                    (review.copy_all)
+                </button>
+            </div>
+            <p class="ocr-copy-status" data-ocr-copy-status="" aria-live="polite"></p>
+            <div data-ocr-copy-fallback=""></div>
+            <fieldset class="ocr-view-choice">
+                <legend>(review.view_label)</legend>
+                <label>
+                    <input
+                        type="radio"
+                        name=(format!("ocr-view-{id}"))
+                        value="source"
+                    />
+                    <span>(review.source_view)</span>
+                </label>
+                <label>
+                    <input
+                        type="radio"
+                        name=(format!("ocr-view-{id}"))
+                        value="text"
+                        checked=(true)
+                    />
+                    <span>(review.text_view)</span>
+                </label>
+            </fieldset>
+        </div>
+    })
+}
+
+#[component]
+async fn source_panel(locale: Locale, id: JobId) -> Result<impl View> {
+    let review = &locale.text().ocr.review;
+    Ok(view! {
+        <section class="ocr-source-panel">
+            <h2>(review.source_title)</h2>
+            <p class="ocr-source-status" data-ocr-source-status="" aria-live="polite">
+                (review.source_missing)
+            </p>
+            source_picker(locale: locale, id: id)
+            <div class="ocr-zoom" data-ocr-zoom="" hidden=(true)>
+                <button
+                    class="button secondary"
+                    type="button"
+                    data-ocr-fit="width"
+                    aria-pressed="true"
+                >
+                    (review.fit_width)
+                </button>
+                <button
+                    class="button secondary"
+                    type="button"
+                    data-ocr-fit="page"
+                    aria-pressed="false"
+                >
+                    (review.fit_page)
+                </button>
+                <button class="button secondary" type="button" data-ocr-zoom-out="">
+                    (review.zoom_out)
+                </button>
+                <span data-ocr-zoom-value="" aria-label=(review.zoom_label) dir="ltr"></span>
+                <button class="button secondary" type="button" data-ocr-zoom-in="">
+                    (review.zoom_in)
+                </button>
+            </div>
+            <div
+                class="ocr-source-viewport"
+                data-ocr-source-viewport=""
+                role="region"
+                aria-label=(review.source_title)
+                tabindex="0"
+                hidden=(true)
+            ></div>
+        </section>
+    })
+}
+
+#[component]
+async fn source_picker(locale: Locale, id: JobId) -> Result<impl View> {
+    let review = &locale.text().ocr.review;
+    let source_error_id = format!("ocr-source-error-{id}");
+    Ok(view! {
+        <form
+            class="ocr-source-picker"
+            data-ocr-source-picker=""
+            hidden=(true)
+            novalidate=(true)
+        >
+            <label>
+                <span>(review.source_file)</span>
+                <input
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    data-ocr-source-file=""
+                    aria-describedby=(source_error_id.as_str())
+                />
+            </label>
+            <label class="ocr-confirm">
+                <input
+                    type="checkbox"
+                    data-ocr-confirm=""
+                    aria-describedby=(source_error_id.as_str())
+                />
+                <span>(review.source_confirm)</span>
+            </label>
+            <button class="button secondary" type="submit">
+                (review.source_attach)
+            </button>
+            <p
+                class="error"
+                id=(source_error_id.as_str())
+                data-ocr-source-error=""
+                aria-live="polite"
+                hidden=(true)
+            ></p>
+        </form>
     })
 }
 

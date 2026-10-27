@@ -105,7 +105,7 @@ async fn uploads_preview_and_all_downloads_in_both_languages() -> anyhow::Result
             assert!(page.contains(&format!("lang=\"{code}\"")));
             assert!(page.contains(drive::TEXT));
             assert!(page.contains("noindex"));
-            assert_eq!(page.matches("class=\"cue\"").count(), pages);
+            assert_eq!(page.matches("class=\"ocr-page\"").count(), pages);
         }
         for extension in ["txt", "docx", "json"] {
             let response = app

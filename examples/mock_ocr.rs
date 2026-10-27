@@ -18,7 +18,7 @@ mod drive;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let drive = drive::Drive::start(Duration::from_millis(750)).await;
+    let drive = drive::Drive::start_with_review(Duration::from_millis(750), true).await;
     let slots = Slots::new(RUNNING_JOBS);
     let ocr = Ocr::new(
         drive.config(),
