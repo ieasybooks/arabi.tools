@@ -3,7 +3,11 @@ import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 
 const speech = fileURLToPath(new URL("../fixtures/speech.mp3", import.meta.url));
-const transcript = "مرحبا بالعالم";
+const samples = [
+  "مرحبا بالعالم كِتَاب مُدَرِّس كتاب",
+  "مـدرسة عـَلَم أمل إمل آمل كتاب",
+  '😀 كتاب Arabic 123 <b> & "نص" [a.*] café',
+];
 
 for (const locale of [
   {
@@ -50,7 +54,7 @@ for (const locale of [
 
     // The same document must change from running to done, without refresh or polling navigation.
     await expect(page.getByText(locale.done, { exact: true })).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByText(transcript, { exact: true }).first()).toBeVisible();
+    await expect(page.locator(".cue-text").first()).toBeVisible();
     expect(jobNavigations).toHaveLength(1);
     const jobPath = new URL(page.url()).pathname;
 
@@ -70,10 +74,13 @@ for (const locale of [
       const body = await response.text();
       if (extension === "txt") {
         const lines = body.trim().split(/\r?\n/);
-        expect(lines).toContain(transcript);
-        expect(lines.every((line) => line === transcript)).toBe(true);
+        expect(lines.length).toBeGreaterThan(0);
+        expect(lines.every((line) => samples.includes(line))).toBe(true);
       } else {
-        expect(body).toMatch(/^1\r?\n\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}\r?\nمرحبا بالعالم/);
+        expect(body).toMatch(/^1\r?\n\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}\r?\n/);
+        for (const block of body.trim().split("\n\n")) {
+          expect(samples).toContain(block.split("\n").slice(2).join("\n"));
+        }
       }
       const downloadStarted = page.waitForEvent("download");
       await link.click();
@@ -112,7 +119,7 @@ test("the form stays locked while the file is being sent", async ({ page }) => {
   release();
   expect(reservations).toBe(1);
   await page.waitForURL(/\/transcribe\/jobs\/[a-f0-9]{32}$/);
-  await expect(page.getByRole("status")).toHaveText("اكتمل التفريغ.", { timeout: 60_000 });
+  await expect(page.locator("#job-status")).toHaveText("اكتمل التفريغ.", { timeout: 60_000 });
 });
 
 // Chooses the recording on the Arabic upload page and sends it.
@@ -133,7 +140,7 @@ test("a reloaded tab replaces the reservation it lost", async ({ page }) => {
   await page.reload();
   await send(page);
   await page.waitForURL(/\/transcribe\/jobs\/[a-f0-9]{32}$/);
-  await expect(page.getByRole("status")).toHaveText("اكتمل التفريغ.", { timeout: 60_000 });
+  await expect(page.locator("#job-status")).toHaveText("اكتمل التفريغ.", { timeout: 60_000 });
 });
 
 test("a tab opened from the upload page cannot replace its reservation", async ({ page }) => {
@@ -171,5 +178,5 @@ test("a tab opened from the upload page cannot replace its reservation", async (
   // The held upload still arrives and its job runs.
   release();
   await page.waitForURL(/\/transcribe\/jobs\/[a-f0-9]{32}$/);
-  await expect(page.getByRole("status")).toHaveText("اكتمل التفريغ.", { timeout: 60_000 });
+  await expect(page.locator("#job-status")).toHaveText("اكتمل التفريغ.", { timeout: 60_000 });
 });
