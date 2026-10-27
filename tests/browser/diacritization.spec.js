@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, truncate, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { allowClipboard } from "./review-helpers.js";
@@ -235,15 +235,18 @@ for (const locale of [
     }
   });
 
-  test(`Diacritization rejects DOC, oversized files and invalid documents in ${locale.code}`, async ({ page }) => {
+  test(`Diacritization rejects DOC, oversized files and invalid documents in ${locale.code}`, async ({ page }, testInfo) => {
     await open(page);
     await page.getByRole("radio", { name: locale.document, exact: true }).check();
     const input = page.getByLabel(locale.file, { exact: true });
     await input.setInputFiles({ name: "legacy.doc", mimeType: "application/msword", buffer: Buffer.from("legacy") });
     await expect(page.getByRole("alert")).toHaveText(locale.wrongType);
-    await input.setInputFiles({ name: "large.txt", mimeType: "text/plain", buffer: Buffer.from("test") });
-    // Exercise the browser's boundary without allocating a 99 MB fixture for this UI check.
-    await input.evaluate((element) => Object.defineProperty(element.files[0], "size", { value: 99_000_001 }));
+    // A sparse local file exercises the real size in both engines without a large
+    // in-memory buffer or an override on a browser-owned File wrapper.
+    const oversized = testInfo.outputPath("large.txt");
+    await writeFile(oversized, "");
+    await truncate(oversized, 99_000_001);
+    await input.setInputFiles(oversized);
     await page.getByRole("button", { name: locale.upload, exact: true }).click();
     await expect(page.getByRole("alert")).toHaveText(locale.tooLarge);
     for (const [name, bytes, message] of [

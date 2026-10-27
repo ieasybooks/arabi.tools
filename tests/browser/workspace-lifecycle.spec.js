@@ -309,7 +309,16 @@ test('accepted uploads with lost replies reconcile their existing job', async ({
   await page.goto('/ocr');
   let reservations = 0;
   page.on('request', request => { if (new URL(request.url()).pathname === '/ocr/jobs') reservations++; });
-  await page.route('**/ocr/jobs/*/document', async route => { await route.fetch(); await route.abort(); });
+  await page.route('**/ocr/jobs/*/document', async route => {
+    // WebKit's intercepted multipart body omits file bytes. Send the actual
+    // fixture with the same context before dropping the browser's reply.
+    const response = await page.request.post(route.request().url(), {
+      multipart: { file: { name: 'reply-lost.png', mimeType: 'image/png', buffer: image } },
+    });
+    expect(response.status()).toBe(200);
+    expect((await response.json()).job_id).toBe(new URL(route.request().url()).pathname.split('/')[3]);
+    await route.abort();
+  });
   await page.locator('[name=file]').setInputFiles({ name: 'reply-lost.png', mimeType: 'image/png', buffer: image });
   await page.locator('#upload-form [type=submit]').click();
   await expect(page.locator('[data-workspace]')).toHaveAttribute('data-phase', 'completed');
