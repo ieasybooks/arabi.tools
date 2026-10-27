@@ -31,10 +31,18 @@
     const current = run => !disposed && run === generation;
     const updateFile = app.fileSelection(form, locked, () => {
       clearError();
-      if (file.files.length) { const problem = fileProblem(); if (problem) showError(problem); }
+      if (file.files.length) {
+        const problem = fileProblem();
+        if (problem) { file.setAttribute('aria-invalid', 'true'); showError(problem); }
+      }
     }, lifetime.signal);
 
-    function clearError() { error.hidden = true; back.hidden = true; }
+    function clearError() {
+      error.hidden = true;
+      back.hidden = true;
+      file.setAttribute('aria-invalid', 'false');
+      source.setAttribute('aria-invalid', String(Array.from(source.value).length > Number(form.dataset.maxCharacters)));
+    }
     function showError(message, job) {
       if (error.textContent !== message) error.textContent = message;
       error.hidden = false;
@@ -53,8 +61,10 @@
       bar.hidden = !['uploading', 'validating', 'queued', 'processing', 'reserving', 'observing'].includes(phase);
       bar.setAttribute('aria-label', message || form.dataset.observing);
       if (percent === undefined) bar.removeAttribute('value'); else bar.value = percent;
+      const cancelledFocus = document.activeElement === cancel;
       cancel.hidden = !locked() || (!state.job?.cancel && phase !== 'reserving' && phase !== 'cancelling' && phase !== 'cancel-unconfirmed');
       cancel.setAttribute('aria-disabled', String(phase === 'cancelling'));
+      if (cancelledFocus && cancel.hidden) buttons.find(button => !button.closest('.diacritize-panel').hidden)?.focus({ preventScroll: true });
     }
     function updateCount() {
       const length = Array.from(source.value).length;
@@ -66,8 +76,8 @@
       const invalid = length > Number(form.dataset.maxCharacters);
       source.setAttribute('aria-invalid', String(invalid));
       count.dataset.invalid = String(invalid);
-      if (invalid) showError(form.dataset.textLimit);
-      else if (error.textContent === form.dataset.textLimit) error.hidden = true;
+      if (invalid && form.elements.input_mode.value === 'text') showError(form.dataset.textLimit);
+      else if (error.textContent === form.dataset.textLimit || (error.textContent === form.dataset.textMissing && source.value.trim())) error.hidden = true;
     }
     function showMode() {
       const documentMode = form.elements.input_mode.value === 'document';
@@ -93,7 +103,9 @@
     function fileProblem() {
       const selected = file.files[0];
       if (!selected) return form.dataset.missing;
-      if (file.files.length !== 1 || !form.dataset.extensions.split(',').includes(selected.name.split('.').pop().toLowerCase())) return form.dataset.wrongType;
+      const dot = selected.name.lastIndexOf('.');
+      const extension = dot > 0 ? selected.name.slice(dot + 1).toLowerCase() : '';
+      if (file.files.length !== 1 || !form.dataset.extensions.split(',').includes(extension)) return form.dataset.wrongType;
       if (selected.size > Number(form.dataset.maxBytes)) return form.dataset.tooLarge;
       return null;
     }
@@ -134,13 +146,15 @@
         restoreSource = false;
         showMode();
         updateCount();
+        const explanation = root.querySelector('.source-needed');
+        if (explanation) explanation.hidden = result.dataset.mode === 'text';
       }
       if (['completed', 'failed', 'cancelled', 'missing'].includes(phase)) {
         attempt = null;
         app.store(attemptKey, null);
         clearError();
       }
-      transition(phase, message, update.querySelector('progress')?.value);
+      transition(phase, message, update.querySelector('progress[value]')?.value);
       if (phase === 'failed') showError(message);
     });
     async function cancelJob() {
@@ -189,9 +203,6 @@
     for (const input of models) input.addEventListener('change', () => { clearError(); rememberChoice(); }, { signal: lifetime.signal });
     window.addEventListener('pagehide', () => { if (attempt) app.store(attemptKey, attempt); }, { signal: lifetime.signal });
     window.addEventListener('pageshow', event => { if (event.persisted) app.store(attemptKey, null); }, { signal: lifetime.signal });
-    document.querySelector('.language-switch')?.addEventListener('submit', event => {
-      if ((source.value || file.files.length) && !window.confirm(form.dataset.languageReload)) event.preventDefault();
-    }, { signal: lifetime.signal });
     form.addEventListener('submit', async event => {
       event.preventDefault();
       if (locked()) return;
@@ -200,7 +211,12 @@
       const text = source.value;
       const problem = !model ? form.dataset.modelUnavailable : documentMode ? fileProblem()
         : !text.trim() ? form.dataset.textMissing : Array.from(text).length > Number(form.dataset.maxCharacters) ? form.dataset.textLimit : null;
-      if (problem) { transition('invalid'); showError(problem); return; }
+      if (problem) {
+        transition('invalid');
+        showError(problem);
+        (documentMode ? file : source).setAttribute('aria-invalid', 'true');
+        return;
+      }
       const chosenFile = file.files[0];
       const run = ++generation;
       restoreSource = false;

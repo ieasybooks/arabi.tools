@@ -157,7 +157,6 @@ pub(super) async fn editor(
                 data-reserving=(locale.text().workspace.reserving)
                 data-validating=(locale.text().workspace.validating)
                 data-observing=(locale.text().workspace.observing)
-                data-language-reload=(locale.text().workspace.language_reload)
                 data-bytes=(locale.text().workspace.bytes)
                 data-kilobytes=(locale.text().workspace.kilobytes)
                 data-megabytes=(locale.text().workspace.megabytes)
@@ -231,6 +230,7 @@ pub(super) async fn editor(
                             name="file"
                             accept=".txt,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                             aria-label=(text.file_label)
+                            aria-describedby="diacritize-error"
                         >
                         <span class="dropzone-icon">
                             icon(data: icons::UPLOAD, size: 24)
@@ -256,7 +256,7 @@ pub(super) async fn editor(
                 <p id="diacritize-error" class="error" role="alert" hidden=(true)></p>
                 <a class="return-to-job" hidden=(true)>(text.back_to_job)</a>
                 <p class="hint">(text.try_again)</p>
-                if initial.is_some() {
+                if restore_source || document_mode {
                     <p class="hint source-needed">
                         (locale.text().workspace.source_needed)
                     </p>
@@ -266,34 +266,7 @@ pub(super) async fn editor(
             <div class="workspace-observer" hidden=(initial.is_none())>
                 jobs::job::observe(job: $(job.get()))
             </div>
-            <section class="workspace-review">
-                <p class="observation-status notice" role="status" hidden=(true)>
-                    (locale.text().workspace.delayed)
-                </p>
-                <button
-                    type="button"
-                    class="button secondary retry-observation"
-                    hidden=(true)
-                >
-                    (locale.text().workspace.retry_observation)
-                </button>
-                <a class="workspace-recovery" hidden=(true)>
-                    (locale.text().workspace.recovery)
-                </a>
-                <button
-                    type="button"
-                    class="button secondary view-result"
-                    hidden=(true)
-                >
-                    (locale.text().workspace.view_result)
-                </button>
-                <p class="previous-result hint" hidden=(true)></p>
-                <div
-                    class="workspace-result"
-                    tabindex="-1"
-                    aria-label=(locale.text().workspace.result)
-                ></div>
-            </section>
+            super::workspace::review(locale: locale)
         </div>
         <noscript><p class="notice">(text.needs_javascript)</p></noscript>
     })

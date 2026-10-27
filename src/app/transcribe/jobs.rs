@@ -1,7 +1,7 @@
 //! Reserves a transcription job before its file is uploaded, so a full queue or an unfinished
 //! job is reported before the visitor spends time uploading.
 
-mod job;
+pub(super) mod job;
 
 use serde::{Deserialize, Serialize};
 use topcoat::{
@@ -29,9 +29,13 @@ const COOKIE: &str = "transcription_job";
 #[serde(untagged)]
 enum Reply {
     /// Where to upload the file for a reserved job.
-    Upload { upload: String },
+    Upload {
+        job_id: String,
+        next: String,
+        upload: String,
+    },
     /// The page to show once the file is uploaded.
-    Next { next: String },
+    Next { job_id: String, next: String },
     /// Why the request was refused, ready to show.
     Error {
         error: String,
@@ -58,8 +62,16 @@ pub(super) async fn reserve(
         .and_then(|attempt| Attempt::parse(&attempt));
     Ok(match transcription.queue.reserve(client_ip(cx), attempt) {
         Ok(id) => {
-            let upload = href!(job::upload, job::Id(id)).resolve(cx);
-            (StatusCode::OK, Json(Reply::Upload { upload }))
+            let upload = href!(job::upload, job::Id(id.clone())).resolve(cx);
+            let next = href!(job::page, job::Id(id.clone())).resolve(cx);
+            (
+                StatusCode::OK,
+                Json(Reply::Upload {
+                    job_id: id.to_string(),
+                    next,
+                    upload,
+                }),
+            )
         }
         Err(rejection) => rejected(cx, rejection),
     })

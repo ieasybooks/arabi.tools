@@ -21,6 +21,15 @@
   };
   app.mount = (selector, initialize) => { mounts.push([selector, initialize]); discover(); };
   new MutationObserver(discover).observe(document.documentElement, { childList: true, subtree: true });
+  // This also covers a local file reselected by a viewer on a direct job page.
+  document.addEventListener('submit', event => {
+    const form = event.target;
+    if (!form.matches?.('.language-switch')) return;
+    const localInput = document.querySelector('#source-text')?.value
+      || [...document.querySelectorAll('input[type=file]')].some(input => input.files.length)
+      || app.sources.size;
+    if (localInput && !window.confirm(form.dataset.reloadMessage)) event.preventDefault();
+  });
   app.fileSelection = (form, locked, changed, signal) => {
     const input = form.elements.file;
     const replace = form.querySelector('.replace-file');
@@ -45,6 +54,7 @@
       input.value = '';
       update();
       changed();
+      replace?.focus({ preventScroll: true });
     }, { signal });
     update();
     return update;
@@ -83,7 +93,10 @@
       if (delayed) delayed.hidden = true;
       if (retry) retry.hidden = true;
       const phase = update.dataset.phase;
-      const result = update.querySelector('.result');
+      const steps = observer.querySelector('.steps');
+      const currentSteps = root.closest('.workspace-entry')?.querySelector(':scope > .steps');
+      if (steps && currentSteps && steps.outerHTML !== currentSteps.outerHTML) currentSteps.replaceWith(steps.cloneNode(true));
+      const result = update.querySelector('[data-result], .result');
       if (result) {
         if (resultId !== jobId) release(resultId);
         resultId = jobId;
@@ -137,8 +150,10 @@
         jobId = null;
         desired = '';
         ended = false;
+        if (delayed) delayed.hidden = true;
+        if (retry) retry.hidden = true;
         sync();
-        const result = output.querySelector('.result');
+        const result = output.querySelector('[data-result], .result');
         if (previous && result) {
           previous.textContent = result.dataset.model
             ? root.dataset.previousModel.replace('{model}', result.dataset.model)

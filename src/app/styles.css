@@ -1805,3 +1805,24 @@ body:has([data-workspace]) .tool-hero {
     padding-inline: 1rem;
   }
 }
+
+/* Workspace upload controls and wide result surfaces. */
+.workspace-input {
+  max-inline-size: 48rem;
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.submission-percent:empty,
+.server-detail:empty {
+  display: none;
+}
+
+@media (max-width: 39.99rem) {
+  .workspace-input {
+    padding: 1rem;
+  }
+}

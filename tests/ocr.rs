@@ -1,6 +1,8 @@
 #[allow(dead_code)]
 #[path = "support/drive.rs"]
 mod drive;
+#[path = "support/runtime.rs"]
+mod runtime;
 #[allow(dead_code)]
 mod support;
 
@@ -481,6 +483,84 @@ async fn drive_startup_does_not_block_transcription() -> anyhow::Result<()> {
     assert!(app.ocr.is_available());
     let html = app.client.get(app.url("/ocr")).send().await?.text().await?;
     assert!(html.contains("id=\"upload-form\""));
+    drive.assert_clean();
+    app.stop().await
+}
+
+#[tokio::test]
+async fn workspace_observer_uses_the_ocr_queue_and_releases_its_completed_document()
+-> anyhow::Result<()> {
+    let drive = drive::Drive::start(Duration::from_millis(150)).await;
+    let mut ocr = ocr(&drive).await?;
+    ocr.queue = Queue::new(
+        arlang_tools::queue::Limits {
+            unwatched: Duration::from_millis(40),
+            keep_finished: Duration::ZERO,
+            ..transcription::limits()
+        },
+        ocr.queue.slots(),
+    );
+    let app = support::TestApp::start_with_ocr(support::Setup::default(), ocr).await?;
+    let reserve: Value = app
+        .client
+        .post(app.url("/ocr/jobs"))
+        .send()
+        .await?
+        .json()
+        .await?;
+    let reply: Value = app
+        .upload(
+            reserve["upload"].as_str().unwrap(),
+            "page.png",
+            &drive::png(),
+            None,
+        )
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    assert_eq!(reply["job_id"], reserve["job_id"]);
+    assert_eq!(reply["next"], reserve["next"]);
+    let id: JobId = reply["job_id"].as_str().unwrap().parse()?;
+    let mut socket = runtime::RuntimeSocket::open(&app.url("/")).await?;
+    socket.observe("/ocr/observe", &id.to_string()).await?;
+    socket.until("processing").await?;
+    tokio::time::sleep(Duration::from_millis(80)).await;
+    app.ocr.queue.sweep();
+    assert!(app.ocr.queue.is_unfinished(&id));
+    socket.until("completed").await?;
+    let result = app.ocr.queue.result(&id).context("finished OCR")?;
+    let weak = std::sync::Arc::downgrade(&result);
+    drop(result);
+    app.ocr.queue.sweep();
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while weak.upgrade().is_some() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await?;
+    assert!(app.ocr.queue.result(&id).is_none());
+    for (id, code) in [
+        ("invalid", StatusCode::NOT_FOUND),
+        ("00000000000000000000000000000000", StatusCode::OK),
+    ] {
+        let response = app
+            .client
+            .post(app.url("/ocr/observe"))
+            .json(&json!({"args": [id], "signals": {}}))
+            .send()
+            .await?;
+        assert_eq!(response.status(), code);
+        assert!(
+            response.headers()["cache-control"]
+                .to_str()?
+                .contains("no-store")
+        );
+        if code == StatusCode::OK {
+            assert!(response.text().await?.contains("missing"));
+        }
+    }
+    drop(socket);
     drive.assert_clean();
     app.stop().await
 }

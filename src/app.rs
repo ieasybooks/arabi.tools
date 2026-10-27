@@ -213,6 +213,7 @@ async fn layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                         </a>
                         <form
                             class="language-switch"
+                            data-reload-message=(text.workspace.language_reload)
                             method="post"
                             action=(href!(language::switch))
                         >

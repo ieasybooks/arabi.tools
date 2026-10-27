@@ -14,6 +14,7 @@ use topcoat::{
         href, page,
         request::{client_ip, uri},
     },
+    runtime::signal,
     view::{View, component, view},
 };
 
@@ -23,7 +24,7 @@ use crate::meta::PageMeta;
 use crate::queue::Rejection;
 use crate::tools::transcription::{EXTENSIONS, MAX_UPLOAD_BYTES, Transcription};
 
-const UPLOAD_SCRIPT: Asset = asset!("./upload.js");
+pub(super) const UPLOAD_SCRIPT: Asset = asset!("./upload.js");
 
 #[page]
 pub async fn page(cx: &Cx) -> Result<impl View> {
@@ -33,8 +34,8 @@ pub async fn page(cx: &Cx) -> Result<impl View> {
     Ok(view! {
         tool_hero(locale: locale, lead: true)
         <section class="workspace">
-            <div class="container workspace-layout">
-                <div class="workspace-main">
+            <div class="container workspace-layout workspace-wide">
+                <div class="workspace-entry">
                     steps(locale: locale, current: Step::Upload, failed: false)
                     match transcription.queue.availability(client_ip(cx)) {
                         Err(rejection) => {
@@ -51,60 +52,88 @@ pub async fn page(cx: &Cx) -> Result<impl View> {
                             </div>
                         }
                         Ok(()) => {
-                            <form
-                                id="upload-form"
-                                class="upload"
-                                data-reserve=(href!(jobs::reserve))
-                                data-extensions=(EXTENSIONS.join(","))
-                                data-max-bytes=(MAX_UPLOAD_BYTES)
-                                data-missing=(text.missing)
-                                data-wrong-type=(text.wrong_type)
-                                data-too-large=(locale.too_large())
-                                data-failed=(text.upload_failed)
-                            >
-                                // The input covers the drop zone, invisible, so clicking and
-                                // dropping a file both reach it; the text around it follows the
-                                // page's language.
-                                <div class="dropzone">
-                                    <input
-                                        id="audio"
-                                        type="file"
-                                        name="file"
-                                        accept=".mp3,.m4a,audio/mpeg,audio/mp4,audio/x-m4a"
-                                        aria-label=(text.file_label)
-                                        required=(true)
-                                    >
-                                    <span class="dropzone-icon">
-                                        icon(data: icons::UPLOAD, size: 24)
-                                    </span>
-                                    <p class="dropzone-title">(text.choose_file)</p>
-                                    <p class="dropzone-hint">(locale.upload_limits())</p>
-                                    <p class="file-name">(text.no_file)</p>
-                                </div>
-                                <div class="form-actions">
-                                    <button type="submit" class="button primary">
-                                        (text.submit)
-                                    </button>
-                                </div>
-                                <div class="upload-progress" hidden=(true)>
-                                    <progress max="100" value="0" aria-label=(text.uploading)></progress>
-                                    <span>(text.uploading)</span>
-                                </div>
-                                <p class="error" role="alert" hidden=(true)></p>
-                                <a class="return-to-job" hidden=(true)>
-                                    (text.back_to_job)
-                                </a>
-                            </form>
-                            <noscript>
-                                <p class="notice">(text.needs_javascript)</p>
-                            </noscript>
-                            <script src=(UPLOAD_SCRIPT) defer=(true)></script>
+                            upload_form(locale: locale)
                         }
                     }
                 </div>
                 before_you_start(locale: locale)
             </div>
         </section>
+        <script src=(super::workspace::SCRIPT) defer=(true)></script>
+        <script src=(UPLOAD_SCRIPT) defer=(true)></script>
+        // Integration: load the transcript viewer scripts here, on the page, before runtime hydration.
+    })
+}
+
+/// This input stays mounted while the shard observes only the accepted job.
+#[component]
+async fn upload_form(cx: &Cx, locale: Locale) -> Result<impl View> {
+    let text = &locale.text().transcription;
+    let workspace = &locale.text().workspace;
+    let job = signal(cx, String::new);
+    Ok(view! {
+        <div data-workspace="transcript" data-previous=(workspace.previous_result)>
+            <form
+                id="upload-form"
+                class="upload workspace-input"
+                method="post"
+                action=(href!(page))
+                novalidate=(true)
+                data-tool="transcribe"
+                data-reserve=(href!(jobs::reserve))
+                data-extensions=(EXTENSIONS.join(","))
+                data-max-bytes=(MAX_UPLOAD_BYTES)
+                data-missing=(text.missing)
+                data-wrong-type=(text.wrong_type)
+                data-too-large=(locale.too_large())
+                data-failed=(text.upload_failed)
+                data-no-file=(text.no_file)
+                data-uploading=(text.uploading)
+                data-reserving=(workspace.reserving)
+                data-validating=(workspace.validating)
+                data-observing=(workspace.observing)
+                data-bytes=(workspace.bytes)
+                data-kilobytes=(workspace.kilobytes)
+                data-megabytes=(workspace.megabytes)
+            >
+                <div class="dropzone">
+                    <input
+                        id="audio"
+                        type="file"
+                        name="file"
+                        accept=".mp3,.m4a,audio/mpeg,audio/mp4,audio/x-m4a"
+                        aria-label=(text.file_label)
+                        aria-describedby="upload-error"
+                    >
+                    <span class="dropzone-icon">
+                        icon(data: icons::UPLOAD, size: 24)
+                    </span>
+                    <p class="dropzone-title">(text.choose_file)</p>
+                    <p class="dropzone-hint">(locale.upload_limits())</p>
+                    <p class="file-name" dir="auto">(text.no_file)</p>
+                </div>
+                super::workspace::file_actions(locale: locale)
+                <div class="form-actions">
+                    <button type="submit" class="button primary" disabled=(true)>
+                        (text.submit)
+                    </button>
+                </div>
+                <div class="upload-progress" hidden=(true)>
+                    <progress max="100" aria-label=(text.uploading)></progress>
+                    <p id="job-status" class="submission-status" role="status"></p>
+                    <p class="submission-percent" dir="ltr"></p>
+                    <p class="server-detail hint"></p>
+                </div>
+                <p id="upload-error" class="error" role="alert" hidden=(true)></p>
+                <a class="return-to-job" hidden=(true)>(text.back_to_job)</a>
+            </form>
+            super::workspace::bridge(job: job.clone())
+            <div class="workspace-observer" hidden=(true)>
+                jobs::job::observe(job: $(job.get()))
+            </div>
+            super::workspace::review(locale: locale)
+        </div>
+        <noscript><p class="notice">(text.needs_javascript)</p></noscript>
     })
 }
 

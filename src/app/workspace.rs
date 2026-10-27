@@ -47,3 +47,28 @@ pub(super) async fn file_actions(locale: crate::i18n::Locale) -> Result<impl Vie
         </div>
     })
 }
+
+#[component]
+pub(super) async fn review(locale: crate::i18n::Locale) -> Result<impl View> {
+    let text = &locale.text().workspace;
+    Ok(view! {
+        <section class="workspace-review">
+            <p class="observation-status notice" role="status" hidden=(true)>
+                (text.delayed)
+            </p>
+            <button
+                type="button"
+                class="button secondary retry-observation"
+                hidden=(true)
+            >
+                (text.retry_observation)
+            </button>
+            <a class="workspace-recovery" hidden=(true)>(text.recovery)</a>
+            <button type="button" class="button secondary view-result" hidden=(true)>
+                (text.view_result)
+            </button>
+            <p class="previous-result hint" hidden=(true)></p>
+            <div class="workspace-result" tabindex="-1" aria-label=(text.result)></div>
+        </section>
+    })
+}

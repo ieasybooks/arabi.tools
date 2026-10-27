@@ -1,3 +1,5 @@
+#[path = "support/runtime.rs"]
+mod runtime;
 mod support;
 
 use std::net::{IpAddr, Ipv4Addr};
@@ -47,7 +49,10 @@ async fn transcribe_fixture(
     )
     .await?;
     let job = reply["next"].as_str().context("missing job page URL")?;
-    assert_eq!(reply, json!({"next": job}));
+    assert_eq!(
+        reply,
+        json!({"next": job, "job_id": job.rsplit('/').next().unwrap()})
+    );
     assert_eq!(Some(job), upload.strip_suffix("/audio"));
 
     let response = app.client.get(app.url(job)).send().await?;
@@ -1237,5 +1242,103 @@ async fn crawlers_find_the_sitemap_icons_and_manifest() -> anyhow::Result<()> {
         home.contains("<img class=\"brand-logo\" src=\"/_topcoat/assets/logo-"),
         "{home}"
     );
+    app.stop().await
+}
+
+#[tokio::test]
+async fn workspace_observer_keeps_queue_position_private_and_releases_on_abandonment()
+-> anyhow::Result<()> {
+    let app = TestApp::start_with(Setup {
+        limits: Limits {
+            running: 0,
+            unwatched: Duration::from_millis(40),
+            ..limits()
+        },
+        ..Setup::default()
+    })
+    .await?;
+    let upload = app.reserve().await?;
+    let reply = json_reply(
+        app.upload(&upload, "speech.mp3", MP3, None).await?,
+        StatusCode::OK,
+    )
+    .await?;
+    let id: JobId = reply["job_id"].as_str().unwrap().parse()?;
+    let mut socket = runtime::RuntimeSocket::open(&app.url("/")).await?;
+    socket
+        .observe("/transcribe/observe", &id.to_string())
+        .await?;
+    let frame = socket.until("queued").await?;
+    assert!(frame.contains("data-job-id"));
+    assert!(frame.contains("Your file is in the queue") || frame.contains("في الطابور"));
+    tokio::time::sleep(Duration::from_millis(80)).await;
+    app.transcription.queue.sweep();
+    assert!(app.transcription.queue.is_unfinished(&id));
+    drop(socket);
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    app.transcription.queue.sweep();
+    assert!(!app.transcription.queue.is_unfinished(&id));
+    for (id, code) in [
+        ("invalid", StatusCode::NOT_FOUND),
+        ("00000000000000000000000000000000", StatusCode::OK),
+    ] {
+        let response = app
+            .client
+            .post(app.url("/transcribe/observe"))
+            .json(&json!({"args": [id], "signals": {}}))
+            .send()
+            .await?;
+        assert_eq!(response.status(), code);
+        assert!(
+            response.headers()["cache-control"]
+                .to_str()?
+                .contains("no-store")
+        );
+        if code == StatusCode::OK {
+            assert!(response.text().await?.contains("missing"));
+        }
+    }
+    app.stop().await
+}
+
+#[tokio::test]
+async fn workspace_terminal_observer_does_not_retain_a_transcript_after_expiry()
+-> anyhow::Result<()> {
+    let app = TestApp::start_with(Setup {
+        limits: Limits {
+            keep_finished: Duration::ZERO,
+            ..limits()
+        },
+        ..Setup::default()
+    })
+    .await?;
+    let upload = app.reserve().await?;
+    let reply = json_reply(
+        app.upload(&upload, "speech.mp3", MP3, None).await?,
+        StatusCode::OK,
+    )
+    .await?;
+    let id: JobId = reply["job_id"].as_str().unwrap().parse()?;
+    let mut socket = runtime::RuntimeSocket::open(&app.url("/")).await?;
+    socket
+        .observe("/transcribe/observe", &id.to_string())
+        .await?;
+    socket.until("completed").await?;
+    let result = app
+        .transcription
+        .queue
+        .result(&id)
+        .context("finished transcript")?;
+    let weak = std::sync::Arc::downgrade(&result);
+    drop(result);
+    app.transcription.queue.sweep();
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while weak.upgrade().is_some() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await?;
+    assert!(app.transcription.queue.result(&id).is_none());
+    drop(socket);
     app.stop().await
 }

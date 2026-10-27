@@ -16,11 +16,11 @@ use topcoat::{
             Json,
             multipart::{Field, Multipart},
         },
-        error::RouterErrorExt,
+        error::{RouterErrorExt, not_found},
         href, module_param, page, path_param, route,
     },
-    runtime::connected,
-    view::{View, component, emit, live, view},
+    runtime::{connected, shard},
+    view::{View, ViewExt, component, emit, live, view},
 };
 
 use super::{COOKIE, Reply, rejected, unavailable};
@@ -47,37 +47,110 @@ const HEARTBEAT: Duration = Duration::from_secs(30);
 pub(super) async fn page(cx: &Cx) -> Result<impl View> {
     let id = path_param::<Id>(cx)?.clone();
     let locale = Locale::of(cx);
-    let mut watch = app_context::<Ocr>(cx).queue.watch(&id).ok_or_not_found()?;
+    crate::app::workspace::private_response(cx);
+    let exists = app_context::<Ocr>(cx).queue.watch(&id).is_some();
     Ok(view! {
         <script src=(REVIEW_SCRIPT) defer=(true)></script>
         ocr::tool_hero(locale: locale, lead: false)
         <section class="workspace">
-            <div class="container workspace-layout">
-                (live! {
-                    loop {
-                        let status = watch.status();
-                        let finished = status.is_finished();
-                        let token = emit! {
-                            job_status(locale: locale, id: id.clone(), status: status)
-                        }?;
-                        if finished || !connected(cx) {
-                            break Ok(token);
-                        }
-                        tokio::select! {
+            <div class="container workspace-layout workspace-wide">
+                if exists {
+                    (live! {
+                        let mut watch = app_context::<Ocr>(cx)
+                            .queue
+                            .watch(&id)
+                            .ok_or_not_found()?;
+                        loop {
+                            let status = watch.status();
+                            let finished = status.is_finished();
+                            let token = emit! {
+                                job_status(
+                                    locale: locale,
+                                    id: id.clone(),
+                                    status: status,
+                                    embedded: false
+                                )
+                            }?;
+                            if finished || !connected(cx) {
+                                drop(watch);
+                                break Ok(token);
+                            }
+                            tokio::select! {
                             changed = watch.changed() => if !changed {
                                 break Ok(token);
                             },
                             () = tokio::time::sleep(HEARTBEAT) => {}
                         }
-                    }
-                })
+                        }
+                    })
+                } else {
+                    (StatusCode::NOT_FOUND)
+                    <p class="notice">(locale.text().workspace.missing)</p>
+                    <a class="button secondary" href=(href!(ocr::page))>
+                        (locale.text().ocr.another)
+                    </a>
+                }
             </div>
         </section>
+        <script src=(crate::app::workspace::SCRIPT) defer=(true)></script>
+        // Integration: load the ocr viewer scripts here, on the direct job page too.
     })
 }
 
+/// A job link is the existing read capability. The shard observes it without starting another job.
+#[shard("/ocr/observe")]
+pub(crate) async fn observe(cx: &Cx, job: String) -> Result<impl View> {
+    crate::app::workspace::private_response(cx);
+    let locale = Locale::of(cx);
+    let id = if job.is_empty() {
+        None
+    } else {
+        Some(job.parse::<JobId>().map_err(|_| not_found())?)
+    };
+    Ok(view! {
+        cx =>
+        if let Some(id) = id {
+            (live! {
+                let Some(mut watch) = app_context::<Ocr>(cx).queue.watch(&id) else {
+                    return emit! {
+                        <div data-job-id=(id.to_string()) data-phase="missing">
+                            <p class="status">(locale.text().workspace.missing)</p>
+                        </div>
+                    };
+                };
+                loop {
+                    let status = watch.status();
+                    let finished = status.is_finished();
+                    let token = emit! {
+                        job_status(
+                            locale: locale,
+                            id: id.clone(),
+                            status: status,
+                            embedded: true
+                        )
+                    }?;
+                    if finished || !connected(cx) {
+                        drop(watch);
+                        break Ok(token);
+                    }
+                    tokio::select! {
+                        changed = watch.changed() => if !changed { break Ok(token); },
+                        () = tokio::time::sleep(HEARTBEAT) => {}
+                    }
+                }
+            })
+        }
+    }
+    .boxed())
+}
+
 #[component]
-async fn job_status(locale: Locale, id: JobId, status: Status<Document>) -> Result<impl View> {
+async fn job_status(
+    locale: Locale,
+    id: JobId,
+    status: Status<Document>,
+    embedded: bool,
+) -> Result<impl View> {
     let text = &locale.text().ocr;
     let finished = status.is_finished();
     let message = match &status {
@@ -89,6 +162,13 @@ async fn job_status(locale: Locale, id: JobId, status: Status<Document>) -> Resu
         Status::Cancelled(CancelReason::User) => locale.text().cancelled_user.to_owned(),
         Status::Cancelled(CancelReason::Unwatched) => text.cancelled_unwatched.to_owned(),
         Status::Cancelled(CancelReason::Shutdown) => text.cancelled_shutdown.to_owned(),
+    };
+    let phase = match &status {
+        Status::Reserved => "reserved",
+        Status::Waiting { .. } => "queued",
+        Status::Running { .. } => "processing",
+        Status::Done(_) => "completed",
+        Status::Failed | Status::Cancelled(_) => "failed",
     };
     let (state, state_icon) = match &status {
         Status::Reserved | Status::Waiting { .. } => ("waiting", Some(icons::WAITING)),
@@ -116,14 +196,29 @@ async fn job_status(locale: Locale, id: JobId, status: Status<Document>) -> Resu
     };
     Ok(view! {
         ocr::steps(locale: locale, current: step, failed: state == "failed")
-        <div class="job" data-state=(state)>
+        <div
+            class="job"
+            data-state=(state)
+            data-job-id=(id.to_string())
+            data-phase=(phase)
+            data-update=(std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis())
+        >
             <div class="job-heading">
                 if let Some(state_icon) = state_icon {
                     <span class="job-icon">icon(data: state_icon, size: 20)</span>
                 }
                 // Topcoat preserves this node across live updates. Only status text belongs
                 // here, so percentage updates do not repeat the polite announcement.
-                <p id="job-status" class="status" role="status">(message)</p>
+                <p
+                    id=((!embedded).then_some("job-status"))
+                    class="status"
+                    role=((!embedded).then_some("status"))
+                >
+                    (message)
+                </p>
                 if let Some(percent) = percent {
                     <p class="percent">(locale.percent(percent))</p>
                 }
@@ -132,7 +227,7 @@ async fn job_status(locale: Locale, id: JobId, status: Status<Document>) -> Resu
                 <progress max="100" value=(percent) aria-labelledby="job-status"></progress>
             }
             if let Some((done, total)) = pages {
-                <p class="hint">(locale.pages_done(done, total))</p>
+                <p class="hint page-progress">(locale.pages_done(done, total))</p>
             }
             if keep_open {
                 <p class="keep-open">
@@ -477,6 +572,7 @@ pub(super) async fn upload(cx: &Cx, mut form: Multipart) -> Result<(StatusCode, 
                 (
                     StatusCode::OK,
                     Json(Reply::Next {
+                        job_id: id.to_string(),
                         next: href!(page, Id(id.clone())).resolve(cx),
                     }),
                 )

@@ -1015,7 +1015,7 @@ static EN: Text = Text {
         cancel_failed: "We could not confirm cancellation. Please try again.",
         copy: "Copy text",
         copied: "Text copied.",
-        copy_failed: "Copying failed. Select the text and copy it manually.",
+        copy_failed: "Copying was unavailable. Select the text and copy it manually.",
         download_text: "Download text (.txt)",
         download_docx: "Download Word document (.docx)",
         download_original: "Download original file",
