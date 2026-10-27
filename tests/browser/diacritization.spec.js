@@ -377,6 +377,47 @@ for (const locale of [
     }
   });
 
+  test(`Diacritization keeps observing an accepted job when cancellation fails before its reply in ${locale.code}`, async ({ page }) => {
+    await open(page);
+    await page.getByLabel(locale.original, { exact: true }).fill(source);
+    let releaseResponse;
+    const held = new Promise((resolve) => { releaseResponse = resolve; });
+    let acceptedUrl;
+    let reservations = 0;
+    let cancellations = 0;
+    page.on("request", (request) => {
+      if (request.method() === "POST" && new URL(request.url()).pathname === "/diacritize/jobs") reservations++;
+    });
+    // The server accepts the text, but its reply reaches the page only after cancellation failed.
+    await page.route("**/diacritize/jobs/*/text", async (route) => {
+      const response = await route.fetch();
+      acceptedUrl = (await response.json()).next;
+      await held;
+      await route.fulfill({ response }).catch(() => {});
+    });
+    await page.route("**/diacritize/jobs/*/cancel", async (route) => {
+      cancellations++;
+      await route.abort("failed");
+    });
+    try {
+      await page.getByRole("button", { name: locale.submit, exact: true }).click();
+      await expect.poll(() => acceptedUrl).toBeTruthy();
+      await page.getByRole("button", { name: locale.cancel, exact: true }).click();
+      await expect(page.getByRole("alert")).toHaveText(locale.cancelFailed);
+      releaseResponse();
+      await expect(page.locator("#job-status")).toHaveText(locale.done);
+      const output = await page.getByLabel(locale.result, { exact: true }).inputValue();
+      expect(stripMarks(output)).toBe(stripMarks(source));
+      const original = page.getByLabel(locale.original, { exact: true });
+      await expect(original).toHaveValue(source);
+      await expect(original).toBeEditable();
+      expect(cancellations).toBe(1);
+      expect(reservations).toBe(1);
+    } finally {
+      releaseResponse();
+    }
+  });
+
   for (const stage of ["submission", "processing"]) {
     test(`Diacritization cancels during ${stage} in ${locale.code}`, async ({ page }) => {
       await open(page);

@@ -29,6 +29,7 @@
     let disposed = false;
     let restoreSource = root.dataset.restoreSource === 'true';
     const locked = () => active.has(state.phase);
+    const cancellationPending = () => state.phase === 'cancelling' || state.phase === 'cancel-unconfirmed';
     const current = run => !disposed && run === generation;
     const updateFile = app.fileSelection(form, locked, () => {
       clearError();
@@ -137,9 +138,7 @@
       });
     }
     const observer = app.observeWorkspace(root, (phase, message, result, update) => {
-      if (state.phase === 'cancelling' || state.phase === 'cancel-unconfirmed') {
-        if (!terminal.has(phase)) return;
-      }
+      if (cancellationPending() && !terminal.has(phase)) return;
       if (result && restoreSource) {
         source.value = result.dataset.source || '';
         models.find(input => input.value === result.dataset.modelValue).checked = true;
@@ -158,6 +157,12 @@
       transition(phase, message, update.querySelector('progress[value]')?.value);
       if (phase === 'failed') showError(message);
     });
+    // A job the server may have accepted stays observed even while its cancellation is
+    // pending or unconfirmed, so it stays alive and a completion can still win in place.
+    function observe(chosenFile) {
+      if (!cancellationPending()) transition('observing', form.dataset.observing);
+      observer.watch(state.job, chosenFile);
+    }
     async function cancelJob() {
       if (!locked() || state.phase === 'cancelling') return;
       const run = generation;
@@ -246,26 +251,22 @@
         } else body = new URLSearchParams({ model: model.value, text });
         transition(documentMode ? 'uploading' : 'submitting', documentMode ? form.dataset.uploading : form.dataset.submitting, documentMode ? 0 : undefined);
         const reply = await post(documentMode ? reservation.upload : reservation.text, body, documentMode);
-        if (!current(run) || ['cancelling', 'cancel-unconfirmed', 'cancelled'].includes(state.phase)) return;
+        if (!current(run) || state.phase === 'cancelled') return;
         attempt = null;
         app.store(attemptKey, null);
         state.job = { ...reservation, ...reply };
-        transition('observing', form.dataset.observing);
-        observer.watch(state.job, documentMode ? chosenFile : null);
+        observe(documentMode ? chosenFile : null);
       } catch (failure) {
         if (current(run) && state.phase === 'cancelling' && !state.job) {
           transition('cancel-unconfirmed');
           showError(form.dataset.cancelFailed);
           return;
         }
-        if (!current(run) || ['cancelling', 'cancel-unconfirmed', 'cancelled'].includes(state.phase)) return;
-        if (failure?.uncertain && state.job) {
-          transition('observing', form.dataset.observing);
-          observer.watch(state.job, documentMode ? chosenFile : null);
-        } else {
-          transition('failed');
-        }
-        showError(failure?.error || form.dataset.failed, failure?.job || state.job?.next);
+        if (!current(run) || state.phase === 'cancelled') return;
+        if (failure?.uncertain && state.job) observe(documentMode ? chosenFile : null);
+        else if (!cancellationPending()) transition('failed');
+        // A pending or unconfirmed cancellation keeps its own message.
+        if (!cancellationPending()) showError(failure?.error || form.dataset.failed, failure?.job || state.job?.next);
       }
     }, { signal: lifetime.signal });
     showMode();
