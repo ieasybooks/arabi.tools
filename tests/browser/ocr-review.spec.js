@@ -183,7 +183,7 @@ for (const locale of ['ar', 'en']) {
     await root.locator('[data-ocr-source-picker] button').click();
     await expect(root.locator('[data-ocr-confirm]')).toHaveAttribute('aria-invalid', 'true');
     await restore(page, pdf(1));
-    await expect(root.locator('[data-ocr-source-error]')).toContainText(locale === 'ar' ? 'النتيجة على 3' : 'result has 3');
+    await expect(root.locator('[data-ocr-source-error]')).toContainText(locale === 'ar' ? 'وعدد صفحات النتيجة 3' : 'result has 3');
     await screenshot(page, `${locale}-320-ocr-source-mismatch`);
     await expect(root.locator('canvas')).toHaveCount(0);
     await restore(page, await original());
