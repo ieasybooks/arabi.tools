@@ -255,6 +255,13 @@ async fn result(
     let copy_override = transcript_copy_override(&transcript)
         .map(serde_json::to_string)
         .transpose()?;
+    // The time column is as wide as the longest start time, so every cue's text lines up.
+    let time_chars = transcript
+        .cues
+        .iter()
+        .map(|cue| short_time(&cue.start).len())
+        .max()
+        .unwrap_or(4);
     let downloads = vec![
         DownloadLink {
             label: text.download_text,
@@ -279,20 +286,21 @@ async fn result(
                 downloads: downloads,
                 (locale.kept_for())
             )
-            <div class="result-toolbar">
-                result_controls::search_toolbar(locale: locale)
-                reading_controls(locale: locale, transcript: transcript.clone())
-            </div>
+            result_controls::search_toolbar(locale: locale)
             result_controls::copy_feedback(locale: locale)
+            reading_controls(locale: locale, transcript: transcript.clone())
             if transcript.text.trim().is_empty() {
                 <p>(text.no_speech)</p>
             } else {
                 <h2 class="visually-hidden">(text.transcript_title)</h2>
+                // Rows run in the transcript's direction, so each time sits beside its text.
                 <ol
                     class="cues"
                     role="list"
                     aria-label=(text.transcript_title)
                     tabindex="0"
+                    dir=(text_direction(&transcript.language))
+                    style=(format!("--time-chars: {time_chars}"))
                 >
                     for (number, cue) in (1..).zip(&transcript.cues) {
                         <li
@@ -300,27 +308,14 @@ async fn result(
                             data-cue=(number.to_string())
                             id=(format!("transcript-{id}-cue-{number}"))
                         >
-                            <div class="cue-heading">
-                                <p class="cue-time">
-                                    <span class="cue-number">(number.to_string())</span>
-                                    <bdi dir="ltr" data-cue-time=(true)>
-                                        (cue.start.as_str())
-                                        " → "
-                                        (cue.end.as_str())
-                                    </bdi>
-                                </p>
-                                <button
-                                    type="button"
-                                    class="button ghost compact copy-cue"
-                                    data-copy-cue=(true)
-                                    aria-label=(review.copy_cue)
-                                    title=(review.copy_cue)
-                                    hidden=(true)
-                                >
-                                    icon(data: icons::COPY, size: 16)
-                                    <span>(review.copy)</span>
-                                </button>
-                            </div>
+                            <p class="cue-time">
+                                <span class="cue-number visually-hidden">
+                                    (number.to_string())
+                                </span>
+                                <bdi dir="ltr" data-cue-time=(true)>
+                                    (short_time(&cue.start))
+                                </bdi>
+                            </p>
                             <p
                                 class="cue-text"
                                 dir="auto"
@@ -328,6 +323,16 @@ async fn result(
                             >
                                 (cue.text.as_str())
                             </p>
+                            <button
+                                type="button"
+                                class="icon-button copy-cue"
+                                data-copy-cue=(true)
+                                aria-label=(review.copy_cue)
+                                title=(review.copy_cue)
+                                hidden=(true)
+                            >
+                                icon(data: icons::COPY, size: 16)
+                            </button>
                         </li>
                     }
                 </ol>
@@ -336,6 +341,8 @@ async fn result(
     })
 }
 
+/// A slim row above the cues: the timestamps switch, then the cue picker. The picker comes
+/// last, so Tab moves from it into the list.
 #[component]
 async fn reading_controls(locale: Locale, transcript: Arc<Transcript>) -> Result<impl View> {
     let text = &locale.text().review;
@@ -367,6 +374,34 @@ async fn reading_controls(locale: Locale, transcript: Arc<Transcript>) -> Result
     })
 }
 
+/// A cue's start time as a reader expects it, from the SRT form `HH:MM:SS,mmm`: `0:03`,
+/// `12:45` or `1:02:03`. The milliseconds stay in the SRT file and the cue picker.
+fn short_time(srt: &str) -> String {
+    let clock = srt.split_once(',').map_or(srt, |(clock, _)| clock);
+    let mut parts = clock
+        .split(':')
+        .map(|part| part.parse::<u64>().unwrap_or(0));
+    let (hours, minutes, seconds) = (
+        parts.next().unwrap_or(0),
+        parts.next().unwrap_or(0),
+        parts.next().unwrap_or(0),
+    );
+    if hours > 0 {
+        format!("{hours}:{minutes:02}:{seconds:02}")
+    } else {
+        format!("{minutes}:{seconds:02}")
+    }
+}
+
+/// The direction of text in a transcript's language.
+fn text_direction(language: &str) -> &'static str {
+    if matches!(language, "ar" | "fa" | "he" | "ps" | "ur" | "yi") {
+        "rtl"
+    } else {
+        "ltr"
+    }
+}
+
 /// Normally TXT is the cue text plus a newline per cue. SRT parsing can fold
 /// internal newlines, so retain the exact TXT only when it cannot be rebuilt.
 /// This avoids a second full transcript in ordinary result markup.
@@ -388,6 +423,14 @@ fn transcript_copy_override(transcript: &Transcript) -> Option<&str> {
 mod review_tests {
     use super::*;
     use crate::tools::transcription::Cue;
+
+    #[test]
+    fn cue_times_read_like_a_clock() {
+        assert_eq!(short_time("00:00:03,046"), "0:03");
+        assert_eq!(short_time("00:12:45,999"), "12:45");
+        assert_eq!(short_time("01:02:03,500"), "1:02:03");
+        assert_eq!(short_time("02:59:59,000"), "2:59:59");
+    }
 
     #[test]
     fn copy_preserves_txt_even_when_srt_cues_fold_lines() {

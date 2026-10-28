@@ -787,47 +787,6 @@ progress::-moz-progress-bar {
   color: var(--gold);
 }
 
-/* The transcript shows the SRT cues, each like a line of a printed page under its number and
-   time range. */
-
-.cues {
-  max-height: 36rem;
-  overflow-y: auto;
-  padding: 0.5rem 1.75rem;
-  border-radius: 1rem;
-  background: var(--paper);
-  box-shadow: inset 0 0 0 1px var(--line-soft);
-}
-
-.cue {
-  padding-block: 0.875rem;
-}
-
-.cue + .cue {
-  border-block-start: 1px solid var(--line-soft);
-}
-
-.cue-time {
-  color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: 0.8125rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.cue-number {
-  display: inline-block;
-  min-width: 2rem;
-  color: var(--gold-text);
-  font-weight: 600;
-}
-
-.cue-text {
-  margin-block-start: 0.25rem;
-  font-family: var(--font-transcript);
-  font-size: 1.3125rem;
-  line-height: 1.9;
-}
-
 .another {
   display: flex;
   justify-content: center;
@@ -949,14 +908,6 @@ progress::-moz-progress-bar {
 
   .job {
     padding: 1.25rem;
-  }
-
-  .cues {
-    padding-inline: 1rem;
-  }
-
-  .cue-text {
-    font-size: 1.1875rem;
   }
 
   .form-actions .button,
@@ -1729,7 +1680,8 @@ progress::-moz-progress-bar {
   background-origin: border-box;
 }
 
-/* Transcript */
+/* Transcript: a slim row (timestamps, cue picker) over a flat list of compact rows, each with
+   its start time, its text beside it and, at the end, its Copy. */
 
 .transcript-result {
   overflow-wrap: anywhere;
@@ -1739,96 +1691,116 @@ progress::-moz-progress-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: space-between;
+  gap: 0 1rem;
+  margin-block-end: -0.75rem;
+  padding-block-end: 0.25rem;
+  border-block-end: 1px solid var(--line-soft);
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.transcript-actions:empty {
+  display: none;
 }
 
 .timestamps-choice {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  min-block-size: 2.5rem;
-  padding-inline: 0.875rem 1rem;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--muted);
-  font-size: 0.9375rem;
+  gap: 0.375rem;
+  min-block-size: 2rem;
   cursor: pointer;
-}
-
-.timestamps-choice:hover {
-  border-color: var(--gold);
 }
 
 .cue-choice {
   display: flex;
   min-inline-size: 0;
-  max-inline-size: 15rem;
+  max-inline-size: 16rem;
 }
 
-/* Drawn like the other pills in every browser, with the chevron on the closing side. */
+/* A quiet picker: plain text with its chevron on the closing side. */
 .cue-choice select {
   inline-size: 100%;
   min-inline-size: 0;
-  min-block-size: 2.5rem;
-  padding-block: 0.375rem;
-  padding-inline: 1rem 2.25rem;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%235f5245'%3E%3Cpath fill-rule='evenodd' d='M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z'/%3E%3C/svg%3E") no-repeat right 0.875rem center / 1rem;
-  color: var(--text);
+  min-block-size: 2rem;
+  padding-block: 0.25rem;
+  padding-inline: 0.5rem 1.75rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%235f5245'%3E%3Cpath fill-rule='evenodd' d='M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z'/%3E%3C/svg%3E") no-repeat right 0.375rem center / 1rem;
+  color: var(--muted);
   font: inherit;
-  font-size: 0.9375rem;
   appearance: none;
   cursor: pointer;
 }
 
 [dir="rtl"] .cue-choice select {
-  background-position: left 0.875rem center;
+  background-position: left 0.375rem center;
 }
 
 .cue-choice select:hover {
-  border-color: var(--gold);
+  background-color: var(--well);
+  color: var(--text);
 }
 
-.transcript-result .cues {
+.cues {
+  max-block-size: 36rem;
+  overflow-y: auto;
   overscroll-behavior: contain;
   scroll-padding-block: 0.75rem;
+  padding-block: 0.5rem;
 }
 
-.transcript-result .cue-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  min-block-size: 2rem;
-}
-
-.transcript-result .copy-cue {
-  min-block-size: 2rem;
-  padding: 0.125rem 0.625rem;
-  font-size: 0.875rem;
-}
-
-.transcript-result .cue-time {
+/* The text wraps beside the time; only very large text moves it under the time. */
+.cue {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.375rem;
-  min-inline-size: 0;
+  align-items: baseline;
+  gap: 0 1rem;
+  padding-block: 0.25rem;
+  padding-inline: 0.5rem 0.25rem;
+  border-radius: 0.5rem;
 }
 
-.transcript-result .cue-text {
+/* Wide enough for the transcript's longest time; the server sets how many characters. */
+.cue-time {
+  flex: 0 0 calc(var(--time-chars, 7) * 1ch);
+  color: var(--faint);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Each line keeps its own direction but starts on the list's start edge, beside the time. */
+.cue-text {
+  flex: 1 1 6em;
+  min-inline-size: 0;
+  font-family: var(--font-transcript);
+  font-size: 1.3125rem;
+  line-height: 1.9;
   white-space: pre-wrap;
   unicode-bidi: plaintext;
   overflow-wrap: anywhere;
-  text-align: start;
+  text-align: match-parent;
+}
+
+.copy-cue {
+  align-self: flex-start;
+  margin-block-start: 0.25rem;
+  inline-size: 2rem;
+  block-size: 2rem;
 }
 
 .transcript-result.timestamps-hidden .cue-time {
-  visibility: hidden;
+  display: none;
 }
 
-/* With a pointer, a cue's copy button appears with the cue; touch screens always show it. */
+/* With a pointer, a cue's row lights up and shows its copy button; touch screens always show
+   the button. */
 @media (hover: hover) {
+  .cue:hover {
+    background: rgb(74 52 30 / 0.035);
+  }
+
   .cue:not(:hover, :focus-within) .copy-cue {
     opacity: 0;
   }
@@ -2166,30 +2138,22 @@ progress::-moz-progress-bar {
     margin-inline-start: calc(20px - 0.25rem);
   }
 
-  .transcript-result .cues {
-    padding-inline: 0.75rem;
-  }
-
-  .transcript-result .cue-number {
-    min-inline-size: 1.5rem;
-  }
-
-  .transcript-result .cue-time {
-    font-size: 0.75rem;
-  }
-
-  .transcript-result .copy-cue {
-    padding-inline: 0.5rem;
-  }
-
   .result-toolbar,
   .ocr-toolbar {
     justify-content: flex-start;
   }
 
-  .cue-choice {
-    flex: 1 1 100%;
-    max-inline-size: none;
+  .cue {
+    column-gap: 0.5rem;
+    padding-inline: 0.25rem 0;
+  }
+
+  .cue-time {
+    font-size: 0.8125rem;
+  }
+
+  .cue-text {
+    font-size: 1.1875rem;
   }
 
   .search-options {

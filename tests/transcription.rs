@@ -93,16 +93,7 @@ async fn transcribe_fixture(
             assert!(body.lines().all(|line| line == ARABIC_TEXT), "{body}");
         } else {
             assert_subtitles(&body)?;
-            // The page lists the same cues, each with its number and time range.
-            for (number, cue) in (1..).zip(body.trim().split("\n\n")) {
-                let mut lines = cue.lines().skip(1);
-                let times = lines.next().context("missing cue times")?;
-                let shown = format!(
-                    "<span class=\"cue-number\">{number}</span><bdi dir=\"ltr\" data-cue-time=\"\">{}</bdi>",
-                    times.replace(" --> ", " → ")
-                );
-                assert!(page.contains(&shown), "missing {shown:?}: {page}");
-            }
+            assert_cues_shown(&page, &body)?;
         }
     }
     let requests = app
@@ -157,6 +148,34 @@ fn assert_subtitles(body: &str) -> anyhow::Result<()> {
         previous_end = end;
     }
     Ok(())
+}
+
+/// The page lists the same cues as `srt`, each with its number and short start time; the cue
+/// picker keeps each exact SRT start time.
+fn assert_cues_shown(page: &str, srt: &str) -> anyhow::Result<()> {
+    for (number, cue) in (1..).zip(srt.trim().split("\n\n")) {
+        let timing = cue.lines().nth(1).context("missing cue times")?;
+        let (start, _) = timing.split_once(" --> ").context("invalid SRT timing")?;
+        let shown = format!(
+            "<span class=\"cue-number visually-hidden\">{number}</span><bdi dir=\"ltr\" data-cue-time=\"\">{}</bdi>",
+            short_time(start)?
+        );
+        assert!(page.contains(&shown), "missing {shown:?}: {page}");
+        let option = format!("المقطع {number} عند \u{2066}{start}\u{2069}");
+        assert!(page.contains(&option), "missing {option:?}: {page}");
+    }
+    Ok(())
+}
+
+/// An SRT start time as the transcript shows it: `0:03`, `12:45` or `1:02:03`.
+fn short_time(timestamp: &str) -> anyhow::Result<String> {
+    let seconds = timestamp_millis(timestamp)? / 1000;
+    let (hours, minutes, seconds) = (seconds / 3600, seconds / 60 % 60, seconds % 60);
+    Ok(if hours > 0 {
+        format!("{hours}:{minutes:02}:{seconds:02}")
+    } else {
+        format!("{minutes}:{seconds:02}")
+    })
 }
 
 fn timestamp_millis(timestamp: &str) -> anyhow::Result<u64> {
