@@ -85,6 +85,11 @@ for (const locale of ["ar", "en"]) {
       }));
       expect(geometry.content).toBeLessThanOrEqual(geometry.viewport);
       if (width === 1280) {
+        // The header keeps one line: the name, Copy all text and Download share a row.
+        const rows = await page.locator(".result-heading").evaluate((heading) => [...heading.querySelectorAll(".result-name, .result-actions > *")]
+          .map((element) => Math.round(element.getBoundingClientRect().top + element.getBoundingClientRect().height / 2)));
+        expect(Math.max(...rows) - Math.min(...rows)).toBeLessThanOrEqual(2);
+        expect(await page.locator("[data-copy-all]").evaluate((button) => button.offsetHeight)).toBeLessThan(48);
         // One toolbar row: the reading controls at the start, the compact search at the end.
         const toolbar = await page.evaluate(() => {
           const box = (selector) => document.querySelector(selector).getBoundingClientRect();

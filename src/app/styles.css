@@ -1596,7 +1596,8 @@ progress::-moz-progress-bar {
   grid-area: name;
 }
 
-/* Copy all text, a quiet button, then Download, the result's one filled button. */
+/* Copy all text, a quiet button, then Download, the result's one filled button. They keep one
+   line beside the name on wide screens. */
 .result-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1610,6 +1611,16 @@ progress::-moz-progress-bar {
 .result-actions .button {
   min-inline-size: 0;
   overflow-wrap: anywhere;
+}
+
+@media (min-width: 40rem) {
+  .result-actions {
+    flex-wrap: nowrap;
+  }
+
+  .result-actions .button {
+    white-space: nowrap;
+  }
 }
 
 /* Several downloads: Download opens a small menu under it, aligned with its end edge. */
