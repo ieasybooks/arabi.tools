@@ -176,6 +176,7 @@ pub async fn search_toolbar(locale: Locale, label: &'static str) -> Result<impl 
             role="search"
             aria-label=(label)
             data-match-count=(text.match_count)
+            data-match-short=(text.match_short)
             data-no-matches=(text.no_matches)
             data-searching=(text.searching)
             data-unavailable=(text.search_unavailable)
@@ -226,7 +227,8 @@ pub async fn search_toolbar(locale: Locale, label: &'static str) -> Result<impl 
                     </button>
                 </span>
             </div>
-            // Shown only while searching, with the active match's cue or page at the end.
+            // Shown only while searching. The active match's cue or page is announced with the
+            // count, out of sight: the cue picker or the page navigator already shows it.
             <div class="search-options">
                 <label>
                     <input type="checkbox" data-search-marks=(true) checked=(true)>

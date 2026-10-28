@@ -35,7 +35,7 @@ for (const locale of ["ar", "en"]) {
       page.on("request", (request) => searchRequests.push(request.url()));
       await field.fill("كتاب");
       const expected = await page.evaluate((texts) => arabiTools.search.find(texts, "كتاب", {}).length, texts);
-      await expect.poll(() => countText(page)).toBe(locale === "ar" ? `المطابقة 1 من ${expected}` : `Match 1 of ${expected}`);
+      await expect.poll(() => countText(page)).toBe(`1/${expected}`);
       await field.press("Shift+Enter");
       await expect(field).toBeFocused();
       await expect(page.locator("[data-cue-select]")).toHaveValue(String(texts.length));
@@ -168,7 +168,7 @@ test("live roots initialize once, release highlights and ignore late clipboard r
   await page.evaluate(() => document.querySelector("main").append(window.newRoot));
   await expect(page.locator('[data-result="transcript"]')).toHaveAttribute("data-transcript-ready", "true");
   await page.getByRole("searchbox").fill("كتاب");
-  await expect.poll(async () => (await countText(page)).startsWith("Match 1 of")).toBe(true);
+  await expect.poll(async () => (await countText(page)).startsWith("1/")).toBe(true);
   await page.evaluate(() => {
     Object.defineProperty(navigator, "clipboard", { value: { writeText: () => new Promise((resolve) => { window.finishCopy = resolve; }) } });
   });
@@ -180,7 +180,7 @@ test("live roots initialize once, release highlights and ignore late clipboard r
   await page.evaluate(() => document.querySelector("main").append(window.originalRoot));
   await expect(page.locator('[data-result="transcript"]')).toHaveAttribute("data-transcript-ready", "true");
   await page.getByRole("searchbox").fill("كتاب");
-  await expect.poll(async () => (await countText(page)).startsWith("Match 1 of")).toBe(true);
+  await expect.poll(async () => (await countText(page)).startsWith("1/")).toBe(true);
 });
 
 for (const engine of ["chromium", "webkit"]) {
@@ -201,7 +201,7 @@ for (const engine of ["chromium", "webkit"]) {
           return { text: element.textContent, rects: [...range.getClientRects()].map((rect) => ({ x: rect.x - box.x, y: rect.y - box.y, width: rect.width, height: rect.height })) };
         }));
         await tab.getByRole("searchbox").fill("تاب");
-        await expect.poll(async () => (await countText(tab)).startsWith("Match 1 of")).toBe(true);
+        await expect.poll(async () => (await countText(tab)).startsWith("1/")).toBe(true);
         const after = await tab.locator(".cue-text").allTextContents();
         expect(after).toEqual(before.map((value) => value.text));
         const highlightedRects = await tab.locator(".cue-text").evaluateAll((elements) => elements.map((element) => {
@@ -317,7 +317,7 @@ test("three-hour transcript keeps all cues searchable, selectable and copyable",
   await page.getByRole("searchbox").focus();
   const beforeScroll = await page.evaluate(() => window.scrollY);
   await page.getByRole("searchbox").fill("نهايةالمحاضرة");
-  await expect.poll(() => countText(page)).toBe("Match 1 of 1");
+  await expect.poll(() => countText(page)).toBe("1/1");
   await expect(page.locator("[data-cue-select]")).toHaveValue("2160");
   const revealed = await page.locator("[data-cue]").last().evaluate((cue) => {
     const box = cue.getBoundingClientRect();

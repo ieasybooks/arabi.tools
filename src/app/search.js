@@ -196,13 +196,16 @@
       }, 250);
     }
 
+    // The field shows the position in short, like a browser's find bar ("1/11", one left-to-right
+    // run in both languages); the full sentence and the match's cue or page are announced.
     function showPosition() {
       const match = matches[active];
-      count.textContent = toolbar.dataset.matchCount
-        .replace("{current}", `\u2068${active + 1}\u2069`)
-        .replace("{total}", `\u2068${matches.length}\u2069`);
+      const position = (template, isolate) => template
+        .replace("{current}", isolate(active + 1))
+        .replace("{total}", isolate(matches.length));
+      count.textContent = `\u2066${position(toolbar.dataset.matchShort, String)}\u2069`;
       label.textContent = adapter.label(match.segment);
-      announce(`${count.textContent} — ${label.textContent}`);
+      announce(`${position(toolbar.dataset.matchCount, (number) => `\u2068${number}\u2069`)} — ${label.textContent}`);
     }
 
     async function reveal() {

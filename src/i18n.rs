@@ -369,7 +369,10 @@ pub struct ReviewText {
     pub search_text: &'static str,
     pub ignore_marks: &'static str,
     pub ignore_tatweel: &'static str,
+    /// The announced position of the active match.
     pub match_count: &'static str,
+    /// The same position as the search field shows it, in short.
+    pub match_short: &'static str,
     pub no_matches: &'static str,
     pub previous_match: &'static str,
     pub next_match: &'static str,
@@ -670,6 +673,7 @@ static AR: Text = Text {
         ignore_marks: "تجاهل الحركات الشائعة",
         ignore_tatweel: "تجاهل التطويل",
         match_count: "المطابقة {current} من {total}",
+        match_short: "{current}/{total}",
         no_matches: "لم يُعثر على مطابقات",
         previous_match: "المطابقة السابقة",
         next_match: "المطابقة التالية",
@@ -919,6 +923,7 @@ static EN: Text = Text {
         ignore_marks: "Ignore common diacritics",
         ignore_tatweel: "Ignore tatweel",
         match_count: "Match {current} of {total}",
+        match_short: "{current}/{total}",
         no_matches: "No matches found",
         previous_match: "Previous match",
         next_match: "Next match",

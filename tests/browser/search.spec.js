@@ -1,5 +1,5 @@
 import { chromium, expect, test, webkit } from "@playwright/test";
-import { completedTranscript, openTranscript, countText } from "./review-helpers.js";
+import { completedTranscript, openTranscript, countText, unisolate } from "./review-helpers.js";
 
 let jobPath;
 test.beforeAll(async ({ browser }) => { jobPath = await completedTranscript(browser); });
@@ -83,7 +83,9 @@ for (const fallback of [false, true]) {
     });
     const field = page.getByRole("searchbox");
     await field.fill("كتاب");
-    await expect.poll(() => countText(page)).toBe("Match 1 of 3");
+    // The field shows the position in short; the full sentence and the page are announced.
+    await expect.poll(() => countText(page)).toBe("1/3");
+    await expect.poll(async () => unisolate(await page.locator("[data-search-status]").textContent())).toBe("Match 1 of 3 — Page 1");
     await field.press("Shift+Enter");
     await expect(field).toBeFocused();
     await expect(page.locator("#adapter-text")).toHaveText("آخر كتاب");
@@ -92,7 +94,7 @@ for (const fallback of [false, true]) {
     const next = page.getByRole("button", { name: "Next match" });
     await next.click();
     await expect(next).toBeFocused();
-    await expect.poll(() => countText(page)).toBe("Match 1 of 3");
+    await expect.poll(() => countText(page)).toBe("1/3");
     await field.fill("No text");
     await expect(page.locator("[data-search-count]")).toHaveText("No matches found");
     await expect(next).toBeDisabled();
@@ -123,7 +125,7 @@ test("stale searches and delayed show calls cannot restore old highlights", asyn
   });
   await page.getByRole("searchbox").fill("كتاب");
   await page.getByRole("searchbox").fill("عالم");
-  await expect.poll(() => countText(page)).toBe("Match 1 of 2500");
+  await expect.poll(() => countText(page)).toBe("1/2500");
   await page.getByRole("button", { name: "Clear search" }).click();
   await page.evaluate(() => { window.releases.forEach((release) => release()); });
   await expect(page.locator("[data-search-count]")).toBeEmpty();
