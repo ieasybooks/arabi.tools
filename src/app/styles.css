@@ -1420,7 +1420,7 @@ progress::-moz-progress-bar {
   /* Level with the tabs, so showing or hiding them moves nothing: the header row, and in its
      place at the start, the previous-result line. */
   [data-workspace="diacritization"] .workspace-review > .previous-result,
-  .diacritize-output-head {
+  [data-workspace="diacritization"] .workspace-review .diacritize-output-head {
     position: absolute;
     inset-block-start: 0;
     inset-inline: var(--dz-pad);
@@ -1434,7 +1434,7 @@ progress::-moz-progress-bar {
     inset-inline-end: auto;
   }
 
-  .diacritize-output-head {
+  [data-workspace="diacritization"] .workspace-review .diacritize-output-head {
     flex-wrap: nowrap;
     min-block-size: 0;
   }
@@ -1702,8 +1702,8 @@ progress::-moz-progress-bar {
   display: none;
 }
 
-/* The job's own page is for an unfinished job only. */
-[data-workspace]:is([data-phase="completed"], [data-phase="failed"], [data-phase="cancelled"], [data-phase="missing"]) .workspace-recovery {
+/* Retire the recovery link after a job ends, without taking away keyboard focus. */
+[data-workspace]:is([data-phase="completed"], [data-phase="failed"], [data-phase="cancelled"], [data-phase="missing"]) .workspace-recovery:not(:focus) {
   display: none;
 }
 
@@ -2383,7 +2383,8 @@ progress::-moz-progress-bar {
 }
 
 .ocr-source-status,
-.ocr-no-text {
+.ocr-no-text,
+.ocr-page h3 {
   color: var(--muted);
   font-size: 0.9375rem;
 }
@@ -2481,6 +2482,15 @@ progress::-moz-progress-bar {
   margin-block-start: 1.5rem;
 }
 
+.ocr-page h3 {
+  font-family: var(--font-body);
+  font-weight: 500;
+}
+
+.ocr-page h3:not(.visually-hidden) + .ocr-page-text {
+  margin-block-start: 0.5rem;
+}
+
 .ocr-page-text {
   font-family: var(--font-transcript);
   font-size: 1.125rem;
@@ -2551,7 +2561,7 @@ progress::-moz-progress-bar {
   }
 
   /* The view switch already names the single visible pane. */
-  .ocr-panel-title {
+  .ocr-review[data-enhanced] .ocr-panel-title {
     display: none;
   }
 

@@ -350,9 +350,7 @@ async fn text_panel(locale: Locale, document: Arc<Document>) -> Result<impl View
                 >
                     for (number, content) in (1..).zip(&document.pages) {
                         <li class="ocr-page">
-                            <h3 class="visually-hidden">
-                                (locale.page_number(number))
-                            </h3>
+                            <h3>(locale.page_number(number))</h3>
                             <p class="ocr-page-text" data-ocr-page-text="" dir="auto">
                                 (content.as_str())
                             </p>
