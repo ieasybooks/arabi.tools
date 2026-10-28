@@ -33,17 +33,30 @@ pub(crate) async fn bridge(job: Signal<String>) -> Result<impl View> {
     })
 }
 
+/// The chosen file, which takes the drop zone's place: its name, size and type, then Replace
+/// and Remove. The script fills it in; it stays hidden until a file is chosen.
 #[component]
-pub(crate) async fn file_actions(locale: crate::i18n::Locale) -> Result<impl View> {
+pub(crate) async fn file_row(locale: crate::i18n::Locale) -> Result<impl View> {
     let text = &locale.text().workspace;
     Ok(view! {
-        <div class="file-actions">
-            <p class="file-size hint" dir="auto"></p>
-            <button type="button" class="button secondary compact replace-file">
+        <div class="file-row">
+            <span class="file-icon">
+                icon(data: crate::icons::TRANSCRIPT, size: 20)
+            </span>
+            <span class="file-details">
+                <span class="file-name" dir="auto"></span>
+                <span class="file-size" dir="auto"></span>
+            </span>
+            <button type="button" class="button ghost compact replace-file">
                 (text.replace_file)
             </button>
-            <button type="button" class="button ghost compact remove-file">
-                (text.remove_file)
+            <button
+                type="button"
+                class="icon-button remove-file"
+                aria-label=(text.remove_file)
+                title=(text.remove_file)
+            >
+                icon(data: crate::icons::CLEAR, size: 16)
             </button>
         </div>
     })

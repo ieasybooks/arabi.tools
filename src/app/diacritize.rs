@@ -215,7 +215,6 @@ async fn input_form(
             data-cancelling=(text.cancelling)
             data-cancelled=(locale.text().cancelled_user)
             data-cancel-failed=(text.cancel_failed)
-            data-no-file=(text.no_file)
         >
             input_choices(locale: locale, model: model)
             text_input(locale: locale, source: source)
@@ -298,9 +297,8 @@ async fn document_input(locale: Locale) -> Result<impl View> {
                 <span class="dropzone-icon">icon(data: icons::UPLOAD, size: 24)</span>
                 <p class="dropzone-title">(text.choose_file)</p>
                 <p class="dropzone-hint">(locale.diacritization_limits())</p>
-                <p class="file-name" dir="auto">(text.no_file)</p>
+                crate::workspace::file_row(locale: locale)
             </div>
-            crate::workspace::file_actions(locale: locale)
             <div class="form-actions">
                 <button type="submit" class="button primary" disabled=(true)>
                     (text.submit_document)

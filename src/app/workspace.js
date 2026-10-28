@@ -37,7 +37,7 @@
     const remove = form.querySelector('.remove-file');
     const update = () => {
       const file = input.files[0];
-      form.querySelector('.file-name').textContent = file?.name || form.dataset.noFile;
+      form.querySelector('.file-name').textContent = file?.name || '';
       const size = form.querySelector('.file-size');
       if (size) {
         const divisor = !file || file.size < 1000 ? 1 : file.size < 1_000_000 ? 1000 : 1_000_000;
@@ -55,7 +55,8 @@
       input.value = '';
       update();
       changed();
-      replace?.focus({ preventScroll: true });
+      // The file row is gone; the drop zone takes its place and the focus.
+      input.focus({ preventScroll: true });
     }, { signal });
     update();
     return update;

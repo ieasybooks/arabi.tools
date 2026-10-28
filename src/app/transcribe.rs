@@ -90,7 +90,6 @@ async fn upload_form(cx: &Cx, locale: Locale) -> Result<impl View> {
                 data-wrong-type=(text.wrong_type)
                 data-too-large=(locale.audio_too_large())
                 data-failed=(text.upload_failed)
-                data-no-file=(text.no_file)
                 data-uploading=(text.uploading)
                 data-reserving=(workspace.reserving)
                 data-validating=(workspace.validating)
@@ -113,9 +112,10 @@ async fn upload_form(cx: &Cx, locale: Locale) -> Result<impl View> {
                     </span>
                     <p class="dropzone-title">(text.choose_file)</p>
                     <p class="dropzone-hint">(locale.upload_limits())</p>
-                    <p class="file-name" dir="auto">(text.no_file)</p>
+                    crate::workspace::file_row(locale: locale)
                 </div>
-                crate::workspace::file_actions(locale: locale)
+                <p id="upload-error" class="error" role="alert" hidden=(true)></p>
+                <a class="return-to-job" hidden=(true)>(text.back_to_job)</a>
                 <div class="form-actions">
                     <button type="submit" class="button primary" disabled=(true)>
                         (text.submit)
@@ -128,8 +128,6 @@ async fn upload_form(cx: &Cx, locale: Locale) -> Result<impl View> {
                     <p class="server-detail hint"></p>
                     crate::workspace::progress_links(locale: locale)
                 </div>
-                <p id="upload-error" class="error" role="alert" hidden=(true)></p>
-                <a class="return-to-job" hidden=(true)>(text.back_to_job)</a>
             </form>
             crate::workspace::note(text: locale.privacy_note(), privacy: true)
             crate::workspace::bridge(job: job.clone())
