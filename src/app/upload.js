@@ -38,17 +38,16 @@
       if (job) back.href = job;
       input.setAttribute('aria-invalid', String(invalid));
     };
-    // Result first: while the workspace holds the result of the file still chosen, the input
-    // folds into one slim bar and its button steps down to secondary. Choosing another file, or
-    // removing it, unfolds the input. The button stays the same element, so it keeps its focus.
-    // Folding above the visitor's view would move the page, so then it waits until the input is
-    // back in view.
+    // A chosen file is one bar with the run button at its end. Result first: while the workspace
+    // holds the result of the file still chosen, the bar folds into the result's card as its top
+    // row and its button steps down to secondary. Choosing another file, or removing it, unfolds
+    // it. The button stays the same element, so it keeps its focus. Folding above the visitor's
+    // view would move the page, so then it waits until the input is back in view.
     let resultIsCurrent = false;
     const fold = () => {
       form.toggleAttribute('data-collapsed', resultIsCurrent);
       button.classList.toggle('primary', !resultIsCurrent);
       button.classList.toggle('secondary', resultIsCurrent);
-      button.classList.toggle('compact', resultIsCurrent);
     };
     const foldInView = () => {
       if (form.hasAttribute('data-collapsed') !== resultIsCurrent && form.getBoundingClientRect().top >= 0) fold();
@@ -59,6 +58,8 @@
       fold();
       clearError();
       if (problem) showError(problem, null, true);
+      // Without a file the run button is not shown; the drop zone takes its focus.
+      if (!input.files.length && document.activeElement === button) input.focus({ preventScroll: true });
     }, lifetime.signal);
     const transition = (phase, message = '', percent) => {
       state = { ...state, phase };

@@ -31,20 +31,23 @@ pub enum CopyAll {
     Field(&'static str),
 }
 
-/// A result's header on the transcript and OCR pages: its name, then its actions.
+/// A result's header: its name, then its actions. Beside the workspace's input bar, which already
+/// names the file, it has no name, only the actions at its end.
 #[component]
 pub async fn result_header(
     locale: Locale,
-    name: String,
+    name: Option<String>,
     copy: Option<CopyAll>,
     downloads: Vec<DownloadLink>,
 ) -> Result<impl View> {
     Ok(view! {
         <div class="result-heading">
-            <p class="result-name">
-                icon(data: icons::DOCUMENT, size: 20)
-                <span dir="auto">(name)</span>
-            </p>
+            if let Some(name) = name {
+                <p class="result-name">
+                    icon(data: icons::DOCUMENT, size: 20)
+                    <span dir="auto">(name)</span>
+                </p>
+            }
             result_actions(locale: locale, copy: copy, downloads: downloads)
         </div>
     })

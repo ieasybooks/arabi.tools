@@ -243,7 +243,7 @@ async fn job_status(
                 </p>
             }
             if let Some(document) = document {
-                result(locale: locale, id: id, document: document)
+                result(locale: locale, id: id, document: document, embedded: embedded)
             } else if !embedded {
                 // The job's own page has no input to carry the line before a result.
                 crate::workspace::privacy_note(text: text.privacy.to_owned())
@@ -267,9 +267,16 @@ async fn job_status(
 }
 
 /// A finished job's downloads and locally enhanced document review, with the page's privacy line
-/// at its foot.
+/// at its foot. In the workspace (`embedded`), the input bar above names the file, so the header
+/// holds only the actions.
 #[component]
-async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> Result<impl View> {
+async fn result(
+    cx: &Cx,
+    locale: Locale,
+    id: JobId,
+    document: Arc<Document>,
+    embedded: bool,
+) -> Result<impl View> {
     let text = &locale.text().ocr;
     let review = &text.review;
     let labels = serde_json::to_string(review)?;
@@ -310,7 +317,7 @@ async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> 
         >
             result_controls::result_header(
                 locale: locale,
-                name: document.name.clone(),
+                name: (!embedded).then(|| document.name.clone()),
                 copy: Some(CopyAll::Ocr),
                 downloads: downloads
             )

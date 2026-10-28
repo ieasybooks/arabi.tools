@@ -107,9 +107,14 @@ for (const tool of ['transcribe', 'ocr']) {
     const resultNote = page.locator('.workspace-result .privacy-note');
     const file = tool === 'transcribe' ? { name: 'speech.mp3', mimeType: 'audio/mpeg', buffer: await readFile(speech) }
       : { name: 'page.png', mimeType: 'image/png', buffer: image };
+    // Before a file is chosen the drop zone is the whole input; a file makes it one bar with the
+    // filled run button at its end.
+    await expect(submit).toBeHidden();
     await input.setInputFiles(file);
     await expect(inputNote).toBeVisible();
+    await expect(submit).toBeVisible();
     await expect(submit).toHaveClass(/\bprimary\b/);
+    expect(await form.evaluate(node => node.getBoundingClientRect().height)).toBeLessThan(120);
     await submit.click();
     await expect(page.locator('[data-workspace]')).toHaveAttribute('data-phase', 'completed');
     // Result first: one bar holding the file and a secondary run button, which keeps its focus.
@@ -119,6 +124,12 @@ for (const tool of ['transcribe', 'ocr']) {
     await expect(submit).toBeFocused();
     await expect(page.locator('.file-name')).toHaveText(file.name);
     expect(await form.evaluate(node => node.getBoundingClientRect().height)).toBeLessThan(120);
+    // The bar and its result read as one card: the result continues right under the bar, and its
+    // header keeps only Copy and Download, as the bar already names the file.
+    expect(await page.evaluate(() => Math.round(document.querySelector('.workspace-review').getBoundingClientRect().top
+      - document.querySelector('#upload-form').getBoundingClientRect().bottom))).toBe(0);
+    await expect(page.locator('.workspace-result .result-name')).toHaveCount(0);
+    await expect(page.locator('.workspace-result .result-actions')).toBeVisible();
     // The privacy line moves to the foot of the result; the header has no retention line.
     await expect(inputNote).toBeHidden();
     await expect(resultNote).toBeVisible();
@@ -159,11 +170,13 @@ for (const tool of ['transcribe', 'ocr']) {
     await expect(form).not.toHaveAttribute('data-collapsed');
     await expect(submit).toHaveClass(/\bprimary\b/);
     await expect(submit).toBeDisabled();
-    // A direct job page has the one privacy line too, at the foot of its result.
+    // A direct job page has the one privacy line too, at the foot of its result, and with no bar
+    // above, its header names the result.
     const job = await page.locator('.workspace-recovery').getAttribute('href');
     await page.goto(job);
     await expect(page.locator('.privacy-note')).toHaveCount(1);
     await expect(page.locator('[data-result] .privacy-note')).toBeVisible();
+    await expect(page.locator('[data-result] .result-name')).toHaveText(`other-${file.name}`.replace(/\.[^.]+$/, ''));
   });
 }
 

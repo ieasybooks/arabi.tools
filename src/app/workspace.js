@@ -51,7 +51,10 @@
     const remove = form.querySelector('.remove-file');
     const update = () => {
       const file = input.files[0];
-      form.querySelector('.file-name').textContent = file?.name || '';
+      const name = form.querySelector('.file-name');
+      name.textContent = file?.name || '';
+      // A long name is cut short on its one line; the whole of it shows on hover.
+      name.title = file?.name || '';
       const size = form.querySelector('.file-size');
       if (size) {
         const divisor = !file || file.size < 1000 ? 1 : file.size < 1_000_000 ? 1000 : 1_000_000;
