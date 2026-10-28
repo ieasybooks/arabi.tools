@@ -584,9 +584,10 @@ svg {
   font-size: 0.9375rem;
 }
 
+/* The button submits the form above it, so it ends where the form does. */
 .form-actions {
   display: flex;
-  justify-content: center;
+  justify-content: flex-end;
 }
 
 /* Buttons: one primary per page; the rest are secondary. */
