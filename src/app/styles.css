@@ -549,11 +549,13 @@ svg {
   display: none;
 }
 
-/* One line at every width: the icon, the name with its size under it, then Remove. */
+/* One line, phones included: the icon, the name with its size under it, then Remove. Only very
+   large text wraps it, with Remove kept at the end. */
 .file-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.25rem 0.75rem;
   min-inline-size: 0;
 }
 
@@ -565,7 +567,7 @@ svg {
 /* Each line keeps its own direction but starts at the page's start edge. */
 .file-details {
   display: flex;
-  flex: 1 1 0;
+  flex: 1 1 6rem;
   flex-direction: column;
   align-items: flex-start;
   min-inline-size: 0;
@@ -589,6 +591,7 @@ svg {
 .file-row > button {
   position: relative;
   z-index: 1;
+  margin-inline-start: auto;
 }
 
 /* A file error sits right under the file and outlines it. */
