@@ -1474,14 +1474,6 @@ progress::-moz-progress-bar {
   outline-offset: -2px;
 }
 
-.result-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem 1.5rem;
-}
-
 .copy-status {
   color: var(--muted);
   font-size: 0.9375rem;
@@ -1812,7 +1804,8 @@ progress::-moz-progress-bar {
   display: none;
 }
 
-/* OCR: the source and its text side by side, each under a header with its own controls. */
+/* OCR: the find bar, then one viewer toolbar, then the source and its text side by side. The
+   source is a page on a flat well, as in a file preview; the text sits on the card. */
 
 .ocr-review {
   min-inline-size: 0;
@@ -1820,8 +1813,11 @@ progress::-moz-progress-bar {
 
 .ocr-search {
   display: flex;
-  flex: 1 1 20rem;
   min-inline-size: 0;
+}
+
+.ocr-search > .result-search {
+  flex: 1;
 }
 
 .ocr-toolbar {
@@ -1830,13 +1826,6 @@ progress::-moz-progress-bar {
   align-items: center;
   gap: 0.5rem 1rem;
   min-inline-size: 0;
-}
-
-@media (min-width: 40rem) {
-  .ocr-page-navigation {
-    padding-inline-start: 1rem;
-    border-inline-start: 1px solid var(--line);
-  }
 }
 
 .ocr-toolbar .error {
@@ -1856,12 +1845,12 @@ progress::-moz-progress-bar {
 }
 
 .ocr-page-field input {
-  inline-size: 3.75rem;
-  min-block-size: 2.5rem;
+  inline-size: 3.25rem;
+  min-block-size: 2.25rem;
   padding: 0.25rem;
   border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--paper);
+  border-radius: 0.5rem;
+  background: var(--surface);
   color: var(--text);
   font: inherit;
   font-variant-numeric: tabular-nums;
@@ -1879,34 +1868,7 @@ progress::-moz-progress-bar {
   outline-color: var(--danger);
 }
 
-.ocr-panels {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1.5rem;
-}
-
-.ocr-source-panel,
-.ocr-text-panel,
-.ocr-source-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  min-inline-size: 0;
-}
-
-.panel-heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 1rem;
-  min-block-size: 2.5rem;
-}
-
-.panel-heading h2 {
-  font-size: 1.125rem;
-}
-
+/* Fit and zoom act on the source, so they close the toolbar on its far side. */
 .ocr-zoom,
 .zoom-steps,
 .ocr-copy-actions {
@@ -1918,6 +1880,7 @@ progress::-moz-progress-bar {
 
 .ocr-zoom {
   gap: 0.5rem;
+  margin-inline-start: auto;
 }
 
 /* A pair of exclusive choices: the chosen one is raised out of the well. */
@@ -1951,11 +1914,66 @@ progress::-moz-progress-bar {
   text-align: center;
 }
 
+.ocr-panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5rem;
+}
+
+.ocr-source-panel,
+.ocr-text-panel,
+.ocr-source-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-inline-size: 0;
+}
+
+/* The well. Without a preview it holds the explanation and the file picker. */
+.ocr-source-panel {
+  border-radius: var(--radius-control);
+  background: var(--well);
+}
+
+.ocr-source-panel:has(> .ocr-source-viewport[hidden]) {
+  padding: 1.25rem;
+}
+
+.panel-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  min-block-size: 2.5rem;
+}
+
+.panel-heading h2 {
+  font-size: 1.125rem;
+}
+
+/* A quiet button ends where the text does. */
+.panel-heading .ocr-copy-actions {
+  margin-inline-end: -0.75rem;
+}
+
 .ocr-source-status,
-.ocr-no-text,
-.ocr-page h3 {
+.ocr-no-text {
   color: var(--muted);
   font-size: 0.9375rem;
+}
+
+/* Where the preview came from matters only when there is none. */
+.ocr-review[data-source-attached] .ocr-source-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 .ocr-source-picker > label {
@@ -2001,17 +2019,12 @@ progress::-moz-progress-bar {
   align-self: flex-start;
 }
 
-.ocr-source-viewport,
-.ocr-text-viewport {
-  min-inline-size: 0;
-  block-size: clamp(22rem, 65vh, 45rem);
-  padding: 1rem;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-control);
-  background: var(--paper);
-}
-
+/* Side by side, the source fills the height its text pane sets. */
 .ocr-source-viewport {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  min-block-size: 0;
+  padding: 1.25rem;
   direction: ltr;
   overflow: auto;
 }
@@ -2019,9 +2032,14 @@ progress::-moz-progress-bar {
 .ocr-source-viewport :is(canvas, img) {
   display: block;
   max-inline-size: none;
+  margin-inline: auto;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(43 33 25 / 0.12), 0 4px 16px rgb(43 33 25 / 0.12);
 }
 
 .ocr-text-viewport {
+  min-inline-size: 0;
+  block-size: clamp(22rem, 65vh, 45rem);
   overflow-y: auto;
   overflow-wrap: anywhere;
 }
@@ -2030,13 +2048,7 @@ progress::-moz-progress-bar {
   margin-block-start: 1.5rem;
 }
 
-.ocr-page h3 {
-  font-family: var(--font-body);
-  font-weight: 500;
-}
-
 .ocr-page-text {
-  margin-block-start: 0.5rem;
   font-family: var(--font-transcript);
   font-size: 1.3125rem;
   line-height: 2;
@@ -2046,11 +2058,15 @@ progress::-moz-progress-bar {
   text-align: start;
 }
 
+.ocr-no-text {
+  margin-block-start: 0.5rem;
+}
+
 .ocr-empty-document {
   color: var(--muted);
 }
 
-/* Narrow screens show one view at a time, chosen beside the page navigator. */
+/* Narrow screens show one view at a time, chosen at the start of the toolbar. */
 .ocr-view-choice {
   display: none;
   margin: 0;
@@ -2088,9 +2104,18 @@ progress::-moz-progress-bar {
     display: inline-flex;
   }
 
-  .ocr-review[data-view="text"] .ocr-source-panel,
+  .ocr-review[data-view="text"] :is(.ocr-source-panel, .ocr-zoom),
   .ocr-review[data-view="source"] .ocr-text-panel {
     display: none;
+  }
+
+  .ocr-zoom {
+    margin-inline-start: 0;
+  }
+
+  .ocr-source-viewport {
+    flex: none;
+    block-size: clamp(22rem, 65vh, 45rem);
   }
 
   .ocr-text-viewport {
@@ -2138,9 +2163,17 @@ progress::-moz-progress-bar {
     margin-inline-start: calc(20px - 0.25rem);
   }
 
-  .result-toolbar,
+  /* The view switch and the page navigator share the toolbar's first line. */
   .ocr-toolbar {
-    justify-content: flex-start;
+    column-gap: 0.5rem;
+  }
+
+  .ocr-view-choice label {
+    padding-inline: 0.75rem;
+  }
+
+  .ocr-page-navigation .icon-button {
+    inline-size: 2rem;
   }
 
   .cue {

@@ -314,16 +314,10 @@ async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> 
             if all_blank {
                 <p class="ocr-empty-document">(review.all_blank)</p>
             }
-            <div class="result-toolbar">
-                <div class="ocr-search" data-ocr-search-slot="">
-                    result_controls::search_toolbar(locale: locale)
-                </div>
-                review_controls(
-                    locale: locale,
-                    id: id.clone(),
-                    pages: document.pages.len()
-                )
+            <div class="ocr-search" data-ocr-search-slot="">
+                result_controls::search_toolbar(locale: locale)
             </div>
+            review_controls(locale: locale, id: id.clone(), pages: document.pages.len())
             <div class="ocr-panels">
                 source_panel(locale: locale, id: id.clone())
                 text_panel(locale: locale, document: document.clone())
@@ -367,7 +361,9 @@ async fn text_panel(locale: Locale, document: Arc<Document>) -> Result<impl View
                 >
                     for (number, content) in (1..).zip(&document.pages) {
                         <li class="ocr-page">
-                            <h3>(locale.page_number(number))</h3>
+                            <h3 class="visually-hidden">
+                                (locale.page_number(number))
+                            </h3>
                             <p class="ocr-page-text" data-ocr-page-text="" dir="auto">
                                 (content.as_str())
                             </p>
@@ -382,6 +378,8 @@ async fn text_panel(locale: Locale, document: Arc<Document>) -> Result<impl View
     })
 }
 
+/// The viewer's one toolbar, directly above the panes: the Source/Text switch on narrow
+/// screens, the page navigator, then fit and zoom for the source.
 #[component]
 async fn review_controls(locale: Locale, id: JobId, pages: usize) -> Result<impl View> {
     let review = &locale.text().ocr.review;
@@ -451,6 +449,7 @@ async fn review_controls(locale: Locale, id: JobId, pages: usize) -> Result<impl
                     aria-atomic="true"
                 ></span>
             </form>
+            zoom_controls(locale: locale)
             <p
                 class="error"
                 id=(page_error_id.as_str())
@@ -462,59 +461,61 @@ async fn review_controls(locale: Locale, id: JobId, pages: usize) -> Result<impl
     })
 }
 
+/// Fit and zoom for the source, shown once a preview is attached.
+#[component]
+async fn zoom_controls(locale: Locale) -> Result<impl View> {
+    let review = &locale.text().ocr.review;
+    Ok(view! {
+        <div class="ocr-zoom" data-ocr-zoom="" hidden=(true)>
+            <div class="segmented">
+                <button
+                    class="button ghost compact"
+                    type="button"
+                    data-ocr-fit="width"
+                    aria-pressed="true"
+                >
+                    (review.fit_width)
+                </button>
+                <button
+                    class="button ghost compact"
+                    type="button"
+                    data-ocr-fit="page"
+                    aria-pressed="false"
+                >
+                    (review.fit_page)
+                </button>
+            </div>
+            <div class="zoom-steps">
+                <button
+                    class="icon-button"
+                    type="button"
+                    data-ocr-zoom-out=""
+                    aria-label=(review.zoom_out)
+                    title=(review.zoom_out)
+                >
+                    icon(data: icons::MINUS, size: 16)
+                </button>
+                <span data-ocr-zoom-value="" aria-label=(review.zoom_label) dir="ltr"></span>
+                <button
+                    class="icon-button"
+                    type="button"
+                    data-ocr-zoom-in=""
+                    aria-label=(review.zoom_in)
+                    title=(review.zoom_in)
+                >
+                    icon(data: icons::PLUS, size: 16)
+                </button>
+            </div>
+        </div>
+    })
+}
+
 #[component]
 async fn source_panel(locale: Locale, id: JobId) -> Result<impl View> {
     let review = &locale.text().ocr.review;
     Ok(view! {
         <section class="ocr-source-panel">
-            <div class="panel-heading">
-                <h2>(review.source_title)</h2>
-                <div class="ocr-zoom" data-ocr-zoom="" hidden=(true)>
-                    <div class="segmented">
-                        <button
-                            class="button ghost compact"
-                            type="button"
-                            data-ocr-fit="width"
-                            aria-pressed="true"
-                        >
-                            (review.fit_width)
-                        </button>
-                        <button
-                            class="button ghost compact"
-                            type="button"
-                            data-ocr-fit="page"
-                            aria-pressed="false"
-                        >
-                            (review.fit_page)
-                        </button>
-                    </div>
-                    <div class="zoom-steps">
-                        <button
-                            class="icon-button"
-                            type="button"
-                            data-ocr-zoom-out=""
-                            aria-label=(review.zoom_out)
-                            title=(review.zoom_out)
-                        >
-                            icon(data: icons::MINUS, size: 16)
-                        </button>
-                        <span
-                            data-ocr-zoom-value=""
-                            aria-label=(review.zoom_label)
-                            dir="ltr"
-                        ></span>
-                        <button
-                            class="icon-button"
-                            type="button"
-                            data-ocr-zoom-in=""
-                            aria-label=(review.zoom_in)
-                            title=(review.zoom_in)
-                        >
-                            icon(data: icons::PLUS, size: 16)
-                        </button>
-                    </div>
-                </div>
-            </div>
+            <h2 class="visually-hidden">(review.source_title)</h2>
             <p class="ocr-source-status" data-ocr-source-status="" aria-live="polite">
                 (review.source_missing)
             </p>

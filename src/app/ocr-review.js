@@ -172,7 +172,9 @@
       root.dataset.currentPage = String(page + 1);
       const item = document.createElement('li');
       item.className = 'ocr-page';
+      // The page navigator shows the number; the heading names the page for screen readers.
       const heading = document.createElement('h3');
+      heading.className = 'visually-hidden';
       heading.textContent = pageName(page);
       textElement = document.createElement('p');
       textElement.className = 'ocr-page-text';
