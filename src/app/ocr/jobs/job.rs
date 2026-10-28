@@ -317,10 +317,8 @@ async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> 
             if all_blank {
                 <p class="ocr-empty-document">(review.all_blank)</p>
             }
-            <div class="ocr-search" data-ocr-search-slot="">
-                result_controls::search_toolbar(locale: locale)
-            </div>
             review_controls(locale: locale, id: id.clone(), pages: document.pages.len())
+            result_controls::copy_feedback(locale: locale)
             <div class="ocr-panels">
                 source_panel(locale: locale, id: id.clone())
                 text_panel(locale: locale, document: document.clone())
@@ -336,20 +334,7 @@ async fn text_panel(locale: Locale, document: Arc<Document>) -> Result<impl View
     let review = &text.review;
     Ok(view! {
         <section class="ocr-text-panel">
-            <div class="panel-heading">
-                <h2>(review.text_title)</h2>
-                <div class="ocr-copy-actions">
-                    <button
-                        class="button ghost compact"
-                        type="button"
-                        data-ocr-copy-page=""
-                    >
-                        icon(data: icons::COPY, size: 16)
-                        <span>(review.copy_page)</span>
-                    </button>
-                </div>
-            </div>
-            result_controls::copy_feedback(locale: locale)
+            <h2 class="visually-hidden">(review.text_title)</h2>
             <div
                 class="ocr-text-viewport"
                 data-ocr-text-viewport=""
@@ -382,78 +367,34 @@ async fn text_panel(locale: Locale, document: Arc<Document>) -> Result<impl View
     })
 }
 
-/// The viewer's one toolbar, directly above the panes: the Source/Text switch on narrow
-/// screens, the page navigator, then fit and zoom for the source.
+/// The viewer's one toolbar, over both columns: above the source, the Page/Text switch on narrow
+/// screens, the page navigator, then fit and zoom; above the text, Copy this page and search.
 #[component]
 async fn review_controls(locale: Locale, id: JobId, pages: usize) -> Result<impl View> {
     let review = &locale.text().ocr.review;
     let page_error_id = format!("ocr-page-error-{id}");
     Ok(view! {
-        <div class="ocr-toolbar" data-ocr-controls="" hidden=(true)>
-            <fieldset class="ocr-view-choice">
-                <legend class="visually-hidden">(review.view_label)</legend>
-                <label>
-                    <input
-                        type="radio"
-                        name=(format!("ocr-view-{id}"))
-                        value="source"
-                    />
-                    <span>(review.source_view)</span>
-                </label>
-                <label>
-                    <input
-                        type="radio"
-                        name=(format!("ocr-view-{id}"))
-                        value="text"
-                        checked=(true)
-                    />
-                    <span>(review.text_view)</span>
-                </label>
-            </fieldset>
-            <form class="ocr-page-navigation" data-ocr-navigation="" novalidate=(true)>
+        <div class="result-toolbar ocr-toolbar" data-ocr-controls="" hidden=(true)>
+            <div class="ocr-page-tools">
+                page_controls(locale: locale, id: id.clone(), pages: pages)
+                zoom_controls(locale: locale)
+            </div>
+            <div class="ocr-text-tools">
                 <button
-                    class="icon-button"
+                    class="button ghost compact"
                     type="button"
-                    data-ocr-previous=""
-                    aria-label=(review.previous_page)
-                    title=(review.previous_page)
+                    data-ocr-copy-page=""
                 >
-                    <span class="forward">icon(data: icons::BACK, size: 16)</span>
+                    icon(data: icons::COPY, size: 16)
+                    <span>(review.copy_page)</span>
                 </button>
-                <span class="ocr-page-count" dir="ltr">
-                    <label class="ocr-page-field">
-                        <span class="visually-hidden">(review.page_label)</span>
-                        <input
-                            type="text"
-                            inputmode="numeric"
-                            dir="ltr"
-                            value="1"
-                            data-ocr-page-number=""
-                            aria-describedby=(page_error_id.as_str())
-                            autocomplete="off"
-                        />
-                    </label>
-                    <span class="ocr-page-total" aria-hidden="true">
-                        <bdi dir="ltr">(format!("/ {pages}"))</bdi>
-                    </span>
-                </span>
-                <button
-                    class="icon-button"
-                    type="button"
-                    data-ocr-next=""
-                    aria-label=(review.next_page)
-                    title=(review.next_page)
-                >
-                    <span class="forward">icon(data: icons::NEXT, size: 16)</span>
-                </button>
-                <span
-                    class="visually-hidden"
-                    data-ocr-position=""
-                    aria-live="polite"
-                    aria-atomic="true"
-                ></span>
-            </form>
-            zoom_controls(locale: locale)
+                <div class="ocr-search" data-ocr-search-slot="">
+                    result_controls::search_toolbar(
+                        locale: locale,
+                        label: locale.text().review.search_text
+                    )
+                </div>
+            </div>
             <p
                 class="error"
                 id=(page_error_id.as_str())
@@ -465,13 +406,81 @@ async fn review_controls(locale: Locale, id: JobId, pages: usize) -> Result<impl
     })
 }
 
-/// Fit and zoom for the source, shown once a preview is attached.
+/// The Page/Text switch on narrow screens, then the page navigator with its editable number.
+#[component]
+async fn page_controls(locale: Locale, id: JobId, pages: usize) -> Result<impl View> {
+    let review = &locale.text().ocr.review;
+    let page_error_id = format!("ocr-page-error-{id}");
+    Ok(view! {
+        <fieldset class="ocr-view-choice">
+            <legend class="visually-hidden">(review.view_label)</legend>
+            <label>
+                <input type="radio" name=(format!("ocr-view-{id}")) value="source" />
+                <span>(review.source_view)</span>
+            </label>
+            <label>
+                <input
+                    type="radio"
+                    name=(format!("ocr-view-{id}"))
+                    value="text"
+                    checked=(true)
+                />
+                <span>(review.text_view)</span>
+            </label>
+        </fieldset>
+        <form class="ocr-page-navigation" data-ocr-navigation="" novalidate=(true)>
+            <button
+                class="icon-button"
+                type="button"
+                data-ocr-previous=""
+                aria-label=(review.previous_page)
+                title=(review.previous_page)
+            >
+                <span class="forward">icon(data: icons::BACK, size: 16)</span>
+            </button>
+            <span class="ocr-page-count" dir="ltr">
+                <label class="ocr-page-field">
+                    <span class="visually-hidden">(review.page_label)</span>
+                    <input
+                        type="text"
+                        inputmode="numeric"
+                        dir="ltr"
+                        value="1"
+                        data-ocr-page-number=""
+                        aria-describedby=(page_error_id.as_str())
+                        autocomplete="off"
+                    />
+                </label>
+                <span class="ocr-page-total" aria-hidden="true">
+                    <bdi dir="ltr">(format!("/ {pages}"))</bdi>
+                </span>
+            </span>
+            <button
+                class="icon-button"
+                type="button"
+                data-ocr-next=""
+                aria-label=(review.next_page)
+                title=(review.next_page)
+            >
+                <span class="forward">icon(data: icons::NEXT, size: 16)</span>
+            </button>
+            <span
+                class="visually-hidden"
+                data-ocr-position=""
+                aria-live="polite"
+                aria-atomic="true"
+            ></span>
+        </form>
+    })
+}
+
+/// Zoom and the two fit choices for the source, shown once a preview is attached.
 #[component]
 async fn zoom_controls(locale: Locale) -> Result<impl View> {
     let review = &locale.text().ocr.review;
     Ok(view! {
         <div class="ocr-zoom" data-ocr-zoom="" hidden=(true)>
-            <div class="segmented">
+            <div class="ocr-fit">
                 <button
                     class="button ghost compact"
                     type="button"

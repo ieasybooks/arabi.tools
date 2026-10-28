@@ -27,7 +27,8 @@ for (const locale of ["ar", "en"]) {
       }
       expect(bytes.txt.toString()).toBe(texts.map((text) => `${text}\n`).join(""));
 
-      const field = page.getByRole("searchbox");
+      // The field is named for what it searches.
+      const field = page.getByRole("searchbox", { name: locale === "ar" ? "ابحث في التفريغ" : "Search transcript", exact: true });
       const originalURL = page.url();
       const storageBefore = await page.evaluate(() => [Object.entries(localStorage), Object.entries(sessionStorage)]);
       const searchRequests = [];
@@ -73,11 +74,21 @@ for (const locale of ["ar", "en"]) {
         fontSize: parseFloat(getComputedStyle(document.querySelector(".cue-text")).fontSize),
       }));
       expect(geometry.content).toBeLessThanOrEqual(geometry.viewport);
+      if (width === 1280) {
+        // One toolbar row: the reading controls at the start, the compact search at the end.
+        const toolbar = await page.evaluate(() => {
+          const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+          return { controls: box(".transcript-actions"), field: box(".search-field"), list: box(".cues") };
+        });
+        expect(Math.abs(toolbar.controls.top - toolbar.field.top)).toBeLessThanOrEqual(4);
+        expect(toolbar.field.width).toBeLessThan(toolbar.list.width / 2);
+      }
       expect(geometry.direction).toBe("rtl");
       expect(geometry.lineHeight / geometry.fontSize).toBeGreaterThanOrEqual(1.8);
       // Enter the scroll region by keyboard: pointer focus need not show
-      // :focus-visible, but tabbing from the preceding control must do so.
-      await page.locator("[data-cue-select]").focus();
+      // :focus-visible, but tabbing from the preceding control (the toolbar's
+      // last, the search's second option) must do so.
+      await page.locator("[data-search-tatweel]").focus();
       await page.keyboard.press("Tab");
       await expect(page.locator(".cues")).toBeFocused();
       expect(await page.locator(".cues").evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe("none");

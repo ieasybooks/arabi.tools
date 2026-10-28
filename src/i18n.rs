@@ -365,7 +365,8 @@ pub struct Text {
 
 /// Search and transcript review controls shared by result viewers.
 pub struct ReviewText {
-    pub search: &'static str,
+    pub search_transcript: &'static str,
+    pub search_text: &'static str,
     pub ignore_marks: &'static str,
     pub ignore_tatweel: &'static str,
     pub match_count: &'static str,
@@ -664,7 +665,8 @@ static AR: Text = Text {
         result: "النتيجة",
     },
     review: ReviewText {
-        search: "ابحث في النص المستخرج",
+        search_transcript: "ابحث في التفريغ",
+        search_text: "ابحث في النص",
         ignore_marks: "تجاهل الحركات الشائعة",
         ignore_tatweel: "تجاهل التطويل",
         match_count: "المطابقة {current} من {total}",
@@ -779,7 +781,7 @@ static AR: Text = Text {
             source_title: "المستند الأصلي",
             text_title: "النص المستخرج",
             view_label: "طريقة العرض",
-            source_view: "الأصل",
+            source_view: "الصفحة",
             text_view: "النص",
             previous_page: "الصفحة السابقة",
             next_page: "الصفحة التالية",
@@ -914,7 +916,8 @@ static EN: Text = Text {
         result: "Result",
     },
     review: ReviewText {
-        search: "Search recognized text",
+        search_transcript: "Search transcript",
+        search_text: "Search text",
         ignore_marks: "Ignore common diacritics",
         ignore_tatweel: "Ignore tatweel",
         match_count: "Match {current} of {total}",
@@ -1029,7 +1032,7 @@ static EN: Text = Text {
             source_title: "Original document",
             text_title: "Recognized text",
             view_label: "Review view",
-            source_view: "Source",
+            source_view: "Page",
             text_view: "Text",
             previous_page: "Previous page",
             next_page: "Next page",

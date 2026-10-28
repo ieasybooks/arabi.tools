@@ -244,7 +244,8 @@ async fn job_status(
     })
 }
 
-/// A finished job's header, search and transcript, with the page's privacy line at its foot.
+/// A finished job's header, its toolbar (reading controls, then search) and transcript, with the
+/// page's privacy line at its foot.
 #[component]
 async fn result(
     cx: &Cx,
@@ -288,9 +289,14 @@ async fn result(
                 copy: Some(CopyAll::Transcript),
                 downloads: downloads
             )
-            result_controls::search_toolbar(locale: locale)
+            <div class="result-toolbar">
+                reading_controls(locale: locale, transcript: transcript.clone())
+                result_controls::search_toolbar(
+                    locale: locale,
+                    label: review.search_transcript
+                )
+            </div>
             result_controls::copy_feedback(locale: locale)
-            reading_controls(locale: locale, transcript: transcript.clone())
             if transcript.text.trim().is_empty() {
                 <p>(text.no_speech)</p>
             } else {
@@ -344,8 +350,7 @@ async fn result(
     })
 }
 
-/// A slim row above the cues: the timestamps switch, then the cue picker. The picker comes
-/// last, so Tab moves from it into the list.
+/// The start of the toolbar: the timestamps switch, then the cue picker.
 #[component]
 async fn reading_controls(locale: Locale, transcript: Arc<Transcript>) -> Result<impl View> {
     let text = &locale.text().review;

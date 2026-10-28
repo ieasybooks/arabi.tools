@@ -132,16 +132,17 @@ pub async fn result_actions(
     })
 }
 
-/// Load `SEARCH_SCRIPT` from the owning page, including pages with live results.
+/// Load `SEARCH_SCRIPT` from the owning page, including pages with live results. `label` names
+/// the field for what it searches, such as the transcript.
 #[component]
-pub async fn search_toolbar(locale: Locale) -> Result<impl View> {
+pub async fn search_toolbar(locale: Locale, label: &'static str) -> Result<impl View> {
     let text = &locale.text().review;
     Ok(view! {
         <div
             class="result-search"
             data-search=(true)
             role="search"
-            aria-label=(text.search)
+            aria-label=(label)
             data-match-count=(text.match_count)
             data-no-matches=(text.no_matches)
             data-searching=(text.searching)
@@ -157,8 +158,8 @@ pub async fn search_toolbar(locale: Locale) -> Result<impl View> {
                     dir="auto"
                     autocomplete="off"
                     spellcheck="false"
-                    aria-label=(text.search)
-                    placeholder=(text.search)
+                    aria-label=(label)
+                    placeholder=(label)
                 >
                 <span class="search-tools">
                     <span class="search-count" data-search-count=(true)></span>

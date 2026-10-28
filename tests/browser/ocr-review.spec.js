@@ -111,6 +111,21 @@ for (const locale of ['ar', 'en']) {
     expect(JSON.parse(baseline.json)).toEqual(texts.map((content, index) => ({ page: index + 1, content })));
     expect(baseline.docx.subarray(0, 2).toString()).toBe('PK');
     await screenshot(page, `${locale}-desktop-ocr-result`);
+    // One toolbar over both columns: the page tools and the search share its row, the search is
+    // named for what it searches, and the page and its text start level, the page on no frame.
+    const layout = await root.evaluate((node) => {
+      const box = (selector) => node.querySelector(selector).getBoundingClientRect();
+      return {
+        source: box('.ocr-source-panel'), text: box('.ocr-text-panel'), tools: box('.ocr-page-tools'),
+        field: box('.search-field'), copy: box('[data-ocr-copy-page]'),
+        frame: getComputedStyle(node.querySelector('.ocr-source-panel')).backgroundColor,
+      };
+    });
+    expect(Math.abs(layout.source.top - layout.text.top)).toBeLessThanOrEqual(1);
+    expect(Math.abs(layout.tools.top - layout.field.top)).toBeLessThanOrEqual(4);
+    expect(Math.abs(layout.copy.top - layout.field.top)).toBeLessThanOrEqual(4);
+    expect(layout.frame).toBe('rgba(0, 0, 0, 0)');
+    await expect(root.getByRole('searchbox', { name: locale === 'ar' ? 'ابحث في النص' : 'Search text', exact: true })).toBeVisible();
 
     await root.locator('[data-ocr-zoom-in]').click();
     await rendered(page, 1);
@@ -185,6 +200,9 @@ for (const locale of ['ar', 'en']) {
     await expect(root.locator('[data-ocr-page-text]')).toHaveText(first);
     await expect(root.locator('.ocr-text-panel')).toBeVisible();
     const sourceRadio = root.locator('.ocr-view-choice input[value="source"]');
+    // The one view switch reads Page / Text.
+    await expect(root.getByRole('radio', { name: locale === 'ar' ? 'الصفحة' : 'Page', exact: true })).toHaveAttribute('value', 'source');
+    await expect(root.getByRole('radio', { name: locale === 'ar' ? 'النص' : 'Text', exact: true })).toBeChecked();
     await sourceRadio.focus();
     await sourceRadio.press('Space');
     await expect(root.locator('[data-ocr-source-status]')).toHaveText(locale === 'ar'
