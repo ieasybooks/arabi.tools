@@ -69,12 +69,19 @@
       cancel.setAttribute('aria-disabled', String(phase === 'cancelling'));
       if (cancelledFocus && cancel.hidden) buttons.find(button => !button.hidden)?.focus({ preventScroll: true });
     }
+    // Each number is isolated left to right inside a line in the page's direction, so Arabic
+    // reads "65 / 1000" from the right as English does from the left.
+    const number = value => {
+      const isolate = document.createElement('bdi');
+      isolate.dir = 'ltr';
+      isolate.textContent = String(value);
+      return isolate;
+    };
     function updateCount() {
       const length = Array.from(source.value).length;
-      const fraction = document.createElement('bdi');
-      fraction.dir = 'ltr';
-      fraction.textContent = `${length} / ${form.dataset.maxCharacters}`;
-      count.replaceChildren(fraction, document.createTextNode(form.dataset.count.split('{max}')[1] || ''));
+      const [before, rest = ''] = form.dataset.count.split('{count}');
+      const [between, after = ''] = rest.split('{max}');
+      count.replaceChildren(before, number(length), between, number(form.dataset.maxCharacters), after);
       count.setAttribute('aria-label', form.dataset.count.replace('{count}', length).replace('{max}', form.dataset.maxCharacters));
       // Diacritics already in the text are replaced, so the note shows only while there are some.
       marks.hidden = !/[\u064b-\u0652]/u.test(source.value);

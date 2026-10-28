@@ -403,6 +403,8 @@ async fn review_controls(locale: Locale, id: JobId, pages: usize) -> Result<impl
 }
 
 /// The Original/Text switch on narrow screens, then the page navigator with its editable number.
+/// The navigator runs in the page's direction, each number isolated left to right, so Arabic reads
+/// it from the right as English does from the left: previous, this page, its total, next.
 #[component]
 async fn page_controls(locale: Locale, id: JobId, pages: usize) -> Result<impl View> {
     let review = &locale.text().ocr.review;
@@ -434,7 +436,7 @@ async fn page_controls(locale: Locale, id: JobId, pages: usize) -> Result<impl V
             >
                 <span class="forward">icon(data: icons::BACK, size: 16)</span>
             </button>
-            <span class="ocr-page-count" dir="ltr">
+            <span class="ocr-page-count">
                 <label class="ocr-page-field">
                     <span class="visually-hidden">(review.page_label)</span>
                     <input
@@ -448,7 +450,8 @@ async fn page_controls(locale: Locale, id: JobId, pages: usize) -> Result<impl V
                     />
                 </label>
                 <span class="ocr-page-total" aria-hidden="true">
-                    <bdi dir="ltr">(format!("/ {pages}"))</bdi>
+                    "/ "
+                    <bdi dir="ltr">(pages.to_string())</bdi>
                 </span>
             </span>
             <button

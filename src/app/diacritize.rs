@@ -272,6 +272,13 @@ async fn text_input(locale: Locale, source: String) -> Result<impl View> {
     let text = &locale.text().diacritization;
     let count = source.chars().count();
     let marked = has_marks(&source);
+    // The count runs in the page's direction with each number isolated left to right, so Arabic
+    // reads "65 / 1000" from the right as English does from the left. The script keeps this shape.
+    let (before, rest) = text
+        .character_count
+        .split_once("{count}")
+        .unwrap_or_default();
+    let (between, after) = rest.split_once("{max}").unwrap_or_default();
     Ok(view! {
         <div id="diacritize-text-panel" class="diacritize-panel">
             <label class="visually-hidden" for="source-text">(text.source_label)</label>
@@ -300,8 +307,11 @@ async fn text_input(locale: Locale, source: String) -> Result<impl View> {
                     class="diacritize-count"
                     aria-label=(locale.diacritization_count(count))
                 >
-                    <bdi dir="ltr">(format!("{count} / {MAX_TEXT_CHARACTERS}"))</bdi>
-                    (text.character_count.split("{max}").last().unwrap_or_default())
+                    (before)
+                    <bdi dir="ltr">(count.to_string())</bdi>
+                    (between)
+                    <bdi dir="ltr">(MAX_TEXT_CHARACTERS.to_string())</bdi>
+                    (after)
                 </p>
             </div>
             <p id="text-limit" class="visually-hidden">
