@@ -191,7 +191,7 @@ pub(crate) async fn tool_hero(locale: Locale, lead: bool) -> Result<impl View> {
     let text = locale.text();
     Ok(view! {
         <section class="tool-hero">
-            <div class="container">
+            <div class="container container-wide">
                 <p class="crumbs">
                     <a href=(href!(super::home))>(text.ocr.all_tools)</a>
                 </p>

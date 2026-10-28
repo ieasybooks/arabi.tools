@@ -377,7 +377,7 @@ pub(super) async fn tool_hero(locale: Locale, lead: bool) -> Result<impl View> {
     let text = &locale.text().diacritization;
     Ok(view! {
         <section class="tool-hero">
-            <div class="container">
+            <div class="container container-wide">
                 <p class="crumbs"><a href=(href!(super::home))>(text.all_tools)</a></p>
                 <h1>(text.name)</h1>
                 if lead {

@@ -244,15 +244,11 @@ svg {
   flex: 1;
 }
 
-/* Centred title pages, with an ornament under the lead. */
-
-.hero,
-.tool-hero {
-  text-align: center;
-}
+/* The home and 404 pages: a centred title, with an ornament under the lead. */
 
 .hero {
   padding-block: 4.5rem 2rem;
+  text-align: center;
 }
 
 .hero h1 {
@@ -266,8 +262,7 @@ svg {
   font-size: 1.1875rem;
 }
 
-.hero .lead::after,
-.tool-hero .container::after {
+.hero .lead::after {
   content: "";
   display: block;
   width: 9rem;
@@ -383,18 +378,26 @@ svg {
   text-align: center;
 }
 
-/* Tool pages: one column, the notes following the form like footnotes. */
+/* Tool and job pages: a compact title on the start edge of the page's column, so the tool
+   starts near the top of the screen. */
 
 .tool-hero {
-  padding-block: 3.5rem 0;
+  padding-block: 1.75rem 0;
 }
 
 .tool-hero h1 {
-  font-size: 2.625rem;
+  font-size: 1.75rem;
+}
+
+.tool-hero .lead {
+  max-width: none;
+  margin: 0.25rem 0 0;
+  font-size: 1rem;
 }
 
 .crumbs {
-  margin-block-end: 0.5rem;
+  margin-block-end: 0.125rem;
+  font-size: 0.9375rem;
 }
 
 .crumbs a {
@@ -407,7 +410,7 @@ svg {
 }
 
 .workspace {
-  padding-block: 2rem 5rem;
+  padding-block: 1.5rem 4rem;
 }
 
 .workspace-layout {
@@ -865,11 +868,15 @@ progress::-moz-progress-bar {
   }
 
   .tool-hero {
-    padding-block: 2.25rem 0;
+    padding-block: 1.25rem 0;
   }
 
   .tool-hero h1 {
-    font-size: 2.125rem;
+    font-size: 1.5rem;
+  }
+
+  .workspace {
+    padding-block-start: 1.25rem;
   }
 
   .tool {
@@ -1245,16 +1252,6 @@ progress::-moz-progress-bar {
   [data-workspace="diacritization"] .workspace-review:not(:has(.result, .observation-status:not([hidden]))) {
     display: none;
   }
-}
-
-/* Job pages are about the job: a smaller title, without the lead, above its card. The
-   rule depends only on the server-rendered title, so a page never changes size mid-job. */
-.tool-hero:not(:has(.lead)) {
-  padding-block: 2rem 0;
-}
-
-.tool-hero:not(:has(.lead)) h1 {
-  font-size: 2rem;
 }
 
 /* Files: size and the two actions on one quiet row under the drop zone. They appear once a
