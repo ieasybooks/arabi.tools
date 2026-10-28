@@ -96,6 +96,85 @@ for (const tool of ['transcribe', 'ocr']) {
   }
 }
 
+for (const tool of ['transcribe', 'ocr']) {
+  test(`${tool} folds its input beside a current result, never above the view, with one privacy line`, async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 700 });
+    await page.goto(`/${tool}`);
+    const form = page.locator('#upload-form');
+    const input = form.locator('[name=file]');
+    const submit = form.locator('[type=submit]');
+    const inputNote = page.locator('[data-workspace] > .privacy-note');
+    const resultNote = page.locator('.workspace-result .privacy-note');
+    const file = tool === 'transcribe' ? { name: 'speech.mp3', mimeType: 'audio/mpeg', buffer: await readFile(speech) }
+      : { name: 'page.png', mimeType: 'image/png', buffer: image };
+    await input.setInputFiles(file);
+    await expect(inputNote).toBeVisible();
+    await expect(submit).toHaveClass(/\bprimary\b/);
+    await submit.click();
+    await expect(page.locator('[data-workspace]')).toHaveAttribute('data-phase', 'completed');
+    // Result first: one bar holding the file and a secondary run button, which keeps its focus.
+    await expect(form).toHaveAttribute('data-collapsed', '');
+    await expect(submit).toHaveClass(/\bsecondary\b/);
+    await expect(submit).not.toHaveClass(/\bprimary\b/);
+    await expect(submit).toBeFocused();
+    await expect(page.locator('.file-name')).toHaveText(file.name);
+    expect(await form.evaluate(node => node.getBoundingClientRect().height)).toBeLessThan(120);
+    // The privacy line moves to the foot of the result; the header has no retention line.
+    await expect(inputNote).toBeHidden();
+    await expect(resultNote).toBeVisible();
+    await expect(page.locator('.workspace-result .result-meta')).toBeHidden();
+    // Another file unfolds the input with the filled run button.
+    await input.setInputFiles({ ...file, name: `other-${file.name}` });
+    await expect(form).not.toHaveAttribute('data-collapsed');
+    await expect(submit).toHaveClass(/\bprimary\b/);
+    // Scrolled into the previous result, the input keeps its size when the next result arrives,
+    // and folds once it is back in view.
+    const reservation = pending();
+    await page.route(`**/${tool}/jobs`, async route => { await reservation.promise; await route.continue(); });
+    await submit.click();
+    await page.evaluate(() => {
+      const spacer = document.createElement('div');
+      spacer.style.blockSize = '2000px';
+      document.querySelector('main').append(spacer);
+      window.scrollTo(0, document.querySelector('.workspace-result').getBoundingClientRect().top + window.scrollY + 40);
+    });
+    expect(await form.evaluate(node => node.getBoundingClientRect().top)).toBeLessThan(0);
+    reservation.release();
+    await expect(page.locator('[data-workspace]')).toHaveAttribute('data-phase', 'completed');
+    await expect(page.locator('.workspace-result [data-result]')).toBeVisible();
+    await expect(form).not.toHaveAttribute('data-collapsed');
+    await expect(submit).toHaveClass(/\bprimary\b/);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(form).toHaveAttribute('data-collapsed', '');
+    await expect(submit).toBeFocused();
+    // Removing the file unfolds the input to the drop zone, and nothing can be sent.
+    await page.locator('.remove-file').click();
+    await expect(form).not.toHaveAttribute('data-collapsed');
+    await expect(submit).toHaveClass(/\bprimary\b/);
+    await expect(submit).toBeDisabled();
+    // A direct job page has the one privacy line too, at the foot of its result.
+    const job = await page.locator('.workspace-recovery').getAttribute('href');
+    await page.goto(job);
+    await expect(page.locator('.privacy-note')).toHaveCount(1);
+    await expect(page.locator('[data-result] .privacy-note')).toBeVisible();
+  });
+}
+
+test('diacritization says what it replaces in the empty output and keeps one privacy line', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await locale(page, 'diacritize', 'en');
+  await expect(page.locator('.result-placeholder')).toHaveText('The diacritized text appears here, with new diacritics replacing any common ones in your text; review it before use.');
+  await expect(page.locator('.privacy-note')).toHaveCount(1);
+  await expect(page.locator('[data-workspace] > .privacy-note')).toBeVisible();
+  await page.locator('#source-text').fill('اللغة العربية جميلة');
+  await page.getByRole('button', { name: 'Diacritize text', exact: true }).click();
+  await expect(page.locator('.workspace-result .result')).toBeVisible();
+  await expect(page.locator('.result-placeholder')).toBeHidden();
+  await expect(page.locator('[data-workspace] > .privacy-note')).toBeHidden();
+  await expect(page.locator('.workspace-result .privacy-note')).toBeVisible();
+  await expect(page.locator('.workspace-result .result-meta')).not.toContainText('30');
+});
+
 test('upload stages distinguish reservation, transfer and validation and prevent double submit', async ({ page }) => {
   await page.goto('/transcribe');
   const reserve = pending();
@@ -137,6 +216,12 @@ test('upload stages distinguish reservation, transfer and validation and prevent
     await expect(page.locator('[data-workspace]')).toHaveAttribute('data-phase', 'reserving');
     await expect(page.locator('.submission-status')).toHaveText('جارٍ طلب مكان في الطابور…');
     await expect(page.locator('.upload-progress progress')).not.toHaveAttribute('value');
+    // Without a percentage the bar sweeps and the status turns a spinner, unless motion is reduced.
+    await expect(page.locator('.upload-progress progress')).toHaveCSS('animation-name', 'progress-sweep');
+    expect(await page.locator('.submission-status').evaluate(node => getComputedStyle(node, '::before').animationName)).toBe('spin');
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await expect(page.locator('.upload-progress progress')).toHaveCSS('animation-name', 'none');
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
     // The file row offers no way to change the file while a job runs.
     await expect(page.locator('[name=file]')).toBeDisabled();
     await expect(page.locator('.remove-file')).toBeDisabled();

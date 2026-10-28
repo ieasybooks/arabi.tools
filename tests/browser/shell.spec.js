@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 const locales = [
-  { code: "ar", direction: "rtl", skip: "انتقل إلى المحتوى الرئيسي", source: "الشيفرة المصدرية" },
-  { code: "en", direction: "ltr", skip: "Skip to main content", source: "Source code" },
+  { code: "ar", direction: "rtl", skip: "انتقل إلى المحتوى الرئيسي", source: "الشيفرة المصدرية", telegram: "قناتنا على تيليجرام", telegramText: "تيليجرام" },
+  { code: "en", direction: "ltr", skip: "Skip to main content", source: "Source code", telegram: "Our Telegram channel", telegramText: "Telegram" },
 ];
 
 for (const locale of locales) {
@@ -28,6 +28,10 @@ for (const locale of locales) {
 
         await expect(page.getByRole("contentinfo").getByRole("link", { name: locale.source, exact: true }))
           .toHaveAttribute("href", "https://github.com/ieasybooks/arabi.tools");
+        // The footer's plain account links keep their full accessible names.
+        const telegram = page.getByRole("contentinfo").getByRole("link", { name: locale.telegram, exact: true });
+        await expect(telegram).toHaveAttribute("href", "https://t.me/ieasybooks");
+        await expect(telegram).toHaveText(locale.telegramText);
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
       });
     }
@@ -48,3 +52,28 @@ for (const locale of locales) {
     }
   });
 }
+
+test("the header, titles and tools share one width in both languages", async ({ page, context, baseURL }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const layouts = new Set();
+  for (const locale of locales) {
+    await context.addCookies([{ name: "lang", value: locale.code, url: baseURL }]);
+    for (const path of ["/transcribe", "/ocr", "/diacritize"]) {
+      await page.goto(path);
+      // The logo, the title and the tool start on the same edge, at the same place on every tool.
+      layouts.add(JSON.stringify(await page.evaluate(() => {
+        const edge = (selector) => {
+          const box = document.querySelector(selector).getBoundingClientRect();
+          return Math.round(document.dir === "rtl" ? document.documentElement.clientWidth - box.right : box.left);
+        };
+        const width = (selector) => Math.round(document.querySelector(selector).getBoundingClientRect().width);
+        return { logo: edge(".brand"), title: edge("main h1"), tool: edge("[data-workspace]"), header: width(".header-inner"), page: width(".workspace .container") };
+      })));
+    }
+  }
+  expect([...layouts]).toHaveLength(1);
+  const layout = JSON.parse([...layouts][0]);
+  expect(layout.logo).toBe(layout.title);
+  expect(layout.title).toBe(layout.tool);
+  expect(layout.header).toBe(layout.page);
+});
