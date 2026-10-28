@@ -630,6 +630,11 @@ svg {
   background: transparent;
 }
 
+/* Beside the button the name may take two lines, so Remove keeps its place on the row. */
+.upload[data-collapsed] .file-details {
+  flex-basis: 4rem;
+}
+
 .upload[data-collapsed] > .form-actions {
   flex: 0 1 auto;
   min-inline-size: 0;
