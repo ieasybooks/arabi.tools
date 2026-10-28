@@ -421,7 +421,8 @@ pub struct SocialText {
     pub x: Account,
     pub facebook: Account,
     pub github: Account,
-    pub email: Account,
+    /// The email link's text, which is also its accessible name.
+    pub email: &'static str,
 }
 
 /// One of the initiative's accounts: the link's short text, and its full accessible name.
@@ -638,10 +639,7 @@ static AR: Text = Text {
             name: "GitHub",
             label: "حسابنا على GitHub للمبرمجين",
         },
-        email: Account {
-            name: "البريد الإلكتروني",
-            label: "بريدنا الإلكتروني",
-        },
+        email: "البريد الإلكتروني",
     },
     not_found_title: "الصفحة غير موجودة",
     not_found: "هذه الصفحة غير موجودة، أو انتهت صلاحيتها.",
@@ -890,10 +888,7 @@ static EN: Text = Text {
             name: "GitHub",
             label: "Our GitHub account for developers",
         },
-        email: Account {
-            name: "Email",
-            label: "Our email",
-        },
+        email: "Email",
     },
     not_found_title: "Page not found",
     not_found: "This page doesn't exist, or it has expired.",

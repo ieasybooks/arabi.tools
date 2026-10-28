@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 const locales = [
-  { code: "ar", direction: "rtl", skip: "انتقل إلى المحتوى الرئيسي", source: "الشيفرة المصدرية", telegram: "قناتنا على تيليجرام", telegramText: "تيليجرام" },
-  { code: "en", direction: "ltr", skip: "Skip to main content", source: "Source code", telegram: "Our Telegram channel", telegramText: "Telegram" },
+  { code: "ar", direction: "rtl", skip: "انتقل إلى المحتوى الرئيسي", source: "الشيفرة المصدرية", telegram: "قناتنا على تيليجرام", telegramText: "تيليجرام", email: "البريد الإلكتروني" },
+  { code: "en", direction: "ltr", skip: "Skip to main content", source: "Source code", telegram: "Our Telegram channel", telegramText: "Telegram", email: "Email" },
 ];
 
 for (const locale of locales) {
@@ -32,6 +32,11 @@ for (const locale of locales) {
         const telegram = page.getByRole("contentinfo").getByRole("link", { name: locale.telegram, exact: true });
         await expect(telegram).toHaveAttribute("href", "https://t.me/ieasybooks");
         await expect(telegram).toHaveText(locale.telegramText);
+        // The email link is named by exactly the text it shows.
+        const email = page.getByRole("contentinfo").getByRole("link", { name: locale.email, exact: true });
+        await expect(email).toHaveAttribute("href", "mailto:easybooksdev@gmail.com");
+        await expect(email).toHaveText(locale.email);
+        await expect(email).not.toHaveAttribute("aria-label", /./);
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
       });
     }

@@ -440,7 +440,8 @@ impl IntoResponse for Typed {
 }
 
 /// One flat line: the initiative behind the site, then plain links to its accounts and to the
-/// site's source code. Each account keeps its full name as the link's accessible name.
+/// site's source code. Each account keeps its full name as the link's accessible name; the email
+/// link is named by its own text.
 #[component]
 async fn site_footer(locale: Locale) -> Result<impl View> {
     let text = locale.text();
@@ -451,7 +452,6 @@ async fn site_footer(locale: Locale) -> Result<impl View> {
         ("https://x.com/iieasybooks", &social.x),
         ("https://fb.com/ieasybooks", &social.facebook),
         ("https://github.com/ieasybooks", &social.github),
-        ("mailto:easybooksdev@gmail.com", &social.email),
     ];
     Ok(view! {
         <footer class="site-footer">
@@ -471,6 +471,9 @@ async fn site_footer(locale: Locale) -> Result<impl View> {
                                 </a>
                             </li>
                         }
+                        <li>
+                            <a href="mailto:easybooksdev@gmail.com">(social.email)</a>
+                        </li>
                     </ul>
                     <a href=(SOURCE_URL)>(text.source_code)</a>
                 </div>
