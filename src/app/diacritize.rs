@@ -230,7 +230,6 @@ async fn input_form(
             </div>
             <p id="diacritize-error" class="error" role="alert" hidden=(true)></p>
             <a class="return-to-job" hidden=(true)>(text.back_to_job)</a>
-            <p class="hint try-again">(text.try_again)</p>
             if source_needed {
                 <p class="hint source-needed">
                     (locale.text().workspace.source_needed)
@@ -316,58 +315,61 @@ async fn input_choices(cx: &Cx, locale: Locale, model: Model) -> Result<impl Vie
     let shakkelha = tool.model_available(Model::Shakkelha);
     let catt = tool.model_available(Model::Catt);
     Ok(view! {
-        <fieldset class="diacritize-models">
-            <legend>(text.model)</legend>
-            <div class="diacritize-choices">
-                <label>
-                    <input
-                        type="radio"
-                        name="model"
-                        value="shakkelha"
-                        checked=(model == Model::Shakkelha)
-                        disabled=(!shakkelha)
-                    >
-                    <bdi lang="ar" dir="rtl">(text.shakkelha)</bdi>
-                </label>
-                <label>
-                    <input
-                        type="radio"
-                        name="model"
-                        value="catt"
-                        checked=(model == Model::Catt)
-                        disabled=(!catt)
-                    >
-                    <bdi lang="en" dir="ltr">(text.catt)</bdi>
-                </label>
-            </div>
-            if !shakkelha || !catt {
-                <p class="hint">(text.model_unavailable)</p>
-            }
-        </fieldset>
-        <fieldset class="diacritize-modes">
-            <legend class="visually-hidden">(text.input_mode)</legend>
-            <div class="diacritize-choices">
-                <label>
-                    <input
-                        type="radio"
-                        name="input_mode"
-                        value="text"
-                        checked=(true)
-                        aria-controls="diacritize-text-panel"
-                    >
-                    <span>(text.text_mode)</span>
-                </label>
-                <label>
-                    <input
-                        type="radio"
-                        name="input_mode"
-                        value="document"
-                        aria-controls="diacritize-document-panel"
-                    >
-                    <span>(text.document_mode)</span>
-                </label>
-            </div>
-        </fieldset>
+        // One row: what to diacritize at the start, the model at the end.
+        <div class="diacritize-top">
+            <fieldset class="diacritize-modes">
+                <legend class="visually-hidden">(text.input_mode)</legend>
+                <div class="diacritize-choices">
+                    <label>
+                        <input
+                            type="radio"
+                            name="input_mode"
+                            value="text"
+                            checked=(true)
+                            aria-controls="diacritize-text-panel"
+                        >
+                        <span>(text.text_mode)</span>
+                    </label>
+                    <label>
+                        <input
+                            type="radio"
+                            name="input_mode"
+                            value="document"
+                            aria-controls="diacritize-document-panel"
+                        >
+                        <span>(text.document_mode)</span>
+                    </label>
+                </div>
+            </fieldset>
+            <fieldset class="diacritize-models">
+                <legend class="visually-hidden">(text.model)</legend>
+                <div class="diacritize-choices segmented">
+                    <label>
+                        <input
+                            type="radio"
+                            name="model"
+                            value="shakkelha"
+                            checked=(model == Model::Shakkelha)
+                            disabled=(!shakkelha)
+                        >
+                        <bdi lang="ar" dir="rtl">(text.shakkelha)</bdi>
+                    </label>
+                    <label>
+                        <input
+                            type="radio"
+                            name="model"
+                            value="catt"
+                            checked=(model == Model::Catt)
+                            disabled=(!catt)
+                        >
+                        <bdi lang="en" dir="ltr">(text.catt)</bdi>
+                    </label>
+                </div>
+            </fieldset>
+        </div>
+        if !shakkelha || !catt {
+            <p class="hint model-unavailable">(text.model_unavailable)</p>
+        }
     })
 }
 
