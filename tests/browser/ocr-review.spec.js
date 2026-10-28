@@ -12,6 +12,13 @@ const first = 'الصفحة الأولى — كِتَاب 1\nFirst page: café �
 const third = 'الصفحة الثالثة — مـدرسة 3\nThird page: آخر نص مشترك';
 const texts = [first, '', third];
 const resultRoot = (page) => page.locator('[data-result="ocr"]');
+// Zoom, fit and the two copy scopes are chosen from small menus, opened by their buttons.
+const zoomMenu = (root) => root.locator('.zoom-menu > summary');
+const copyMenu = (root) => root.locator('.copy-menu > summary');
+async function choose(root, menu, item) {
+  await menu(root).click();
+  await root.locator(item).click();
+}
 
 test.beforeEach(async ({ page }) => {
   page.on('pageerror', (error) => { throw error; });
@@ -111,25 +118,33 @@ for (const locale of ['ar', 'en']) {
     expect(JSON.parse(baseline.json)).toEqual(texts.map((content, index) => ({ page: index + 1, content })));
     expect(baseline.docx.subarray(0, 2).toString()).toBe('PK');
     await screenshot(page, `${locale}-desktop-ocr-result`);
-    // One toolbar over both columns: the page tools and the search share its row, the search is
-    // named for what it searches, and the page and its text start level, the page on no frame.
+    // One toolbar over both columns: the page tools (the navigator and one zoom button) and the
+    // search share its row, the search is named for what it searches, and the page and its text
+    // start level, the page on no frame. Both copy scopes sit in the header's Copy menu.
     const layout = await root.evaluate((node) => {
       const box = (selector) => node.querySelector(selector).getBoundingClientRect();
       return {
         source: box('.ocr-source-panel'), text: box('.ocr-text-panel'), tools: box('.ocr-page-tools'),
-        field: box('.search-field'), copy: box('[data-ocr-copy-page]'),
+        field: box('.search-field'), zoom: box('.zoom-menu > summary'), copy: box('.copy-menu > summary'),
         frame: getComputedStyle(node.querySelector('.ocr-source-panel')).backgroundColor,
       };
     });
     expect(Math.abs(layout.source.top - layout.text.top)).toBeLessThanOrEqual(1);
     expect(Math.abs(layout.tools.top - layout.field.top)).toBeLessThanOrEqual(4);
-    expect(Math.abs(layout.copy.top - layout.field.top)).toBeLessThanOrEqual(4);
+    expect(Math.abs(layout.zoom.top + layout.zoom.height / 2 - (layout.field.top + layout.field.height / 2))).toBeLessThanOrEqual(2);
+    expect(layout.copy.bottom).toBeLessThanOrEqual(layout.tools.top);
+    await expect(root.locator('.ocr-toolbar [data-ocr-copy-page]')).toHaveCount(0);
     expect(layout.frame).toBe('rgba(0, 0, 0, 0)');
     await expect(root.getByRole('searchbox', { name: locale === 'ar' ? 'ابحث في النص' : 'Search text', exact: true })).toBeVisible();
 
-    await root.locator('[data-ocr-zoom-in]').click();
+    await choose(root, zoomMenu, '[data-ocr-zoom-in]');
     await rendered(page, 1);
+    // The zoom button reads the zoom; a step leaves its menu open for the next one.
     const zoom = await root.locator('[data-ocr-zoom-value]').textContent();
+    await expect(zoomMenu(root)).toContainText(zoom);
+    await expect(root.locator('[data-ocr-zoom-out]')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(root.locator('[data-ocr-zoom-out]')).toBeHidden();
     const sourcePane = root.locator('[data-ocr-source-viewport]');
     await sourcePane.focus();
     const documentScroll = await page.evaluate(() => scrollY);
@@ -148,7 +163,8 @@ for (const locale of ['ar', 'en']) {
     await expect(root.locator('[data-ocr-next]')).toBeDisabled();
     await expect(root.locator('[data-ocr-page-text]')).toHaveText(third);
     await screenshot(page, `${locale}-desktop-ocr-page-three`);
-    await root.locator('[data-ocr-fit="page"]').click();
+    await choose(root, zoomMenu, '[data-ocr-fit="page"]');
+    await expect(root.locator('[data-ocr-fit="page"]')).toBeHidden();
     await rendered(page, 3);
 
     // The page adapter preserves all text, blank-page indices and last-request-wins behavior.
@@ -175,10 +191,11 @@ for (const locale of ['ar', 'en']) {
       window.copied = [];
       Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text) => window.copied.push(text) } });
     });
-    await root.locator('[data-ocr-copy-page]').click();
-    await root.locator('[data-ocr-copy-all]').click();
+    await choose(root, copyMenu, '[data-ocr-copy-page]');
+    await choose(root, copyMenu, '[data-ocr-copy-all]');
     expect(await page.evaluate(() => window.copied)).toEqual(['', texts.join('\n\n')]);
-    await expect(root.locator('[data-ocr-copy-all]')).toBeFocused();
+    // The menu closes after a choice and its button keeps the focus.
+    await expect(copyMenu(root)).toBeFocused();
     await expect(root.locator('[data-copy-status]')).toHaveText(locale === 'ar' ? 'نُسخ النص' : 'Text copied');
     for (const extension of ['txt', 'docx', 'json']) {
       const downloading = page.waitForEvent('download');
@@ -200,8 +217,8 @@ for (const locale of ['ar', 'en']) {
     await expect(root.locator('[data-ocr-page-text]')).toHaveText(first);
     await expect(root.locator('.ocr-text-panel')).toBeVisible();
     const sourceRadio = root.locator('.ocr-view-choice input[value="source"]');
-    // The one view switch reads Page / Text.
-    await expect(root.getByRole('radio', { name: locale === 'ar' ? 'الصفحة' : 'Page', exact: true })).toHaveAttribute('value', 'source');
+    // The one view switch reads Original / Text.
+    await expect(root.getByRole('radio', { name: locale === 'ar' ? 'الأصل' : 'Original', exact: true })).toHaveAttribute('value', 'source');
     await expect(root.getByRole('radio', { name: locale === 'ar' ? 'النص' : 'Text', exact: true })).toBeChecked();
     await sourceRadio.focus();
     await sourceRadio.press('Space');
@@ -260,14 +277,14 @@ test('OCR preview failures and denied clipboard keep text and exact copy scopes'
   await expect(root.locator('[data-ocr-source-error]')).toContainText('local preview could not be displayed');
   await expect(root.locator('a[download]')).toHaveCount(3);
   await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('unavailable'); } } }));
-  await root.locator('[data-ocr-copy-all]').click();
+  await choose(root, copyMenu, '[data-ocr-copy-all]');
   await expect(root.locator('textarea')).toHaveValue(texts.join('\n\n'));
   expect(await root.locator('textarea').evaluate((field) => field.value.slice(field.selectionStart, field.selectionEnd))).toBe(texts.join('\n\n'));
   await root.getByRole('button', { name: 'Close copy panel', exact: true }).click();
   await expect(root.locator('textarea')).toHaveCount(0);
-  await expect(root.locator('[data-ocr-copy-all]')).toBeFocused();
+  await expect(copyMenu(root)).toBeFocused();
   await root.locator('[data-ocr-next]').click();
-  await root.locator('[data-ocr-copy-page]').click();
+  await choose(root, copyMenu, '[data-ocr-copy-page]');
   await expect(root.locator('textarea')).toHaveValue('');
   expect(posts).toEqual([]);
 });
@@ -345,7 +362,7 @@ test('OCR all-blank document keeps every page and never copies placeholder text'
   await rendered(page, 3);
   expect(await root.evaluate((node) => window.arabiTools.ocrReview.get(node).texts)).toEqual(['', '', '']);
   await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined }));
-  await root.locator('[data-ocr-copy-all]').click();
+  await choose(root, copyMenu, '[data-ocr-copy-all]');
   await expect(root.locator('textarea')).toHaveValue('\n\n\n\n');
 });
 
@@ -459,7 +476,7 @@ test('OCR 1000-page viewer bounds canvases and DOM while retaining every page te
   expect(await root.locator('*').count()).toBe(initialNodes);
   expect(initialNodes).toBeLessThan(150);
   await expect(root.locator('canvas')).toHaveCount(1);
-  await root.locator('[data-ocr-zoom-in]').click();
+  await choose(root, zoomMenu, '[data-ocr-zoom-in]');
   await root.locator('[data-ocr-zoom-in]').click();
   await rendered(page, 1000);
   const bounds = await root.locator('canvas').evaluate((canvas) => ({ width: canvas.width, height: canvas.height }));
@@ -473,7 +490,7 @@ test('OCR 1000-page viewer bounds canvases and DOM while retaining every page te
   await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
     writeText: async text => { window.largeOcrCopy = text; },
   } }));
-  await root.locator('[data-ocr-copy-all]').click();
+  await choose(root, copyMenu, '[data-ocr-copy-all]');
   expect(await root.evaluate(node => window.largeOcrCopy === window.arabiTools.ocrReview.get(node).texts.join('\n\n'))).toBe(true);
   let memory = null;
   if (browserName === 'chromium') {

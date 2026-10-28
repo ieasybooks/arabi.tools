@@ -374,11 +374,10 @@ async fn text_panel(locale: Locale, document: Arc<Document>) -> Result<impl View
     })
 }
 
-/// The viewer's one toolbar, over both columns: above the source, the Page/Text switch on narrow
-/// screens, the page navigator, then fit and zoom; above the text, Copy this page and search.
+/// The viewer's one toolbar, over both columns: above the source, the Original/Text switch on
+/// narrow screens, the page navigator, then the zoom; above the text, the search.
 #[component]
 async fn review_controls(locale: Locale, id: JobId, pages: usize) -> Result<impl View> {
-    let review = &locale.text().ocr.review;
     let page_error_id = format!("ocr-page-error-{id}");
     Ok(view! {
         <div class="result-toolbar ocr-toolbar" data-ocr-controls="" hidden=(true)>
@@ -386,21 +385,11 @@ async fn review_controls(locale: Locale, id: JobId, pages: usize) -> Result<impl
                 page_controls(locale: locale, id: id.clone(), pages: pages)
                 zoom_controls(locale: locale)
             </div>
-            <div class="ocr-text-tools">
-                <button
-                    class="button ghost compact"
-                    type="button"
-                    data-ocr-copy-page=""
-                >
-                    icon(data: icons::COPY, size: 16)
-                    <span>(review.copy_page)</span>
-                </button>
-                <div class="ocr-search" data-ocr-search-slot="">
-                    result_controls::search_toolbar(
-                        locale: locale,
-                        label: locale.text().review.search_text
-                    )
-                </div>
+            <div class="ocr-search" data-ocr-search-slot="">
+                result_controls::search_toolbar(
+                    locale: locale,
+                    label: locale.text().review.search_text
+                )
             </div>
             <p
                 class="error"
@@ -413,7 +402,7 @@ async fn review_controls(locale: Locale, id: JobId, pages: usize) -> Result<impl
     })
 }
 
-/// The Page/Text switch on narrow screens, then the page navigator with its editable number.
+/// The Original/Text switch on narrow screens, then the page navigator with its editable number.
 #[component]
 async fn page_controls(locale: Locale, id: JobId, pages: usize) -> Result<impl View> {
     let review = &locale.text().ocr.review;
@@ -481,51 +470,44 @@ async fn page_controls(locale: Locale, id: JobId, pages: usize) -> Result<impl V
     })
 }
 
-/// Zoom and the two fit choices for the source, shown once a preview is attached.
+/// The source's zoom, shown once a preview is attached: one button reading the current zoom, which
+/// opens the two fit choices (the one in use pressed and checked) and the two zoom steps. The steps
+/// keep the menu open, so the zoom can change by several steps while the button shows it.
 #[component]
 async fn zoom_controls(locale: Locale) -> Result<impl View> {
     let review = &locale.text().ocr.review;
     Ok(view! {
         <div class="ocr-zoom" data-ocr-zoom="" hidden=(true)>
-            <div class="ocr-fit">
-                <button
-                    class="button ghost compact"
-                    type="button"
-                    data-ocr-fit="width"
-                    aria-pressed="true"
-                >
-                    (review.fit_width)
-                </button>
-                <button
-                    class="button ghost compact"
-                    type="button"
-                    data-ocr-fit="page"
-                    aria-pressed="false"
-                >
-                    (review.fit_page)
-                </button>
-            </div>
-            <div class="zoom-steps">
-                <button
-                    class="icon-button"
-                    type="button"
-                    data-ocr-zoom-out=""
-                    aria-label=(review.zoom_out)
-                    title=(review.zoom_out)
-                >
-                    icon(data: icons::MINUS, size: 16)
-                </button>
-                <span data-ocr-zoom-value="" aria-label=(review.zoom_label) dir="ltr"></span>
-                <button
-                    class="icon-button"
-                    type="button"
-                    data-ocr-zoom-in=""
-                    aria-label=(review.zoom_in)
-                    title=(review.zoom_in)
-                >
-                    icon(data: icons::PLUS, size: 16)
-                </button>
-            </div>
+            result_controls::menu(
+                class: "menu-start zoom-menu",
+                button: "button ghost compact",
+                label: view! {
+                    <span class="visually-hidden">(review.zoom_label)</span>
+                    <bdi data-ocr-zoom-value="" dir="ltr"></bdi>
+                },
+                <li>
+                    <button type="button" data-ocr-fit="width" aria-pressed="true">
+                        (review.fit_width)
+                    </button>
+                </li>
+                <li>
+                    <button type="button" data-ocr-fit="page" aria-pressed="false">
+                        (review.fit_page)
+                    </button>
+                </li>
+                <li class="menu-group">
+                    <button type="button" data-ocr-zoom-in="" data-menu-keep="">
+                        icon(data: icons::PLUS, size: 16)
+                        (review.zoom_in)
+                    </button>
+                </li>
+                <li>
+                    <button type="button" data-ocr-zoom-out="" data-menu-keep="">
+                        icon(data: icons::MINUS, size: 16)
+                        (review.zoom_out)
+                    </button>
+                </li>
+            )
         </div>
     })
 }

@@ -4,14 +4,14 @@ use topcoat::{
     Result,
     asset::{Asset, asset},
     icon::icon,
-    view::{View, component, view},
+    view::{Child, View, component, view},
 };
 
 use crate::i18n::Locale;
 use crate::icons;
 
 pub const SEARCH_SCRIPT: Asset = asset!("./app/search.js");
-/// Also closes the download menus, so every page with a result loads it.
+/// Also runs the menus, so every page with a result loads it.
 pub const COPY_SCRIPT: Asset = asset!("./app/copy.js");
 
 /// One of a result's downloads: its full localized label, also its accessible name, and its URL.
@@ -29,6 +29,26 @@ pub enum CopyAll {
     Ocr,
     /// The read-only field with this id, from `diacritize.js`.
     Field(&'static str),
+}
+
+/// A small menu, like a file viewer's: a button that opens a list of choices under it. Choosing
+/// one, clicking elsewhere or pressing Escape closes it, and focus returns to its button; a choice
+/// marked `data-menu-keep` leaves it open, for steps such as zoom. `class` adds the menu's own
+/// classes (`menu-start` opens it from its start edge), `button` styles its button, `label` fills
+/// the button before its chevron, and the children are the list's items. `COPY_SCRIPT` runs it.
+#[component]
+pub async fn menu(
+    class: &'static str,
+    button: &'static str,
+    #[into] label: Child<'_>,
+    #[default] child: Child<'_>,
+) -> Result<impl View> {
+    Ok(view! {
+        <details class=(format!("menu {class}")) data-menu="">
+            <summary class=(button)>(label)</summary>
+            <ul class="menu-list" role="list">(child)</ul>
+        </details>
+    })
 }
 
 /// A result's header: its name, then its actions. Beside the workspace's input bar, which already
@@ -55,7 +75,8 @@ pub async fn result_header(
 
 /// A result's two whole-result actions: Copy all text, a quiet button, when the result has text,
 /// then Download, the result's one filled button. Several downloads open a small menu that lists
-/// each by its full label; a single download is a plain link named by its full label.
+/// each by its full label; a single download is a plain link named by its full label. An OCR result
+/// copies all its text or the page in view, so its Copy opens a menu of the two.
 #[component]
 pub async fn result_actions(
     locale: Locale,
@@ -63,6 +84,7 @@ pub async fn result_actions(
     mut downloads: Vec<DownloadLink>,
 ) -> Result<impl View> {
     let text = &locale.text().review;
+    let ocr = &locale.text().ocr.review;
     let single = (downloads.len() == 1).then(|| downloads.remove(0));
     Ok(view! {
         <div class="result-actions">
@@ -79,14 +101,24 @@ pub async fn result_actions(
                         </button>
                     }
                     CopyAll::Ocr => {
-                        <button
-                            type="button"
-                            class="button ghost compact"
-                            data-ocr-copy-all=""
-                        >
-                            icon(data: icons::COPY, size: 16)
-                            <span>(text.copy_all)</span>
-                        </button>
+                        menu(
+                            class: "copy-menu",
+                            button: "button ghost compact",
+                            label: view! {
+                                icon(data: icons::COPY, size: 16)
+                                <span>(text.copy)</span>
+                            },
+                            <li>
+                                <button type="button" data-ocr-copy-all="">
+                                    (text.copy_all)
+                                </button>
+                            </li>
+                            <li>
+                                <button type="button" data-ocr-copy-page="">
+                                    (ocr.copy_page)
+                                </button>
+                            </li>
+                        )
                     }
                     CopyAll::Field(field) => {
                         <button
@@ -112,24 +144,21 @@ pub async fn result_actions(
                     <span>(text.download)</span>
                 </a>
             } else {
-                <details class="download-menu" data-download-menu="">
-                    <summary class="button primary compact">
+                menu(
+                    class: "download-menu",
+                    button: "button primary compact",
+                    label: view! {
                         icon(data: icons::DOWNLOAD, size: 16)
                         <span>(text.download)</span>
-                        <span class="download-chevron">
-                            icon(data: icons::DOWN, size: 16)
-                        </span>
-                    </summary>
-                    <ul class="download-list" role="list">
-                        for link in &downloads {
-                            <li>
-                                <a href=(link.href.as_str()) download=(true)>
-                                    (link.label)
-                                </a>
-                            </li>
-                        }
-                    </ul>
-                </details>
+                    },
+                    for link in &downloads {
+                        <li>
+                            <a href=(link.href.as_str()) download=(true)>
+                                (link.label)
+                            </a>
+                        </li>
+                    }
+                )
             }
         </div>
     })

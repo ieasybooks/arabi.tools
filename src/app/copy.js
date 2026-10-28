@@ -10,7 +10,8 @@
   app.copyText = async (text, { status, fallback }) => {
     const request = {};
     requests.set(status, request);
-    const trigger = document.activeElement;
+    // A choice in a menu closes it, so the menu's button takes the focus back afterwards.
+    const trigger = document.activeElement?.closest("details[data-menu]")?.querySelector("summary") ?? document.activeElement;
     status.textContent = "";
     if (fallback instanceof Element) fallback.replaceChildren();
     try {
@@ -62,20 +63,22 @@
     }
   };
 
-  // A result's Download menu is a <details> disclosure. Choosing a download, clicking
-  // elsewhere or pressing Escape closes it; Escape returns focus to its button.
-  const menus = () => document.querySelectorAll("details[data-download-menu][open]");
+  // Every result menu (Download, Copy, zoom) is a <details> disclosure. Choosing an item, clicking
+  // elsewhere or pressing Escape closes it; an item marked data-menu-keep, such as a zoom step,
+  // leaves it open. A focused item would vanish with the list, so its menu's button takes focus.
+  const menus = () => document.querySelectorAll("details[data-menu][open]");
+  const close = (menu) => {
+    const focused = menu.contains(document.activeElement);
+    menu.open = false;
+    if (focused) menu.querySelector("summary").focus({ preventScroll: true });
+  };
   document.addEventListener("click", (event) => {
     for (const menu of menus()) {
-      if (!menu.contains(event.target) || event.target.closest("a[download]")) menu.open = false;
+      const item = event.target.closest?.(".menu-list :is(a, button)");
+      if (!menu.contains(event.target) || (item && menu.contains(item) && !item.hasAttribute("data-menu-keep"))) close(menu);
     }
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
-    for (const menu of menus()) {
-      const focused = menu.contains(document.activeElement);
-      menu.open = false;
-      if (focused) menu.querySelector("summary").focus();
-    }
+    if (event.key === "Escape") for (const menu of menus()) close(menu);
   });
 })();

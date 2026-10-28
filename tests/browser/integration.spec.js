@@ -67,6 +67,7 @@ for (const locale of ['ar', 'en']) {
     await expect(root.locator('[data-ocr-page-text]')).toHaveText(first);
     await expect(root.locator('[data-ocr-source-picker]')).toBeHidden();
     await trackCopy(page);
+    await root.locator('.zoom-menu > summary').click();
     await root.locator('[data-ocr-zoom-in]').click();
     await rendered(root, 1, 'red');
     const zoom = await root.locator('[data-ocr-zoom-value]').textContent();
@@ -82,8 +83,11 @@ for (const locale of ['ar', 'en']) {
     await rendered(root, 2, 'white');
     await expect(root.locator('[data-ocr-page-text]')).toHaveText('');
     await expect(query).toHaveValue('نص مشترك');
-    await root.locator('[data-ocr-copy-page]').click();
-    await root.locator('[data-ocr-copy-all]').click();
+    // Both copy scopes are chosen from the header's Copy menu.
+    for (const scope of ['page', 'all']) {
+      await root.locator('.copy-menu > summary').click();
+      await root.locator(`[data-ocr-copy-${scope}]`).click();
+    }
     expect(await page.evaluate(() => window.integrationCopies)).toEqual(['', [first, '', third].join('\n\n')]);
     expect(await page.evaluate(() => window.integrationClipboard)).toEqual(['', [first, '', third].join('\n\n')]);
 
