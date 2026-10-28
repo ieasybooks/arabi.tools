@@ -38,7 +38,25 @@
       if (job) back.href = job;
       input.setAttribute('aria-invalid', String(invalid));
     };
+    // Result first: while the workspace holds the result of the file still chosen, the input
+    // folds into one slim bar and its button steps down to secondary. Choosing another file, or
+    // removing it, unfolds the input. The button stays the same element, so it keeps its focus.
+    // Folding above the visitor's view would move the page, so then it waits until the input is
+    // back in view.
+    let resultIsCurrent = false;
+    const fold = () => {
+      form.toggleAttribute('data-collapsed', resultIsCurrent);
+      button.classList.toggle('primary', !resultIsCurrent);
+      button.classList.toggle('secondary', resultIsCurrent);
+      button.classList.toggle('compact', resultIsCurrent);
+    };
+    const foldInView = () => {
+      if (form.hasAttribute('data-collapsed') !== resultIsCurrent && form.getBoundingClientRect().top >= 0) fold();
+    };
+    window.addEventListener('scroll', foldInView, { passive: true, signal: lifetime.signal });
     const updateFile = app.fileSelection(form, button, locked, problem => {
+      resultIsCurrent = false;
+      fold();
       clearError();
       if (problem) showError(problem, null, true);
     }, lifetime.signal);
@@ -58,6 +76,10 @@
       if (phase !== 'processing') detail.textContent = '';
     };
     const observer = app.observeWorkspace(root, (phase, message, result, update) => {
+      if (phase === 'completed' && result) {
+        resultIsCurrent = true; // The input stays locked while a job runs, so it is the file sent.
+        foldInView();
+      }
       if (['completed', 'failed', 'missing'].includes(phase)) {
         attempt = null;
         app.store(attemptKey, null);
