@@ -69,6 +69,51 @@ pub const DOWNLOAD: IconData = IconData::unescaped_unchecked(
     ViewBox::new(0.0, 0.0, 16.0, 16.0),
     r#"<g fill="currentColor"><path d="M8.75 2.75a.75.75 0 0 0-1.5 0v5.69L5.03 6.22a.75.75 0 0 0-1.06 1.06l3.5 3.5a.75.75 0 0 0 1.06 0l3.5-3.5a.75.75 0 0 0-1.06-1.06L8.75 8.44V2.75Z"/><path d="M3.5 9.75a.75.75 0 0 0-1.5 0v1.5A2.75 2.75 0 0 0 4.75 14h6.5A2.75 2.75 0 0 0 14 11.25v-1.5a.75.75 0 0 0-1.5 0v1.5c0 .69-.56 1.25-1.25 1.25h-6.5c-.69 0-1.25-.56-1.25-1.25v-1.5Z"/></g>"#,
 );
+/// Copying text.
+pub const COPY: IconData = IconData::unescaped_unchecked(
+    ViewBox::new(0.0, 0.0, 16.0, 16.0),
+    r#"<g fill="currentColor"><path d="M5.5 3.5A1.5 1.5 0 0 1 7 2h2.879a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 1 .439 1.061V9.5A1.5 1.5 0 0 1 12 11V8.621a3 3 0 0 0-.879-2.121L9 4.379A3 3 0 0 0 6.879 3.5H5.5Z"/><path d="M4 5a1.5 1.5 0 0 0-1.5 1.5v6A1.5 1.5 0 0 0 4 14h5a1.5 1.5 0 0 0 1.5-1.5V8.621a1.5 1.5 0 0 0-.44-1.06L7.94 5.439A1.5 1.5 0 0 0 6.878 5H4Z"/></g>"#,
+);
+/// Searching a result.
+pub const SEARCH: IconData = IconData::unescaped_unchecked(
+    ViewBox::new(0.0, 0.0, 16.0, 16.0),
+    r#"<g fill="currentColor"><path fill-rule="evenodd" d="M9.965 11.026a5 5 0 1 1 1.06-1.06l2.755 2.754a.75.75 0 1 1-1.06 1.06l-2.755-2.754ZM10.5 7a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0Z" clip-rule="evenodd"/></g>"#,
+);
+/// Clearing a field.
+pub const CLEAR: IconData = IconData::unescaped_unchecked(
+    ViewBox::new(0.0, 0.0, 16.0, 16.0),
+    r#"<g fill="currentColor"><path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z"/></g>"#,
+);
+/// The previous match.
+pub const UP: IconData = IconData::unescaped_unchecked(
+    ViewBox::new(0.0, 0.0, 16.0, 16.0),
+    r#"<g fill="currentColor"><path fill-rule="evenodd" d="M11.78 9.78a.75.75 0 0 1-1.06 0L8 7.06 5.28 9.78a.75.75 0 0 1-1.06-1.06l3.25-3.25a.75.75 0 0 1 1.06 0l3.25 3.25a.75.75 0 0 1 0 1.06Z" clip-rule="evenodd"/></g>"#,
+);
+/// The next match.
+pub const DOWN: IconData = IconData::unescaped_unchecked(
+    ViewBox::new(0.0, 0.0, 16.0, 16.0),
+    r#"<g fill="currentColor"><path fill-rule="evenodd" d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></g>"#,
+);
+/// The previous page. Mirrored on Arabic pages.
+pub const BACK: IconData = IconData::unescaped_unchecked(
+    ViewBox::new(0.0, 0.0, 16.0, 16.0),
+    r#"<g fill="currentColor"><path fill-rule="evenodd" d="M9.78 4.22a.75.75 0 0 1 0 1.06L7.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L5.47 8.53a.75.75 0 0 1 0-1.06l3.25-3.25a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd"/></g>"#,
+);
+/// The next page. Mirrored on Arabic pages.
+pub const NEXT: IconData = IconData::unescaped_unchecked(
+    ViewBox::new(0.0, 0.0, 16.0, 16.0),
+    r#"<g fill="currentColor"><path fill-rule="evenodd" d="M6.22 4.22a.75.75 0 0 1 1.06 0l3.25 3.25a.75.75 0 0 1 0 1.06l-3.25 3.25a.75.75 0 0 1-1.06-1.06L8.94 8 6.22 5.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></g>"#,
+);
+/// Zooming out.
+pub const MINUS: IconData = IconData::unescaped_unchecked(
+    ViewBox::new(0.0, 0.0, 16.0, 16.0),
+    r#"<g fill="currentColor"><path d="M3.75 7.25a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5Z"/></g>"#,
+);
+/// Zooming in.
+pub const PLUS: IconData = IconData::unescaped_unchecked(
+    ViewBox::new(0.0, 0.0, 16.0, 16.0),
+    r#"<g fill="currentColor"><path d="M8.75 3.75a.75.75 0 0 0-1.5 0v3.5h-3.5a.75.75 0 0 0 0 1.5h3.5v3.5a.75.75 0 0 0 1.5 0v-3.5h3.5a.75.75 0 0 0 0-1.5h-3.5v-3.5Z"/></g>"#,
+);
 /// Going on to a page. Mirrored on Arabic pages.
 pub const FORWARD: IconData = IconData::unescaped_unchecked(
     ViewBox::new(0.0, 0.0, 16.0, 16.0),

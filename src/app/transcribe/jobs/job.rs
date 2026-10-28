@@ -189,7 +189,6 @@ async fn job_status(
         _ => None,
     };
     Ok(view! {
-        transcribe::steps(locale: locale, current: step, failed: state == "failed")
         <div
             class="job"
             data-state=(state)
@@ -200,6 +199,7 @@ async fn job_status(
                 .unwrap_or_default()
                 .as_millis())
         >
+            transcribe::steps(locale: locale, current: step, failed: state == "failed")
             <div class="job-heading">
                 if let Some(state_icon) = state_icon {
                     <span class="job-icon">icon(data: state_icon, size: 20)</span>
@@ -263,38 +263,20 @@ async fn result(locale: Locale, id: JobId, transcript: Arc<Transcript>) -> Resul
             data-job-id=(id.to_string())
             data-copy-text=(copy_override)
         >
-            <div class="result-heading">
-                <p class="result-name">
-                    icon(data: icons::TRANSCRIPT, size: 20)
-                    <span dir="auto">(transcript.name.as_str())</span>
-                </p>
-                <div class="downloads">
-                    <a
-                        class="button primary"
-                        href=(href!(download_text, Id(id.clone())))
-                        download=(true)
-                    >
-                        icon(data: icons::DOWNLOAD, size: 16)
-                        <span>(text.download_text)</span>
-                    </a>
-                    <a
-                        class="button secondary"
-                        href=(href!(download_srt, Id(id.clone())))
-                        download=(true)
-                    >
-                        icon(data: icons::DOWNLOAD, size: 16)
-                        <span>(text.download_srt)</span>
-                    </a>
-                </div>
+            result_heading(
+                locale: locale,
+                id: id.clone(),
+                name: transcript.name.clone()
+            )
+            <div class="result-toolbar">
+                result_controls::search_toolbar(locale: locale)
+                reading_controls(locale: locale, transcript: transcript.clone())
             </div>
-            <p class="hint">(locale.kept_for())</p>
-            result_controls::search_toolbar(locale: locale)
-            reading_controls(locale: locale, transcript: transcript.clone())
             result_controls::copy_feedback(locale: locale)
             if transcript.text.trim().is_empty() {
                 <p>(text.no_speech)</p>
             } else {
-                <h2 class="transcript-title">(text.transcript_title)</h2>
+                <h2 class="visually-hidden">(text.transcript_title)</h2>
                 <ol
                     class="cues"
                     role="list"
@@ -318,11 +300,14 @@ async fn result(locale: Locale, id: JobId, transcript: Arc<Transcript>) -> Resul
                                 </p>
                                 <button
                                     type="button"
-                                    class="button secondary copy-cue"
+                                    class="button ghost compact copy-cue"
                                     data-copy-cue=(true)
+                                    aria-label=(review.copy_cue)
+                                    title=(review.copy_cue)
                                     hidden=(true)
                                 >
-                                    (review.copy_cue)
+                                    icon(data: icons::COPY, size: 16)
+                                    <span>(review.copy)</span>
                                 </button>
                             </div>
                             <p
@@ -340,21 +325,66 @@ async fn result(locale: Locale, id: JobId, transcript: Arc<Transcript>) -> Resul
     })
 }
 
+/// The transcript's name and retention, with Copy all and the two downloads.
+#[component]
+async fn result_heading(locale: Locale, id: JobId, name: String) -> Result<impl View> {
+    let text = &locale.text().transcription;
+    let review = &locale.text().review;
+    Ok(view! {
+        <div class="result-heading">
+            <div class="result-title">
+                <p class="result-name">
+                    icon(data: icons::TRANSCRIPT, size: 20)
+                    <span dir="auto">(name.as_str())</span>
+                </p>
+                <p class="result-meta">(locale.kept_for())</p>
+            </div>
+            <div class="downloads">
+                <button
+                    type="button"
+                    class="button secondary compact"
+                    data-copy-all=(true)
+                >
+                    icon(data: icons::COPY, size: 16)
+                    <span>(review.copy_all)</span>
+                </button>
+                <a
+                    class="button primary compact"
+                    href=(href!(download_text, Id(id.clone())))
+                    download=(true)
+                    aria-label=(text.download_text)
+                    title=(text.download_text)
+                >
+                    icon(data: icons::DOWNLOAD, size: 16)
+                    <span>(crate::i18n::TXT)</span>
+                </a>
+                <a
+                    class="button secondary compact"
+                    href=(href!(download_srt, Id(id.clone())))
+                    download=(true)
+                    aria-label=(text.download_srt)
+                    title=(text.download_srt)
+                >
+                    icon(data: icons::DOWNLOAD, size: 16)
+                    <span>(crate::i18n::SRT)</span>
+                </a>
+            </div>
+        </div>
+    })
+}
+
 #[component]
 async fn reading_controls(locale: Locale, transcript: Arc<Transcript>) -> Result<impl View> {
     let text = &locale.text().review;
     Ok(view! {
         <div class="transcript-actions" data-transcript-controls=(true) hidden=(true)>
-            <button type="button" class="button secondary" data-copy-all=(true)>
-                (text.copy_all)
-            </button>
             if !transcript.cues.is_empty() {
                 <label class="timestamps-choice">
                     <input type="checkbox" data-show-timestamps=(true) checked=(true)>
                     (text.show_timestamps)
                 </label>
                 <label class="cue-choice">
-                    <span>(text.go_to_cue)</span>
+                    <span class="visually-hidden">(text.go_to_cue)</span>
                     <select data-cue-select=(true)>
                         for (number, cue) in (1..).zip(&transcript.cues) {
                             <option value=(number.to_string())>

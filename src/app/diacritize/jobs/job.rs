@@ -161,15 +161,6 @@ async fn job_status(
         _ => None,
     };
     Ok(view! {
-        diacritize::steps(
-            locale: locale,
-            current: if state == "done" {
-                diacritize::Step::Download
-            } else {
-                diacritize::Step::Diacritize
-            },
-            failed: state == "failed"
-        )
         <div
             class="job"
             data-state=(state)
@@ -180,6 +171,15 @@ async fn job_status(
             data-job-id=(id.to_string())
             data-phase=(phase)
         >
+            diacritize::steps(
+                locale: locale,
+                current: if state == "done" {
+                    diacritize::Step::Download
+                } else {
+                    diacritize::Step::Diacritize
+                },
+                failed: state == "failed"
+            )
             <div class="job-heading">
                 if let Some(state_icon) = state_icon {
                     <span class="job-icon">icon(data: state_icon, size: 20)</span>
@@ -231,15 +231,28 @@ async fn result(locale: Locale, id: JobId, document: Arc<Document>) -> Result<im
             data-mode=(if document.text.is_some() { "text" } else { "document" })
         >
             <div class="result-heading">
-                <p class="result-name">
-                    icon(data: icons::TRANSCRIPT, size: 20)
-                    <span dir="auto">(name)</span>
-                </p>
-                <p class="hint">
-                    (text.model)
-                    ": "
-                    <bdi dir="auto">(locale.diacritization_model(document.model))</bdi>
-                </p>
+                <div class="result-title">
+                    <p class="result-name">
+                        icon(data: icons::TRANSCRIPT, size: 20)
+                        <span dir="auto">(name)</span>
+                    </p>
+                    <p class="result-meta">
+                        <span class="visually-hidden">
+                            (text.model)
+                            ": "
+                        </span>
+                        <bdi dir="auto">
+                            (locale.diacritization_model(document.model))
+                        </bdi>
+                        " · "
+                        (locale.diacritization_kept_for())
+                    </p>
+                </div>
+                result_actions(
+                    locale: locale,
+                    id: id.clone(),
+                    document: document.clone()
+                )
             </div>
             if let Some(text_result) = document.text.as_ref() {
                 <label class="visually-hidden" for="diacritized-text">
@@ -257,41 +270,61 @@ async fn result(locale: Locale, id: JobId, document: Arc<Document>) -> Result<im
                     (text_result.output.as_str())
                 </textarea>
             }
-            <div class="downloads">
-                if document.text.is_some() {
-                    <button
-                        type="button"
-                        class="button secondary"
-                        data-copy="diacritized-text"
-                    >
-                        (locale.text().review.copy_all)
-                    </button>
-                }
+            result_controls::copy_feedback(locale: locale)
+        </div>
+    })
+}
+
+/// Copy all (text results), the result download, and the original file for documents.
+#[component]
+async fn result_actions(locale: Locale, id: JobId, document: Arc<Document>) -> Result<impl View> {
+    let text = &locale.text().diacritization;
+    Ok(view! {
+        <div class="downloads">
+            if document.text.is_some() {
+                <button
+                    type="button"
+                    class="button secondary compact"
+                    data-copy="diacritized-text"
+                >
+                    icon(data: icons::COPY, size: 16)
+                    <span>(locale.text().review.copy_all)</span>
+                </button>
+            }
+            <a
+                class="button primary compact"
+                href=(href!(download_result, Id(id.clone())))
+                download=(true)
+                aria-label=(if document.kind == DocumentKind::Docx {
+                    text.download_docx
+                } else {
+                    text.download_text
+                })
+                title=(if document.kind == DocumentKind::Docx {
+                    text.download_docx
+                } else {
+                    text.download_text
+                })
+            >
+                icon(data: icons::DOWNLOAD, size: 16)
+                <span>
+                    (if document.kind == DocumentKind::Docx {
+                        crate::i18n::DOCX
+                    } else {
+                        crate::i18n::TXT
+                    })
+                </span>
+            </a>
+            if document.text.is_none() {
                 <a
-                    class="button secondary"
-                    href=(href!(download_result, Id(id.clone())))
+                    class="button secondary compact"
+                    href=(href!(download_original, Id(id)))
                     download=(true)
                 >
                     icon(data: icons::DOWNLOAD, size: 16)
-                    (if document.kind == DocumentKind::Docx {
-                        text.download_docx
-                    } else {
-                        text.download_text
-                    })
+                    <span>(text.download_original)</span>
                 </a>
-                if document.text.is_none() {
-                    <a
-                        class="button secondary"
-                        href=(href!(download_original, Id(id)))
-                        download=(true)
-                    >
-                        (text.download_original)
-                    </a>
-                }
-            </div>
-            result_controls::copy_feedback(locale: locale)
-            <p class="hint">(text.replaces_marks)</p>
-            <p class="hint">(locale.diacritization_kept_for())</p>
+            }
         </div>
     })
 }

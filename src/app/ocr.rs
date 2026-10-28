@@ -39,21 +39,26 @@ pub async fn page(cx: &Cx) -> Result<impl View> {
         <section class="workspace">
             <div class="container workspace-layout workspace-wide">
                 <div class="workspace-entry">
-                    steps(locale: locale, current: Step::Upload, failed: false)
                     if !ocr.is_available() {
-                        <p class="notice" role="status">(text.unavailable)</p>
+                        <div class="workspace-card">
+                            steps(locale: locale, current: Step::Upload, failed: false)
+                            <p class="notice" role="status">(text.unavailable)</p>
+                        </div>
                     } else {
                         match ocr.queue.availability(client_ip(cx)) {
                             Err(rejection) => {
-                                <div class="notice">
-                                    icon(data: icons::WARNING, size: 20)
-                                    <div class="notice-body">
-                                        <p>(locale.ocr_rejection(rejection))</p>
-                                        if rejection == Rejection::ActiveJob {
-                                            if let Some(job) = jobs::unfinished_job(cx) {
-                                                <p><a href=(job)>(text.back_to_job)</a></p>
+                                <div class="workspace-card">
+                                    steps(locale: locale, current: Step::Upload, failed: false)
+                                    <div class="notice">
+                                        icon(data: icons::WARNING, size: 20)
+                                        <div class="notice-body">
+                                            <p>(locale.ocr_rejection(rejection))</p>
+                                            if rejection == Rejection::ActiveJob {
+                                                if let Some(job) = jobs::unfinished_job(cx) {
+                                                    <p><a href=(job)>(text.back_to_job)</a></p>
+                                                }
                                             }
-                                        }
+                                        </div>
                                     </div>
                                 </div>
                             }
@@ -105,6 +110,9 @@ async fn upload_form(cx: &Cx, locale: Locale) -> Result<impl View> {
                 data-kilobytes=(workspace.kilobytes)
                 data-megabytes=(workspace.megabytes)
             >
+                <div class="card-steps">
+                    steps(locale: locale, current: Step::Upload, failed: false)
+                </div>
                 <div class="dropzone">
                     <input
                         id="document"
@@ -132,6 +140,7 @@ async fn upload_form(cx: &Cx, locale: Locale) -> Result<impl View> {
                     <p id="job-status" class="submission-status" role="status"></p>
                     <p class="submission-percent" dir="ltr"></p>
                     <p class="server-detail hint"></p>
+                    crate::workspace::progress_links(locale: locale)
                 </div>
                 <p id="upload-error" class="error" role="alert" hidden=(true)></p>
                 <a class="return-to-job" hidden=(true)>(text.back_to_job)</a>
@@ -140,7 +149,7 @@ async fn upload_form(cx: &Cx, locale: Locale) -> Result<impl View> {
             <div class="workspace-observer" hidden=(true)>
                 jobs::job::observe(job: $(job.get()))
             </div>
-            crate::workspace::review(locale: locale)
+            crate::workspace::review(locale: locale, placeholder: None)
         </div>
         <noscript><p class="notice">(text.needs_javascript)</p></noscript>
     })

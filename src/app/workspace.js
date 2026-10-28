@@ -71,6 +71,8 @@
     const back = root.querySelector('.workspace-recovery');
     const previous = root.querySelector('.previous-result');
     const view = root.querySelector('.view-result');
+    // A new job starts its steps again rather than showing the previous job's progress.
+    const initialSteps = root.querySelector('.card-steps > .steps')?.cloneNode(true);
     const lifetime = new AbortController();
     let jobId = null;
     let resultId = output.querySelector('[data-result]')?.dataset.jobId;
@@ -95,7 +97,7 @@
       if (retry) retry.hidden = true;
       const phase = update.dataset.phase;
       const steps = observer.querySelector('.steps');
-      const currentSteps = root.closest('.workspace-entry')?.querySelector(':scope > .steps');
+      const currentSteps = root.querySelector('.card-steps > .steps');
       if (steps && currentSteps && steps.outerHTML !== currentSteps.outerHTML) currentSteps.replaceWith(steps.cloneNode(true));
       const result = update.querySelector('[data-result]');
       if (result) {
@@ -148,6 +150,8 @@
       reserve: recover,
       begin() {
         if (jobId !== resultId) release(jobId);
+        const steps = root.querySelector('.card-steps > .steps');
+        if (steps && initialSteps) steps.replaceWith(initialSteps.cloneNode(true));
         jobId = null;
         desired = '';
         ended = false;

@@ -13,6 +13,13 @@ use crate::tools::{KEEP_FINISHED, MAX_UPLOAD_BYTES};
 /// The cookie holding the visitor's language.
 pub const COOKIE: &str = "lang";
 
+/// Download formats, named the same in both languages. Each download link's accessible name
+/// is its full localized label.
+pub const TXT: &str = "TXT";
+pub const SRT: &str = "SRT";
+pub const DOCX: &str = "DOCX";
+pub const JSON: &str = "JSON";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Locale {
     Ar,
@@ -391,6 +398,7 @@ pub struct ReviewText {
     pub search_unavailable: &'static str,
     pub copy_all: &'static str,
     pub copy_cue: &'static str,
+    pub copy: &'static str,
     pub copied: &'static str,
     pub copy_failed: &'static str,
     pub copy_label: &'static str,
@@ -606,6 +614,7 @@ pub struct DiacritizationText {
     pub download_original: &'static str,
     pub another: &'static str,
     pub try_again: &'static str,
+    pub result_placeholder: &'static str,
     pub closed: &'static str,
     pub full: &'static str,
     pub active_job: &'static str,
@@ -688,6 +697,7 @@ static AR: Text = Text {
         search_unavailable: "يحتاج البحث إلى متصفح أحدث. يمكنك تحديد النص ونسخه وتنزيله.",
         copy_all: "نسخ النص كاملًا",
         copy_cue: "نسخ هذا المقطع",
+        copy: "نسخ",
         copied: "نُسخ النص",
         copy_failed: "تعذّر النسخ. حدّد النص وانسخه يدويًا.",
         copy_label: "النص المراد نسخه",
@@ -746,6 +756,7 @@ static AR: Text = Text {
         download_original: "تنزيل الملف الأصلي",
         another: "تشكيل نص أو مستند آخر",
         try_again: "جرّب نموذجًا آخر أو عدّل النص الأصلي.",
+        result_placeholder: "ستظهر النتيجة هنا.",
         closed: "نحدّث الموقع الآن. حاول مرة أخرى بعد بضع دقائق.",
         full: "الطابور ممتلئ الآن. حاول مرة أخرى بعد بضع دقائق.",
         active_job: "يوجد تشكيل قيد التنفيذ من اتصالك بالإنترنت. انتظر حتى ينتهي أو ألغِه قبل بدء طلب آخر.",
@@ -942,6 +953,7 @@ static EN: Text = Text {
         search_unavailable: "Search needs a newer browser. You can still select, copy, and download the text.",
         copy_all: "Copy all text",
         copy_cue: "Copy this cue",
+        copy: "Copy",
         copied: "Text copied",
         copy_failed: "Copying was unavailable. Select the text and copy it manually.",
         copy_label: "Text to copy",
@@ -1000,6 +1012,7 @@ static EN: Text = Text {
         download_original: "Download original file",
         another: "Diacritize another text or document",
         try_again: "Try another model or edit the original text.",
+        result_placeholder: "The result will appear here.",
         closed: "We are updating the site. Please try again in a few minutes.",
         full: "The queue is full right now. Please try again in a few minutes.",
         active_job: "Diacritization from your connection is already in progress. Wait for it to finish or cancel it before starting another request.",

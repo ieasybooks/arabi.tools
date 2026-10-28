@@ -38,37 +38,56 @@ pub(crate) async fn file_actions(locale: crate::i18n::Locale) -> Result<impl Vie
     Ok(view! {
         <div class="file-actions">
             <p class="file-size hint" dir="auto"></p>
-            <button type="button" class="button secondary replace-file">
+            <button type="button" class="button secondary compact replace-file">
                 (text.replace_file)
             </button>
-            <button type="button" class="button secondary remove-file">
+            <button type="button" class="button ghost compact remove-file">
                 (text.remove_file)
             </button>
         </div>
     })
 }
 
+/// Shown beside a job's progress: the job's own page, and a jump to its finished result.
 #[component]
-pub(crate) async fn review(locale: crate::i18n::Locale) -> Result<impl View> {
+pub(crate) async fn progress_links(locale: crate::i18n::Locale) -> Result<impl View> {
+    let text = &locale.text().workspace;
+    Ok(view! {
+        <p class="progress-links">
+            <button type="button" class="link-button view-result" hidden=(true)>
+                (text.view_result)
+            </button>
+            <a class="workspace-recovery" hidden=(true)>(text.recovery)</a>
+        </p>
+    })
+}
+
+/// `placeholder` fills the result card before the first result arrives.
+#[component]
+pub(crate) async fn review(
+    locale: crate::i18n::Locale,
+    placeholder: Option<&'static str>,
+) -> Result<impl View> {
     let text = &locale.text().workspace;
     Ok(view! {
         <section class="workspace-review">
-            <p class="observation-status notice" role="status" hidden=(true)>
-                (text.delayed)
-            </p>
-            <button
-                type="button"
-                class="button secondary retry-observation"
-                hidden=(true)
-            >
-                (text.retry_observation)
-            </button>
-            <a class="workspace-recovery" hidden=(true)>(text.recovery)</a>
-            <button type="button" class="button secondary view-result" hidden=(true)>
-                (text.view_result)
-            </button>
-            <p class="previous-result hint" hidden=(true)></p>
+            <div class="observation-notice">
+                <p class="observation-status" role="status" hidden=(true)>
+                    (text.delayed)
+                </p>
+                <button
+                    type="button"
+                    class="button secondary compact retry-observation"
+                    hidden=(true)
+                >
+                    (text.retry_observation)
+                </button>
+            </div>
+            <p class="previous-result" hidden=(true)></p>
             <div class="workspace-result" tabindex="-1" aria-label=(text.result)></div>
+            if let Some(placeholder) = placeholder {
+                <p class="result-placeholder">(placeholder)</p>
+            }
         </section>
     })
 }

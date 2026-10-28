@@ -208,7 +208,6 @@ async fn job_status(
         _ => None,
     };
     Ok(view! {
-        ocr::steps(locale: locale, current: step, failed: state == "failed")
         <div
             class="job"
             data-state=(state)
@@ -219,6 +218,7 @@ async fn job_status(
                 .unwrap_or_default()
                 .as_millis())
         >
+            ocr::steps(locale: locale, current: step, failed: state == "failed")
             <div class="job-heading">
                 if let Some(state_icon) = state_icon {
                     <span class="job-icon">icon(data: state_icon, size: 20)</span>
@@ -297,45 +297,67 @@ async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> 
             data-no-text=(text.no_text)
         >
             <div class="result-heading">
-                <p class="result-name">
-                    icon(data: icons::TRANSCRIPT, size: 20)
-                    <span dir="auto">(document.name.as_str())</span>
-                </p>
+                <div class="result-title">
+                    <p class="result-name">
+                        icon(data: icons::TRANSCRIPT, size: 20)
+                        <span dir="auto">(document.name.as_str())</span>
+                    </p>
+                    <p class="result-meta">(text.kept_for)</p>
+                </div>
                 <div class="downloads ocr-downloads">
+                    <button
+                        class="button secondary compact"
+                        type="button"
+                        data-ocr-copy-all=""
+                    >
+                        icon(data: icons::COPY, size: 16)
+                        <span>(locale.text().review.copy_all)</span>
+                    </button>
                     <a
-                        class="button primary"
+                        class="button primary compact"
                         href=(href!(download_text, Id(id.clone())))
                         download=(true)
+                        aria-label=(text.download_text)
+                        title=(text.download_text)
                     >
                         icon(data: icons::DOWNLOAD, size: 16)
-                        <span>(text.download_text)</span>
+                        <span>(crate::i18n::TXT)</span>
                     </a>
                     <a
-                        class="button secondary"
+                        class="button secondary compact"
                         href=(href!(download_docx, Id(id.clone())))
                         download=(true)
+                        aria-label=(text.download_docx)
+                        title=(text.download_docx)
                     >
                         icon(data: icons::DOWNLOAD, size: 16)
-                        <span>(text.download_docx)</span>
+                        <span>(crate::i18n::DOCX)</span>
                     </a>
                     <a
-                        class="button secondary"
+                        class="button secondary compact"
                         href=(href!(download_json, Id(id.clone())))
                         download=(true)
+                        aria-label=(text.download_json)
+                        title=(text.download_json)
                     >
                         icon(data: icons::DOWNLOAD, size: 16)
-                        <span>(text.download_json)</span>
+                        <span>(crate::i18n::JSON)</span>
                     </a>
                 </div>
             </div>
-            <p class="hint">(text.kept_for)</p>
             if all_blank {
                 <p class="ocr-empty-document">(review.all_blank)</p>
             }
-            <div data-ocr-search-slot="">
-                result_controls::search_toolbar(locale: locale)
+            <div class="result-toolbar">
+                <div class="ocr-search" data-ocr-search-slot="">
+                    result_controls::search_toolbar(locale: locale)
+                </div>
+                review_controls(
+                    locale: locale,
+                    id: id.clone(),
+                    pages: document.pages.len()
+                )
             </div>
-            review_controls(locale: locale, id: id.clone())
             <div class="ocr-panels">
                 source_panel(locale: locale, id: id.clone())
                 text_panel(locale: locale, document: document.clone())
@@ -350,7 +372,20 @@ async fn text_panel(locale: Locale, document: Arc<Document>) -> Result<impl View
     let review = &text.review;
     Ok(view! {
         <section class="ocr-text-panel">
-            <h2>(review.text_title)</h2>
+            <div class="panel-heading">
+                <h2>(review.text_title)</h2>
+                <div class="ocr-copy-actions">
+                    <button
+                        class="button ghost compact"
+                        type="button"
+                        data-ocr-copy-page=""
+                    >
+                        icon(data: icons::COPY, size: 16)
+                        <span>(review.copy_page)</span>
+                    </button>
+                </div>
+            </div>
+            result_controls::copy_feedback(locale: locale)
             <div
                 class="ocr-text-viewport"
                 data-ocr-text-viewport=""
@@ -382,55 +417,13 @@ async fn text_panel(locale: Locale, document: Arc<Document>) -> Result<impl View
 }
 
 #[component]
-async fn review_controls(locale: Locale, id: JobId) -> Result<impl View> {
+async fn review_controls(locale: Locale, id: JobId, pages: usize) -> Result<impl View> {
     let review = &locale.text().ocr.review;
     let page_error_id = format!("ocr-page-error-{id}");
     Ok(view! {
         <div class="ocr-toolbar" data-ocr-controls="" hidden=(true)>
-            <form class="ocr-page-navigation" data-ocr-navigation="" novalidate=(true)>
-                <button class="button secondary" type="button" data-ocr-previous="">
-                    (review.previous_page)
-                </button>
-                <label class="ocr-page-field">
-                    <span>(review.page_label)</span>
-                    <input
-                        type="text"
-                        inputmode="numeric"
-                        dir="ltr"
-                        value="1"
-                        data-ocr-page-number=""
-                        aria-describedby=(page_error_id.as_str())
-                        autocomplete="off"
-                    />
-                </label>
-                <button class="button secondary" type="button" data-ocr-next="">
-                    (review.next_page)
-                </button>
-                <span
-                    class="ocr-page-position"
-                    data-ocr-position=""
-                    aria-live="polite"
-                    aria-atomic="true"
-                ></span>
-            </form>
-            <p
-                class="error"
-                id=(page_error_id.as_str())
-                data-ocr-page-error=""
-                aria-live="polite"
-                hidden=(true)
-            ></p>
-            <div class="ocr-copy-actions">
-                <button class="button secondary" type="button" data-ocr-copy-page="">
-                    (review.copy_page)
-                </button>
-                <button class="button secondary" type="button" data-ocr-copy-all="">
-                    (locale.text().review.copy_all)
-                </button>
-            </div>
-            result_controls::copy_feedback(locale: locale)
             <fieldset class="ocr-view-choice">
-                <legend>(review.view_label)</legend>
+                <legend class="visually-hidden">(review.view_label)</legend>
                 <label>
                     <input
                         type="radio"
@@ -449,6 +442,56 @@ async fn review_controls(locale: Locale, id: JobId) -> Result<impl View> {
                     <span>(review.text_view)</span>
                 </label>
             </fieldset>
+            <form class="ocr-page-navigation" data-ocr-navigation="" novalidate=(true)>
+                <button
+                    class="icon-button"
+                    type="button"
+                    data-ocr-previous=""
+                    aria-label=(review.previous_page)
+                    title=(review.previous_page)
+                >
+                    <span class="forward">icon(data: icons::BACK, size: 16)</span>
+                </button>
+                <span class="ocr-page-count" dir="ltr">
+                    <label class="ocr-page-field">
+                        <span class="visually-hidden">(review.page_label)</span>
+                        <input
+                            type="text"
+                            inputmode="numeric"
+                            dir="ltr"
+                            value="1"
+                            data-ocr-page-number=""
+                            aria-describedby=(page_error_id.as_str())
+                            autocomplete="off"
+                        />
+                    </label>
+                    <span class="ocr-page-total" aria-hidden="true">
+                        <bdi dir="ltr">(format!("/ {pages}"))</bdi>
+                    </span>
+                </span>
+                <button
+                    class="icon-button"
+                    type="button"
+                    data-ocr-next=""
+                    aria-label=(review.next_page)
+                    title=(review.next_page)
+                >
+                    <span class="forward">icon(data: icons::NEXT, size: 16)</span>
+                </button>
+                <span
+                    class="visually-hidden"
+                    data-ocr-position=""
+                    aria-live="polite"
+                    aria-atomic="true"
+                ></span>
+            </form>
+            <p
+                class="error"
+                id=(page_error_id.as_str())
+                data-ocr-page-error=""
+                aria-live="polite"
+                hidden=(true)
+            ></p>
         </div>
     })
 }
@@ -458,36 +501,58 @@ async fn source_panel(locale: Locale, id: JobId) -> Result<impl View> {
     let review = &locale.text().ocr.review;
     Ok(view! {
         <section class="ocr-source-panel">
-            <h2>(review.source_title)</h2>
+            <div class="panel-heading">
+                <h2>(review.source_title)</h2>
+                <div class="ocr-zoom" data-ocr-zoom="" hidden=(true)>
+                    <div class="segmented">
+                        <button
+                            class="button ghost compact"
+                            type="button"
+                            data-ocr-fit="width"
+                            aria-pressed="true"
+                        >
+                            (review.fit_width)
+                        </button>
+                        <button
+                            class="button ghost compact"
+                            type="button"
+                            data-ocr-fit="page"
+                            aria-pressed="false"
+                        >
+                            (review.fit_page)
+                        </button>
+                    </div>
+                    <div class="zoom-steps">
+                        <button
+                            class="icon-button"
+                            type="button"
+                            data-ocr-zoom-out=""
+                            aria-label=(review.zoom_out)
+                            title=(review.zoom_out)
+                        >
+                            icon(data: icons::MINUS, size: 16)
+                        </button>
+                        <span
+                            data-ocr-zoom-value=""
+                            aria-label=(review.zoom_label)
+                            dir="ltr"
+                        ></span>
+                        <button
+                            class="icon-button"
+                            type="button"
+                            data-ocr-zoom-in=""
+                            aria-label=(review.zoom_in)
+                            title=(review.zoom_in)
+                        >
+                            icon(data: icons::PLUS, size: 16)
+                        </button>
+                    </div>
+                </div>
+            </div>
             <p class="ocr-source-status" data-ocr-source-status="" aria-live="polite">
                 (review.source_missing)
             </p>
             source_picker(locale: locale, id: id)
-            <div class="ocr-zoom" data-ocr-zoom="" hidden=(true)>
-                <button
-                    class="button secondary"
-                    type="button"
-                    data-ocr-fit="width"
-                    aria-pressed="true"
-                >
-                    (review.fit_width)
-                </button>
-                <button
-                    class="button secondary"
-                    type="button"
-                    data-ocr-fit="page"
-                    aria-pressed="false"
-                >
-                    (review.fit_page)
-                </button>
-                <button class="button secondary" type="button" data-ocr-zoom-out="">
-                    (review.zoom_out)
-                </button>
-                <span data-ocr-zoom-value="" aria-label=(review.zoom_label) dir="ltr"></span>
-                <button class="button secondary" type="button" data-ocr-zoom-in="">
-                    (review.zoom_in)
-                </button>
-            </div>
             <div
                 class="ocr-source-viewport"
                 data-ocr-source-viewport=""

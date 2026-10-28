@@ -3,10 +3,12 @@
 use topcoat::{
     Result,
     asset::{Asset, asset},
+    icon::icon,
     view::{View, component, view},
 };
 
 use crate::i18n::Locale;
+use crate::icons;
 
 pub const SEARCH_SCRIPT: Asset = asset!("./app/search.js");
 pub const COPY_SCRIPT: Asset = asset!("./app/copy.js");
@@ -27,16 +29,52 @@ pub async fn search_toolbar(locale: Locale) -> Result<impl View> {
             data-unavailable=(text.search_unavailable)
             hidden=(true)
         >
-            <label class="search-field">
-                <span>(text.search)</span>
-                <input
-                    type="search"
-                    data-search-query=(true)
-                    dir="auto"
-                    autocomplete="off"
-                    spellcheck="false"
-                >
-            </label>
+            <div class="search-bar">
+                <div class="search-field">
+                    icon(data: icons::SEARCH, size: 16)
+                    <input
+                        type="search"
+                        data-search-query=(true)
+                        dir="auto"
+                        autocomplete="off"
+                        spellcheck="false"
+                        aria-label=(text.search)
+                        placeholder=(text.search)
+                    >
+                    <button
+                        type="button"
+                        class="icon-button"
+                        data-search-clear=(true)
+                        aria-label=(text.clear_search)
+                        title=(text.clear_search)
+                    >
+                        icon(data: icons::CLEAR, size: 16)
+                    </button>
+                </div>
+                <span class="search-count" data-search-count=(true)></span>
+                <div class="search-steps">
+                    <button
+                        type="button"
+                        class="icon-button"
+                        data-search-previous=(true)
+                        aria-label=(text.previous_match)
+                        title=(text.previous_match)
+                        disabled=(true)
+                    >
+                        icon(data: icons::UP, size: 16)
+                    </button>
+                    <button
+                        type="button"
+                        class="icon-button"
+                        data-search-next=(true)
+                        aria-label=(text.next_match)
+                        title=(text.next_match)
+                        disabled=(true)
+                    >
+                        icon(data: icons::DOWN, size: 16)
+                    </button>
+                </div>
+            </div>
             <div class="search-options">
                 <label>
                     <input type="checkbox" data-search-marks=(true) checked=(true)>
@@ -46,32 +84,8 @@ pub async fn search_toolbar(locale: Locale) -> Result<impl View> {
                     <input type="checkbox" data-search-tatweel=(true) checked=(true)>
                     (text.ignore_tatweel)
                 </label>
+                <bdi class="search-active" data-search-active=(true)></bdi>
             </div>
-            <div class="search-actions">
-                <button
-                    type="button"
-                    class="button secondary"
-                    data-search-previous=(true)
-                    disabled=(true)
-                >
-                    (text.previous_match)
-                </button>
-                <button
-                    type="button"
-                    class="button secondary"
-                    data-search-next=(true)
-                    disabled=(true)
-                >
-                    (text.next_match)
-                </button>
-                <button type="button" class="button secondary" data-search-clear=(true)>
-                    (text.clear_search)
-                </button>
-            </div>
-            <p class="search-position">
-                <span data-search-count=(true)></span>
-                <bdi data-search-active=(true)></bdi>
-            </p>
             <p
                 class="visually-hidden"
                 data-search-status=(true)

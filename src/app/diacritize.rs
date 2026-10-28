@@ -36,21 +36,26 @@ pub async fn page(cx: &Cx) -> Result<impl View> {
         <section class="workspace">
             <div class="container workspace-layout workspace-wide">
                 <div class="workspace-entry">
-                    steps(locale: locale, current: Step::Input, failed: false)
                     if !tool.is_available() {
-                        <p class="notice" role="status">(text.unavailable)</p>
+                        <div class="workspace-card">
+                            steps(locale: locale, current: Step::Input, failed: false)
+                            <p class="notice" role="status">(text.unavailable)</p>
+                        </div>
                     } else {
                         match tool.queue.availability(client_ip(cx)) {
                             Err(rejection) => {
-                                <div class="notice">
-                                    icon(data: icons::WARNING, size: 20)
-                                    <div class="notice-body">
-                                        <p>(locale.diacritization_rejection(rejection))</p>
-                                        if rejection == Rejection::ActiveJob {
-                                            if let Some(job) = jobs::unfinished_job(cx) {
-                                                <p><a href=(job)>(text.back_to_job)</a></p>
+                                <div class="workspace-card">
+                                    steps(locale: locale, current: Step::Input, failed: false)
+                                    <div class="notice">
+                                        icon(data: icons::WARNING, size: 20)
+                                        <div class="notice-body">
+                                            <p>(locale.diacritization_rejection(rejection))</p>
+                                            if rejection == Rejection::ActiveJob {
+                                                if let Some(job) = jobs::unfinished_job(cx) {
+                                                    <p><a href=(job)>(text.back_to_job)</a></p>
+                                                }
                                             }
-                                        }
+                                        </div>
                                     </div>
                                 </div>
                             }
@@ -157,7 +162,10 @@ pub(super) async fn editor(
             <div class="workspace-observer" hidden=(initial.is_none())>
                 jobs::job::observe(job: $(job.get()))
             </div>
-            crate::workspace::review(locale: locale)
+            crate::workspace::review(
+                locale: locale,
+                placeholder: Some(locale.text().diacritization.result_placeholder)
+            )
         </div>
         <noscript>
             <p class="notice">(locale.text().diacritization.needs_javascript)</p>
@@ -209,19 +217,23 @@ async fn input_form(
             data-cancel-failed=(text.cancel_failed)
             data-no-file=(text.no_file)
         >
+            <div class="card-steps">
+                steps(locale: locale, current: Step::Input, failed: false)
+            </div>
             input_choices(locale: locale, model: model)
             text_input(locale: locale, source: source)
             document_input(locale: locale)
             <div class="upload-progress" hidden=(true)>
                 <progress max="100" value="0" aria-label=(text.uploading)></progress>
                 <p id="job-status" class="submission-status" role="status"></p>
-                <button type="button" class="button secondary cancel-upload">
+                <button type="button" class="button secondary compact cancel-upload">
                     (text.cancel)
                 </button>
+                crate::workspace::progress_links(locale: locale)
             </div>
             <p id="diacritize-error" class="error" role="alert" hidden=(true)></p>
             <a class="return-to-job" hidden=(true)>(text.back_to_job)</a>
-            <p class="hint">(text.try_again)</p>
+            <p class="hint try-again">(text.try_again)</p>
             if source_needed {
                 <p class="hint source-needed">
                     (locale.text().workspace.source_needed)
@@ -260,7 +272,9 @@ async fn text_input(locale: Locale, source: String) -> Result<impl View> {
                 "\n"
                 (source)
             </textarea>
-            <p id="text-limit" class="hint">(locale.diacritization_text_limit())</p>
+            <p id="text-limit" class="visually-hidden">
+                (locale.diacritization_text_limit())
+            </p>
             <div class="form-actions">
                 <button type="submit" class="button primary" disabled=(true)>
                     (text.submit_text)

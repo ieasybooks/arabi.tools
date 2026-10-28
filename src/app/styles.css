@@ -4,7 +4,7 @@
 :root {
   --font-body: "Gilroy", "Noto Naskh Arabic UI", system-ui, sans-serif;
   --font-display: "Gilroy", "Thmanyah Serif Display", "Noto Naskh Arabic UI", serif;
-  --font-transcript: "Kitab", "Noto Naskh Arabic UI", serif;
+  --font-transcript: "Kitab", "Gilroy", "Noto Naskh Arabic UI", serif;
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
   --paper: #f8f4ea;
   --surface: #fffcf5;
@@ -27,6 +27,7 @@
   --radius: 1.25rem;
   --radius-control: 0.75rem;
   --container: 48rem;
+  --wide: 72rem;
 
   color-scheme: light;
   color: var(--text);
@@ -415,7 +416,6 @@ svg {
   gap: 2rem;
 }
 
-.workspace-main,
 .job {
   display: flex;
   flex-direction: column;
@@ -424,10 +424,6 @@ svg {
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--shadow);
-}
-
-.workspace-main {
-  gap: 1.75rem;
 }
 
 .workspace-aside {
@@ -652,9 +648,10 @@ svg {
   color: #fff;
 }
 
-.button.primary:disabled {
-  background: var(--faint);
-  cursor: progress;
+.button:disabled,
+.button[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .button.secondary {
@@ -828,12 +825,6 @@ progress::-moz-progress-bar {
 /* The transcript shows the SRT cues, each like a line of a printed page under its number and
    time range. */
 
-.transcript-title {
-  padding-block-end: 0.75rem;
-  font-size: 1.375rem;
-  text-align: center;
-}
-
 .cues {
   max-height: 36rem;
   overflow-y: auto;
@@ -987,7 +978,6 @@ progress::-moz-progress-bar {
     margin-block-start: 0.75rem;
   }
 
-  .workspace-main,
   .job {
     padding: 1.25rem;
   }
@@ -1001,7 +991,6 @@ progress::-moz-progress-bar {
   }
 
   .form-actions .button,
-  .downloads .button,
   .another .button {
     flex: 1;
   }
@@ -1165,10 +1154,6 @@ progress::-moz-progress-bar {
   opacity: 1;
 }
 
-.diacritize-form .upload-progress .button {
-  align-self: flex-start;
-}
-
 .diacritize-result .result-name span {
   min-width: 0;
 }
@@ -1187,115 +1172,523 @@ progress::-moz-progress-bar {
     width: 1.25rem;
     height: 1.25rem;
   }
+}
 
-  .diacritize-result .downloads .button {
-    flex-basis: 100%;
+/* Compact controls for toolbars: one size, three weights (secondary, ghost, icon). */
+
+.button.compact {
+  gap: 0.375rem;
+  min-block-size: 2.5rem;
+  padding: 0.375rem 1rem;
+  font-size: 0.9375rem;
+}
+
+.button.ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.button.ghost:hover {
+  background: var(--well);
+  color: var(--text);
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: var(--well);
+  color: var(--text);
+}
+
+.icon-button:disabled {
+  opacity: 0.4;
+  background: transparent;
+  cursor: default;
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--green);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+
+.link-button:hover {
+  color: var(--green-strong);
+}
+
+/* Regions that receive focus from a script, not from the keyboard, need no ring. */
+[tabindex="-1"]:focus {
+  outline: none;
+}
+
+/* Workspace: forms and reading keep the 48rem column; only paired panels use the wide one.
+   Everything is centred on the same axis as the title. */
+
+.workspace-wide {
+  max-width: calc(var(--wide) + 4rem);
+}
+
+.workspace-entry,
+[data-workspace] {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-width: 0;
+}
+
+.workspace-card,
+.workspace-input,
+.workspace-aside,
+.job,
+[data-workspace="transcript"] .workspace-review {
+  inline-size: 100%;
+  max-inline-size: var(--container);
+  margin-inline: auto;
+}
+
+.job:has(.ocr-review) {
+  max-inline-size: none;
+}
+
+.workspace-card,
+.workspace-input,
+.diacritize-form,
+.workspace-review:has(.result),
+[data-workspace="diacritization"] .workspace-review {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+  padding: 2rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.workspace-review {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.workspace-result {
+  min-width: 0;
+}
+
+.card-steps {
+  padding-block-end: 0.5rem;
+}
+
+@media (min-width: 60rem) {
+  [data-workspace="diacritization"] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  [data-workspace="diacritization"] .workspace-result:has(.result),
+  [data-workspace="diacritization"] .diacritize-result {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+  }
+
+  [data-workspace="diacritization"] .diacritize-result textarea {
+    flex: 1;
   }
 }
 
-/* Search and transcript review */
-.transcript-result {
-  min-inline-size: 0;
+.result-placeholder {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  min-block-size: 12rem;
+  padding: 2rem;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+  color: var(--faint);
+  text-align: center;
+}
+
+.workspace-review:has(.workspace-result .result) .result-placeholder {
+  display: none;
+}
+
+/* On one column an empty result card is noise; it appears with the result. */
+@media (max-width: 59.99rem) {
+  [data-workspace="diacritization"] .workspace-review:not(:has(.result, .observation-status:not([hidden]))) {
+    display: none;
+  }
+}
+
+/* Job pages are about the job: a smaller title, without the lead, above its card. The
+   rule depends only on the server-rendered title, so a page never changes size mid-job. */
+.tool-hero:not(:has(.lead)) {
+  padding-block: 2rem 0;
+}
+
+.tool-hero:not(:has(.lead)) h1 {
+  font-size: 2rem;
+}
+
+/* Files: size and the two actions on one quiet row under the drop zone. They appear once a
+   file is chosen, and stay while one of them has focus. */
+
+.file-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.file-size {
+  flex: 1;
+  min-inline-size: 8rem;
+  color: var(--muted);
+  font-size: 0.9375rem;
   overflow-wrap: anywhere;
 }
 
-.result-search,
-.transcript-actions,
-.copy-panel {
+.dropzone[data-selected="false"] ~ .file-actions:not(:focus-within) {
+  display: none;
+}
+
+[data-workspace] .dropzone:has(input:disabled) {
+  border-style: solid;
+  background: var(--well);
+}
+
+[data-workspace] .dropzone-hint {
+  color: var(--muted);
+}
+
+/* Progress: status and percentage (or Cancel) on one row, the bar, then any detail and the
+   links to the job. */
+
+.upload-progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-control);
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+  color: var(--muted);
+}
+
+.upload-progress progress {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.upload-progress .submission-status {
+  grid-column: 1;
+  grid-row: 1;
+  min-block-size: 1.75em;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.upload-progress .submission-percent,
+.upload-progress .cancel-upload {
+  grid-column: 2;
+  grid-row: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.upload-progress .server-detail,
+.upload-progress .progress-links {
+  grid-column: 1 / -1;
+}
+
+.submission-percent:empty,
+.server-detail:empty {
+  display: none;
+}
+
+[data-workspace][data-phase="cancelled"] .submission-status {
+  color: var(--muted);
+}
+
+.progress-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+  font-size: 0.9375rem;
+}
+
+.progress-links:not(:has(> :not([hidden]))) {
+  display: none;
+}
+
+.observation-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+.observation-notice:not(:has(> :not([hidden]))) {
+  display: none;
+}
+
+.observation-notice:has(.observation-status:not([hidden])) {
+  padding: 0.75rem 1rem;
+  border: 1px solid rgb(138 90 20 / 0.25);
+  border-radius: var(--radius-control);
+  background: var(--warning-soft);
+}
+
+.observation-status {
+  flex: 1;
+  min-inline-size: 12rem;
+}
+
+.previous-result {
+  align-self: flex-start;
+  padding: 0.125rem 0.75rem;
+  border-radius: 999px;
+  background: var(--well);
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* "Try another model" is advice for a second run, so it waits for a first result. */
+[data-workspace]:not(:has(.workspace-result .result)) .try-again {
+  display: none;
+}
+
+/* Results: a header with the file, its details and the whole-result actions; then the
+   toolbar; then the content. */
+
+.result {
+  gap: 1.25rem;
   min-inline-size: 0;
+}
+
+.result-heading {
+  gap: 0.75rem 1rem;
+}
+
+.result-title {
+  display: flex;
+  flex: 1 1 14rem;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-inline-size: 0;
+}
+
+.result-meta {
+  color: var(--faint);
+  font-size: 0.875rem;
+}
+
+.downloads {
+  gap: 0.5rem;
+}
+
+.result-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+}
+
+.copy-status {
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+.copy-status:empty,
+[data-copy-fallback]:empty {
+  display: none;
+}
+
+.copy-panel {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  min-inline-size: 0;
 }
 
-.result-search {
-  overflow-wrap: anywhere;
-  padding: 1rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  background: var(--paper);
-}
-
-.search-field,
-.cue-choice,
 .copy-panel label {
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
-  min-inline-size: 0;
 }
 
-.search-field input,
-.cue-choice select,
 .copy-panel textarea {
   inline-size: 100%;
-  min-inline-size: 0;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--faint);
+  min-block-size: 10rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--line);
   border-radius: var(--radius-control);
-  background: var(--surface);
+  background: var(--paper);
+  color: var(--text);
+  font-family: var(--font-transcript);
+  line-height: 1.9;
+  white-space: pre-wrap;
+  unicode-bidi: plaintext;
+  resize: vertical;
+}
+
+.copy-panel .button {
+  align-self: flex-start;
+}
+
+/* Search: a find bar. The field, the count and the two steps share one row; the visible
+   matching options sit under it with the active match's cue or page. */
+
+.result-search {
+  display: flex;
+  flex: 1 1 26rem;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.search-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+}
+
+.search-field {
+  display: flex;
+  flex: 1 1 12rem;
+  align-items: center;
+  gap: 0.5rem;
+  min-inline-size: 0;
+  min-block-size: 2.5rem;
+  padding-inline: 0.875rem 0.125rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+}
+
+.search-field:focus-within {
+  border-color: var(--green);
+  box-shadow: 0 0 0 1px var(--green);
+}
+
+.search-field > svg {
+  color: var(--faint);
+}
+
+.search-field input {
+  flex: 1;
+  min-inline-size: 0;
+  padding: 0.375rem 0;
+  border: 0;
+  background: transparent;
   color: var(--text);
   font: inherit;
 }
 
-.cue-choice select {
-  padding-inline: 0.5rem;
+.search-field input:focus-visible {
+  outline: none;
 }
 
-.search-options,
-.search-actions,
-.cue-heading {
+.search-field input::placeholder {
+  color: var(--faint);
+  opacity: 1;
+}
+
+/* An empty field follows the page, so an Arabic placeholder starts on the right. */
+[dir="rtl"] .search-field input:placeholder-shown {
+  direction: rtl;
+}
+
+.search-field input::-webkit-search-cancel-button {
+  display: none;
+  appearance: none;
+}
+
+.search-field .icon-button {
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+}
+
+.search-field:has(input:placeholder-shown) [data-search-clear] {
+  display: none;
+}
+
+.search-count {
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.search-count:empty {
+  display: none;
+}
+
+.search-steps {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.search-options {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem 0.75rem;
+  gap: 0 1.25rem;
+  padding-inline: 0.875rem;
+  color: var(--muted);
+  font-size: 0.875rem;
 }
 
-.search-options label,
-.timestamps-choice {
-  display: flex;
+.search-options label {
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  min-block-size: 2.75rem;
-  color: var(--muted);
+  gap: 0.375rem;
+  min-block-size: 2rem;
+  cursor: pointer;
 }
 
 .search-options input,
 .timestamps-choice input {
   flex: none;
-  inline-size: 1.125rem;
-  block-size: 1.125rem;
+  inline-size: 1rem;
+  block-size: 1rem;
+  margin: 0;
   accent-color: var(--green);
 }
 
-.result .button {
+.search-active {
   max-inline-size: 100%;
-  min-block-size: 2.75rem;
-  padding: 0.5rem 0.875rem;
-  white-space: normal;
-  overflow-wrap: anywhere;
+  margin-inline-start: auto;
+  color: var(--gold-text);
+  font-weight: 500;
 }
 
-.result .button:disabled {
-  color: var(--muted);
-  background: var(--well);
-  border-color: var(--line);
-  border-style: dashed;
-  cursor: default;
-}
-
-.search-position,
-.copy-status {
-  color: var(--muted);
-  overflow-wrap: anywhere;
-}
-
-.search-position bdi {
-  display: block;
-}
-
-.copy-status:empty,
-[data-copy-fallback]:empty {
+.search-active:empty {
   display: none;
 }
 
@@ -1318,29 +1711,91 @@ progress::-moz-progress-bar {
   background-origin: border-box;
 }
 
-.transcript-result .cues {
-  max-inline-size: 65ch;
+/* Transcript */
+
+.transcript-result {
+  overflow-wrap: anywhere;
+}
+
+.transcript-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.timestamps-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-block-size: 2.5rem;
+  padding-inline: 0.875rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.9375rem;
+  cursor: pointer;
+}
+
+.timestamps-choice:hover {
+  border-color: var(--gold);
+}
+
+.cue-choice {
+  display: flex;
+  min-inline-size: 0;
+  max-inline-size: 15rem;
+}
+
+/* Drawn like the other pills in every browser, with the chevron on the closing side. */
+.cue-choice select {
   inline-size: 100%;
-  align-self: center;
+  min-inline-size: 0;
+  min-block-size: 2.5rem;
+  padding-block: 0.375rem;
+  padding-inline: 1rem 2.25rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%235f5245'%3E%3Cpath fill-rule='evenodd' d='M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z'/%3E%3C/svg%3E") no-repeat right 0.875rem center / 1rem;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9375rem;
+  appearance: none;
+  cursor: pointer;
+}
+
+[dir="rtl"] .cue-choice select {
+  background-position: left 0.875rem center;
+}
+
+.cue-choice select:hover {
+  border-color: var(--gold);
+}
+
+.transcript-result .cues {
   overscroll-behavior: contain;
   scroll-padding-block: 0.75rem;
 }
 
 .transcript-result .cue-heading {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
+  gap: 0.5rem;
+  min-block-size: 2rem;
+}
+
+.transcript-result .copy-cue {
+  min-block-size: 2rem;
+  padding: 0.125rem 0.625rem;
+  font-size: 0.875rem;
 }
 
 .transcript-result .cue-time {
-  min-inline-size: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 0.375rem;
-}
-
-.transcript-result .cue-time bdi,
-.transcript-result .downloads {
   min-inline-size: 0;
-  max-inline-size: 100%;
 }
 
 .transcript-result .cue-text {
@@ -1351,56 +1806,99 @@ progress::-moz-progress-bar {
 }
 
 .transcript-result.timestamps-hidden .cue-time {
+  visibility: hidden;
+}
+
+/* With a pointer, a cue's copy button appears with the cue; touch screens always show it. */
+@media (hover: hover) {
+  .cue:not(:hover, :focus-within) .copy-cue {
+    opacity: 0;
+  }
+}
+
+/* Script-only controls stay out of sight until their script has taken over the result. */
+.transcript-result:not([data-transcript-ready]) [data-copy-all],
+.ocr-review:not([data-enhanced]) :is([data-ocr-copy-all], .ocr-copy-actions) {
   display: none;
 }
 
-.copy-panel textarea {
-  font-family: var(--font-transcript);
-  white-space: pre-wrap;
-  unicode-bidi: plaintext;
-  min-block-size: 10rem;
-  resize: vertical;
-  line-height: 1.9;
-}
-
-@media (max-width: 39.999rem) {
-  .transcript-result .downloads {
-    inline-size: 100%;
-  }
-
-  .transcript-result .downloads .button {
-    flex-basis: 100%;
-  }
-}
-
-@media (min-width: 40rem) {
-  .transcript-actions {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-}
-
-/* OCR review */
+/* OCR: the source and its text side by side, each under a header with its own controls. */
 
 .job:has(> .ocr-review) {
   min-inline-size: 0;
-  padding: clamp(0.75rem, 2vw, 2rem);
 }
 
 .ocr-review {
   min-inline-size: 0;
 }
 
-.ocr-review .hint,
-.ocr-page h3,
-.ocr-source-status,
-.ocr-no-text,
-.ocr-page-position {
-  color: var(--muted);
+.ocr-search {
+  display: flex;
+  flex: 1 1 20rem;
+  min-inline-size: 0;
 }
 
-.ocr-toolbar,
+.ocr-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  min-inline-size: 0;
+}
+
+@media (min-width: 40rem) {
+  .ocr-page-navigation {
+    padding-inline-start: 1rem;
+    border-inline-start: 1px solid var(--line);
+  }
+}
+
+.ocr-toolbar .error {
+  flex-basis: 100%;
+}
+
+.ocr-page-navigation {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.ocr-page-count {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.ocr-page-field input {
+  inline-size: 3.75rem;
+  min-block-size: 2.5rem;
+  padding: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.ocr-page-total {
+  padding-inline: 0.25rem 0.125rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ocr-review [aria-invalid="true"] {
+  border-color: var(--danger);
+  outline-color: var(--danger);
+}
+
+.ocr-panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5rem;
+}
+
 .ocr-source-panel,
 .ocr-text-panel,
 .ocr-source-picker {
@@ -1410,65 +1908,68 @@ progress::-moz-progress-bar {
   min-inline-size: 0;
 }
 
-.ocr-toolbar {
-  padding-block: 0.75rem;
-  border-block: 1px solid var(--line);
+.panel-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  min-block-size: 2.5rem;
 }
 
-.ocr-page-navigation,
-.ocr-copy-actions,
+.panel-heading h2 {
+  font-size: 1.125rem;
+}
+
+.ocr-zoom,
+.zoom-steps,
+.ocr-copy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .ocr-zoom {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  min-inline-size: 0;
-}
-
-.ocr-review button[aria-pressed="true"] {
-  background: var(--green-soft);
-  border-color: var(--green);
-  color: var(--green-strong);
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-}
-
-.ocr-page-field {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
   gap: 0.5rem;
 }
 
-.ocr-page-field input {
-  inline-size: 4.5rem;
-  min-block-size: 2.75rem;
-  padding: 0.375rem;
-  border: 1px solid var(--muted);
-  border-radius: var(--radius-control);
+/* A pair of exclusive choices: the chosen one is raised out of the well. */
+.segmented,
+.ocr-view-choice {
+  display: inline-flex;
+  gap: 0.125rem;
+  padding: 0.1875rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--well);
+}
+
+.segmented .button {
+  min-block-size: 2.125rem;
+  padding: 0.25rem 0.875rem;
+}
+
+.segmented .button[aria-pressed="true"],
+.ocr-view-choice label:has(:checked) {
   background: var(--surface);
   color: var(--text);
-  font: inherit;
+  box-shadow: 0 1px 3px rgb(74 52 30 / 0.16);
+}
+
+[data-ocr-zoom-value] {
+  min-inline-size: 3.25rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
   text-align: center;
 }
 
-.ocr-review [aria-invalid="true"] {
-  border-color: var(--danger);
-  outline-color: var(--danger);
-}
-
-.ocr-page-position {
-  font-variant-numeric: tabular-nums;
-}
-
-.ocr-panels {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1.25rem;
-}
-
-.ocr-panels h2 {
-  font-size: 1.375rem;
+.ocr-source-status,
+.ocr-no-text,
+.ocr-page h3 {
+  color: var(--muted);
+  font-size: 0.9375rem;
 }
 
 .ocr-source-picker > label {
@@ -1486,11 +1987,12 @@ progress::-moz-progress-bar {
 }
 
 .ocr-source-picker input::file-selector-button {
-  min-block-size: 2.75rem;
+  min-block-size: 2.5rem;
   max-inline-size: 100%;
-  padding: 0.5rem;
-  border: 1px solid var(--muted);
-  border-radius: var(--radius-control);
+  margin-inline-end: 0.75rem;
+  padding: 0.375rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
   background: var(--surface);
   color: var(--text);
   font: inherit;
@@ -1503,23 +2005,27 @@ progress::-moz-progress-bar {
 
 .ocr-confirm input {
   flex-shrink: 0;
-  inline-size: 1.25rem;
-  block-size: 1.25rem;
+  inline-size: 1.125rem;
+  block-size: 1.125rem;
   margin-block-start: 0.25rem;
   accent-color: var(--green);
+}
+
+.ocr-source-picker .button {
+  align-self: flex-start;
 }
 
 .ocr-source-viewport,
 .ocr-text-viewport {
   min-inline-size: 0;
+  block-size: clamp(22rem, 65vh, 45rem);
   padding: 1rem;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-soft);
   border-radius: var(--radius-control);
   background: var(--paper);
 }
 
 .ocr-source-viewport {
-  block-size: clamp(22rem, 60vh, 45rem);
   direction: ltr;
   overflow: auto;
 }
@@ -1530,7 +2036,6 @@ progress::-moz-progress-bar {
 }
 
 .ocr-text-viewport {
-  max-block-size: 65vh;
   overflow-y: auto;
   overflow-wrap: anywhere;
 }
@@ -1541,28 +2046,51 @@ progress::-moz-progress-bar {
 
 .ocr-page h3 {
   font-family: var(--font-body);
-  font-size: 1rem;
-}
-
-.ocr-page-text {
-  white-space: pre-wrap;
-  unicode-bidi: plaintext;
-  font-family: var(--font-transcript);
-  font-size: 1.3125rem;
-  line-height: 2;
-  text-align: start;
-  overflow-wrap: anywhere;
+  font-weight: 500;
 }
 
 .ocr-page-text {
   margin-block-start: 0.5rem;
+  font-family: var(--font-transcript);
+  font-size: 1.3125rem;
+  line-height: 2;
+  white-space: pre-wrap;
+  unicode-bidi: plaintext;
+  overflow-wrap: anywhere;
+  text-align: start;
 }
 
+.ocr-empty-document {
+  color: var(--muted);
+}
+
+/* Narrow screens show one view at a time, chosen beside the page navigator. */
 .ocr-view-choice {
   display: none;
   margin: 0;
-  padding: 0;
-  border: 0;
+}
+
+.ocr-view-choice label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-block-size: 2.125rem;
+  padding: 0.25rem 1rem;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.ocr-view-choice input {
+  position: absolute;
+  opacity: 0;
+}
+
+.ocr-view-choice label:has(input:focus-visible) {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
 }
 
 @media (max-width: 55rem) {
@@ -1571,36 +2099,7 @@ progress::-moz-progress-bar {
   }
 
   .ocr-view-choice {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-
-  .ocr-view-choice legend {
-    margin-block-end: 0.5rem;
-  }
-
-  .ocr-view-choice label {
-    display: flex;
-    flex: 1;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    min-block-size: 2.75rem;
-    padding: 0.5rem;
-    border: 1px solid var(--muted);
-    border-radius: var(--radius-control);
-    cursor: pointer;
-  }
-
-  .ocr-view-choice label:has(:checked) {
-    background: var(--green-soft);
-    color: var(--green-strong);
-    border-color: var(--green);
-  }
-
-  .ocr-view-choice input {
-    accent-color: var(--green);
+    display: inline-flex;
   }
 
   .ocr-review[data-view="text"] .ocr-source-panel,
@@ -1609,158 +2108,75 @@ progress::-moz-progress-bar {
   }
 
   .ocr-text-viewport {
-    max-block-size: none;
+    block-size: auto;
     overflow-y: visible;
   }
-
-  .ocr-review .downloads,
-  .ocr-copy-actions {
-    inline-size: 100%;
-  }
-
-  .ocr-review .downloads .button {
-    flex: 1 1 100%;
-  }
 }
 
-/* Workspace source continuity, review panels and lifecycle controls. */
-.workspace-wide {
-  max-width: 76rem;
-  gap: 1rem;
-}
-
-.workspace-entry,
-[data-workspace],
-.workspace-review,
-.workspace-result {
-  min-width: 0;
-}
-
-.workspace-entry,
-[data-workspace],
-.workspace-review {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-[data-workspace] .diacritize-form,
-.workspace-review:has(.result) {
-  padding: 1.5rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow);
-}
-
-.workspace-review .button,
-.file-actions .button {
-  align-self: flex-start;
-  white-space: normal;
-}
-
-.file-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.file-size {
-  flex-basis: 100%;
-  color: var(--muted);
-  overflow-wrap: anywhere;
-}
-
-:is(.workspace-input, .diacritize-form) .button[aria-disabled="true"],
-:is(.workspace-input, .diacritize-form) .button:disabled {
-  border-color: var(--line);
-  background: var(--well);
-  color: var(--muted);
-  cursor: wait;
-}
-
-[data-workspace] .dropzone:has(input:disabled) {
-  border-style: solid;
-  background: var(--well);
-}
-
-[data-workspace] .hint,
-[data-workspace] .dropzone-hint {
-  color: var(--muted);
-}
-
-[data-workspace] .diacritize-choices label:has(input:disabled) {
-  opacity: 1;
-  background: var(--well);
-  color: var(--muted);
-}
-
-.previous-result {
-  font-weight: 500;
-}
-
-[data-workspace] .submission-status {
-  min-block-size: 1.75em;
-}
-
-[data-workspace][data-phase="cancelled"] .submission-status {
-  color: var(--muted);
-}
-
-body:has([data-workspace], .job) .tool-hero {
-  padding-block: 1.5rem 0;
-}
-
-body:has([data-workspace], .job) .tool-hero h1 {
-  font-size: 2rem;
-}
-
-body:has([data-workspace], .job) .tool-hero .container::after {
-  margin-block-start: 1rem;
-}
-
-.workspace:has([data-workspace], .job) {
-  padding-block-start: 1rem;
-}
-
-@media (min-width: 60rem) {
-  [data-workspace="diacritization"] {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    align-items: start;
-  }
-}
+/* Phones */
 
 @media (max-width: 39.99rem) {
-  [data-workspace] .diacritize-form,
-  .workspace-review:has(.result) {
-    padding: 1rem;
+  .workspace-card,
+  .workspace-input,
+  .diacritize-form,
+  .workspace-review:has(.result),
+  [data-workspace="diacritization"] .workspace-review {
+    padding: 1.25rem;
+  }
+
+  .result-heading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .result-title {
+    flex: none;
+  }
+
+  .downloads .button {
+    flex: 1 1 auto;
+  }
+
+  .file-size {
+    flex-basis: 100%;
   }
 
   .file-actions .button {
     flex: 1;
-    padding-inline: 1rem;
   }
-}
 
-/* Workspace upload controls and wide result surfaces. */
-.workspace-input {
-  max-inline-size: 48rem;
-  padding: 1.5rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--shadow);
-}
+  .transcript-result .cues {
+    padding-inline: 0.75rem;
+  }
 
-.submission-percent:empty,
-.server-detail:empty {
-  display: none;
-}
+  .transcript-result .cue-number {
+    min-inline-size: 1.5rem;
+  }
 
-@media (max-width: 39.99rem) {
-  .workspace-input {
-    padding: 1rem;
+  .transcript-result .cue-time {
+    font-size: 0.75rem;
+  }
+
+  .transcript-result .copy-cue {
+    padding-inline: 0.5rem;
+  }
+
+  .result-toolbar,
+  .ocr-toolbar {
+    justify-content: flex-start;
+  }
+
+  .upload-progress {
+    padding: 0.875rem 1rem;
+  }
+
+  .cue-choice {
+    flex: 1 1 100%;
+    max-inline-size: none;
+  }
+
+  /* Copy all takes its own row; the format downloads share the next one. */
+  .downloads > button.button {
+    flex-basis: 100%;
   }
 }
