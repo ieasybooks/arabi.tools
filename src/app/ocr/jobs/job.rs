@@ -29,7 +29,7 @@ use crate::app::ocr;
 use crate::i18n::Locale;
 use crate::icons;
 use crate::queue::{CancelReason, JobId, Status};
-use crate::result_controls::{self, COPY_SCRIPT, SEARCH_SCRIPT};
+use crate::result_controls::{self, COPY_SCRIPT, CopyAll, DownloadLink, SEARCH_SCRIPT};
 use crate::tools::ocr::{
     Document, DocumentProblem, MAX_UPLOAD_BYTES, Ocr, UploadedDocument, download_name,
 };
@@ -278,6 +278,20 @@ async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> 
         .pages
         .iter()
         .all(|content| content.trim().is_empty());
+    let downloads = vec![
+        DownloadLink {
+            label: text.download_text,
+            href: href!(download_text, Id(id.clone())).resolve(cx),
+        },
+        DownloadLink {
+            label: text.download_docx,
+            href: href!(download_docx, Id(id.clone())).resolve(cx),
+        },
+        DownloadLink {
+            label: text.download_json,
+            href: href!(download_json, Id(id.clone())).resolve(cx),
+        },
+    ];
     Ok(view! {
         <div
             class="result ocr-review"
@@ -290,55 +304,13 @@ async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> 
             data-wrong-type=(text.wrong_type)
             data-no-text=(text.no_text)
         >
-            <div class="result-heading">
-                <div class="result-title">
-                    <p class="result-name">
-                        icon(data: icons::TRANSCRIPT, size: 20)
-                        <span dir="auto">(document.name.as_str())</span>
-                    </p>
-                    <p class="result-meta">(text.kept_for)</p>
-                </div>
-                <div class="downloads ocr-downloads">
-                    <button
-                        class="button secondary compact"
-                        type="button"
-                        data-ocr-copy-all=""
-                    >
-                        icon(data: icons::COPY, size: 16)
-                        <span>(locale.text().review.copy_all)</span>
-                    </button>
-                    <a
-                        class="button primary compact"
-                        href=(href!(download_text, Id(id.clone())))
-                        download=(true)
-                        aria-label=(text.download_text)
-                        title=(text.download_text)
-                    >
-                        icon(data: icons::DOWNLOAD, size: 16)
-                        <span>(crate::i18n::TXT)</span>
-                    </a>
-                    <a
-                        class="button secondary compact"
-                        href=(href!(download_docx, Id(id.clone())))
-                        download=(true)
-                        aria-label=(text.download_docx)
-                        title=(text.download_docx)
-                    >
-                        icon(data: icons::DOWNLOAD, size: 16)
-                        <span>(crate::i18n::DOCX)</span>
-                    </a>
-                    <a
-                        class="button secondary compact"
-                        href=(href!(download_json, Id(id.clone())))
-                        download=(true)
-                        aria-label=(text.download_json)
-                        title=(text.download_json)
-                    >
-                        icon(data: icons::DOWNLOAD, size: 16)
-                        <span>(crate::i18n::JSON)</span>
-                    </a>
-                </div>
-            </div>
+            result_controls::result_header(
+                locale: locale,
+                name: document.name.clone(),
+                copy: Some(CopyAll::Ocr),
+                downloads: downloads,
+                (text.kept_for)
+            )
             if all_blank {
                 <p class="ocr-empty-document">(review.all_blank)</p>
             }

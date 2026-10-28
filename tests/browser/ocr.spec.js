@@ -46,6 +46,8 @@ for (const locale of [
     await expect(page.locator("[data-ocr-page-text]").first()).toHaveText(text);
     if (process.env.OCR_SCREENSHOT_DIR) await page.screenshot({ path: join(process.env.OCR_SCREENSHOT_DIR, `ocr-result-${locale.code}.png`), fullPage: true });
     for (const [i, extension] of ["txt", "docx", "json"].entries()) {
+      // Each download is listed in the Download menu, which closes after a choice.
+      await page.locator(".download-menu summary").click();
       const link = page.getByRole("link", { name: locale.downloads[i], exact: true });
       const started = page.waitForEvent("download");
       await link.click();

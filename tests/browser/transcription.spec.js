@@ -64,6 +64,8 @@ for (const locale of [
       ["txt", locale.text, "text/plain; charset=utf-8"],
       ["srt", locale.subtitles, "application/x-subrip; charset=utf-8"],
     ]) {
+      // Each download is listed in the Download menu, which closes after a choice.
+      await page.locator(".download-menu summary").click();
       const link = page.getByRole("link", { name: label, exact: true });
       const href = await link.getAttribute("href");
       expect(href).toBe(`${jobPath}/transcript.${extension}`);

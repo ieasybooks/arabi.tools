@@ -29,7 +29,7 @@ use crate::app::transcribe;
 use crate::i18n::Locale;
 use crate::icons;
 use crate::queue::{CancelReason, JobId, Status};
-use crate::result_controls::{self, COPY_SCRIPT, SEARCH_SCRIPT};
+use crate::result_controls::{self, COPY_SCRIPT, CopyAll, DownloadLink, SEARCH_SCRIPT};
 use crate::tools::transcription::{
     AudioProblem, MAX_UPLOAD_BYTES, Transcript, Transcription, check_audio, download_name,
     has_accepted_extension,
@@ -241,15 +241,30 @@ async fn job_status(
     })
 }
 
-/// A finished job's downloads and transcript.
+/// A finished job's header, search and transcript.
 #[component]
-async fn result(locale: Locale, id: JobId, transcript: Arc<Transcript>) -> Result<impl View> {
+async fn result(
+    cx: &Cx,
+    locale: Locale,
+    id: JobId,
+    transcript: Arc<Transcript>,
+) -> Result<impl View> {
     let text = &locale.text().transcription;
     let review = &locale.text().review;
     // JSON escapes line endings that HTML attribute parsing would normalize.
     let copy_override = transcript_copy_override(&transcript)
         .map(serde_json::to_string)
         .transpose()?;
+    let downloads = vec![
+        DownloadLink {
+            label: text.download_text,
+            href: href!(download_text, Id(id.clone())).resolve(cx),
+        },
+        DownloadLink {
+            label: text.download_srt,
+            href: href!(download_srt, Id(id.clone())).resolve(cx),
+        },
+    ];
     Ok(view! {
         <div
             class="result transcript-result"
@@ -257,10 +272,12 @@ async fn result(locale: Locale, id: JobId, transcript: Arc<Transcript>) -> Resul
             data-job-id=(id.to_string())
             data-copy-text=(copy_override)
         >
-            result_heading(
+            result_controls::result_header(
                 locale: locale,
-                id: id.clone(),
-                name: transcript.name.clone()
+                name: transcript.name.clone(),
+                copy: Some(CopyAll::Transcript),
+                downloads: downloads,
+                (locale.kept_for())
             )
             <div class="result-toolbar">
                 result_controls::search_toolbar(locale: locale)
@@ -315,54 +332,6 @@ async fn result(locale: Locale, id: JobId, transcript: Arc<Transcript>) -> Resul
                     }
                 </ol>
             }
-        </div>
-    })
-}
-
-/// The transcript's name and retention, with Copy all and the two downloads.
-#[component]
-async fn result_heading(locale: Locale, id: JobId, name: String) -> Result<impl View> {
-    let text = &locale.text().transcription;
-    let review = &locale.text().review;
-    Ok(view! {
-        <div class="result-heading">
-            <div class="result-title">
-                <p class="result-name">
-                    icon(data: icons::TRANSCRIPT, size: 20)
-                    <span dir="auto">(name.as_str())</span>
-                </p>
-                <p class="result-meta">(locale.kept_for())</p>
-            </div>
-            <div class="downloads">
-                <button
-                    type="button"
-                    class="button secondary compact"
-                    data-copy-all=(true)
-                >
-                    icon(data: icons::COPY, size: 16)
-                    <span>(review.copy_all)</span>
-                </button>
-                <a
-                    class="button primary compact"
-                    href=(href!(download_text, Id(id.clone())))
-                    download=(true)
-                    aria-label=(text.download_text)
-                    title=(text.download_text)
-                >
-                    icon(data: icons::DOWNLOAD, size: 16)
-                    <span>(crate::i18n::TXT)</span>
-                </a>
-                <a
-                    class="button secondary compact"
-                    href=(href!(download_srt, Id(id.clone())))
-                    download=(true)
-                    aria-label=(text.download_srt)
-                    title=(text.download_srt)
-                >
-                    icon(data: icons::DOWNLOAD, size: 16)
-                    <span>(crate::i18n::SRT)</span>
-                </a>
-            </div>
         </div>
     })
 }

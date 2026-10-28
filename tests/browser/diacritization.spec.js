@@ -36,8 +36,10 @@ function docxPart(bytes, name) {
   return execFileSync("python3", ["-c", "import io, sys, zipfile; sys.stdout.buffer.write(zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())).read(sys.argv[1]))", name], { input: bytes }).toString();
 }
 
-async function download(page, label) {
+// A document result lists its two downloads in the Download menu.
+async function download(page, label, menu = false) {
   const started = page.waitForEvent("download");
+  if (menu) await page.locator(".download-menu summary").click();
   await page.getByRole("link", { name: label, exact: true }).click();
   const result = await started;
   expect(await result.failure()).toBeNull();
@@ -216,7 +218,7 @@ for (const locale of [
       await expect(page.locator(".workspace-recovery")).toHaveAttribute("href", /\/diacritize\/jobs\/[a-f0-9]{32}$/);
       await expect(page.locator("#job-status")).toHaveText(locale.done, { timeout: 60_000 });
       await expect(page.locator(".result-heading bdi")).toHaveText(model);
-      const result = await download(page, locale[extension]);
+      const result = await download(page, locale[extension], true);
       expect(result.name).toBe(`مستند.${extension}`);
       if (extension === "txt") {
         expect(stripMarks(result.bytes.toString())).toBe(txt.toString());
@@ -228,7 +230,7 @@ for (const locale of [
         expect(stripMarks(after)).toBe(before);
         expect(docxPart(result.bytes, "word/styles.xml")).toBe(docxPart(docx, "word/styles.xml"));
       }
-      const original = await download(page, locale.originalFile);
+      const original = await download(page, locale.originalFile, true);
       expect(original.bytes).toEqual(bytes);
       await expect(page.locator("#diacritized-text")).toHaveCount(0);
       await fitsViewport(page);

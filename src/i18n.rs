@@ -13,13 +13,6 @@ use crate::tools::{KEEP_FINISHED, MAX_UPLOAD_BYTES};
 /// The cookie holding the visitor's language.
 pub const COOKIE: &str = "lang";
 
-/// Download formats, named the same in both languages. Each download link's accessible name
-/// is its full localized label.
-pub const TXT: &str = "TXT";
-pub const SRT: &str = "SRT";
-pub const DOCX: &str = "DOCX";
-pub const JSON: &str = "JSON";
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Locale {
     Ar,
@@ -403,6 +396,8 @@ pub struct ReviewText {
     pub searching: &'static str,
     pub search_unavailable: &'static str,
     pub copy_all: &'static str,
+    /// Opens the menu of a result's downloads, or names its only download.
+    pub download: &'static str,
     pub copy_cue: &'static str,
     pub copy: &'static str,
     pub copied: &'static str,
@@ -682,6 +677,7 @@ static AR: Text = Text {
         searching: "جارٍ البحث…",
         search_unavailable: "يحتاج البحث إلى متصفح أحدث. يمكنك تحديد النص ونسخه وتنزيله.",
         copy_all: "نسخ النص كاملًا",
+        download: "تنزيل",
         copy_cue: "نسخ هذا المقطع",
         copy: "نسخ",
         copied: "نُسخ النص",
@@ -918,6 +914,7 @@ static EN: Text = Text {
         searching: "Searching…",
         search_unavailable: "Search needs a newer browser. You can still select, copy, and download the text.",
         copy_all: "Copy all text",
+        download: "Download",
         copy_cue: "Copy this cue",
         copy: "Copy",
         copied: "Text copied",

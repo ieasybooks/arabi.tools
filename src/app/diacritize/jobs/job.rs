@@ -35,7 +35,7 @@ use crate::{
     i18n::Locale,
     icons,
     queue::{CancelReason, JobId, Status},
-    result_controls::{self, COPY_SCRIPT},
+    result_controls::{self, COPY_SCRIPT, CopyAll, DownloadLink},
 };
 
 module_param!(pub id: JobId, error = not_found);
@@ -204,13 +204,31 @@ async fn job_status(
 }
 
 #[component]
-async fn result(locale: Locale, id: JobId, document: Arc<Document>) -> Result<impl View> {
+async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> Result<impl View> {
     let text = &locale.text().diacritization;
     let name = if document.kind == DocumentKind::Text {
         text.result_label.to_owned()
     } else {
         document.name.clone()
     };
+    let mut downloads = vec![DownloadLink {
+        label: if document.kind == DocumentKind::Docx {
+            text.download_docx
+        } else {
+            text.download_text
+        },
+        href: href!(download_result, Id(id.clone())).resolve(cx),
+    }];
+    if document.text.is_none() {
+        downloads.push(DownloadLink {
+            label: text.download_original,
+            href: href!(download_original, Id(id.clone())).resolve(cx),
+        });
+    }
+    let copy = document
+        .text
+        .is_some()
+        .then_some(CopyAll::Field("diacritized-text"));
     Ok(view! {
         <div
             class="result diacritize-result"
@@ -221,30 +239,19 @@ async fn result(locale: Locale, id: JobId, document: Arc<Document>) -> Result<im
             data-source=(document.text.as_ref().map(|text| text.source.as_str()))
             data-mode=(if document.text.is_some() { "text" } else { "document" })
         >
-            <div class="result-heading">
-                <div class="result-title">
-                    <p class="result-name">
-                        icon(data: icons::TRANSCRIPT, size: 20)
-                        <span dir="auto">(name)</span>
-                    </p>
-                    <p class="result-meta">
-                        <span class="visually-hidden">
-                            (text.model)
-                            ": "
-                        </span>
-                        <bdi dir="auto">
-                            (locale.diacritization_model(document.model))
-                        </bdi>
-                        " · "
-                        (locale.diacritization_kept_for())
-                    </p>
-                </div>
-                result_actions(
-                    locale: locale,
-                    id: id.clone(),
-                    document: document.clone()
-                )
-            </div>
+            result_controls::result_header(
+                locale: locale,
+                name: name,
+                copy: copy,
+                downloads: downloads,
+                <span class="visually-hidden">
+                    (text.model)
+                    ": "
+                </span>
+                <bdi dir="auto">(locale.diacritization_model(document.model))</bdi>
+                " · "
+                (locale.diacritization_kept_for())
+            )
             if let Some(text_result) = document.text.as_ref() {
                 <label class="visually-hidden" for="diacritized-text">
                     (text.result_label)
@@ -262,60 +269,6 @@ async fn result(locale: Locale, id: JobId, document: Arc<Document>) -> Result<im
                 </textarea>
             }
             result_controls::copy_feedback(locale: locale)
-        </div>
-    })
-}
-
-/// Copy all (text results), the result download, and the original file for documents.
-#[component]
-async fn result_actions(locale: Locale, id: JobId, document: Arc<Document>) -> Result<impl View> {
-    let text = &locale.text().diacritization;
-    Ok(view! {
-        <div class="downloads">
-            if document.text.is_some() {
-                <button
-                    type="button"
-                    class="button secondary compact"
-                    data-copy="diacritized-text"
-                >
-                    icon(data: icons::COPY, size: 16)
-                    <span>(locale.text().review.copy_all)</span>
-                </button>
-            }
-            <a
-                class="button primary compact"
-                href=(href!(download_result, Id(id.clone())))
-                download=(true)
-                aria-label=(if document.kind == DocumentKind::Docx {
-                    text.download_docx
-                } else {
-                    text.download_text
-                })
-                title=(if document.kind == DocumentKind::Docx {
-                    text.download_docx
-                } else {
-                    text.download_text
-                })
-            >
-                icon(data: icons::DOWNLOAD, size: 16)
-                <span>
-                    (if document.kind == DocumentKind::Docx {
-                        crate::i18n::DOCX
-                    } else {
-                        crate::i18n::TXT
-                    })
-                </span>
-            </a>
-            if document.text.is_none() {
-                <a
-                    class="button secondary compact"
-                    href=(href!(download_original, Id(id)))
-                    download=(true)
-                >
-                    icon(data: icons::DOWNLOAD, size: 16)
-                    <span>(text.download_original)</span>
-                </a>
-            }
         </div>
     })
 }

@@ -167,6 +167,7 @@ for (const locale of ['ar', 'en']) {
     await expect(root.locator('[data-copy-status]')).toHaveText(locale === 'ar' ? 'نُسخ النص' : 'Text copied');
     for (const extension of ['txt', 'docx', 'json']) {
       const downloading = page.waitForEvent('download');
+      await root.locator('.download-menu summary').click();
       await root.locator(`a[href$="document.${extension}"]`).click();
       const download = await downloading;
       expect(download.suggestedFilename()).toBe(`review.${extension}`);

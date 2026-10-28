@@ -61,4 +61,21 @@
       return false;
     }
   };
+
+  // A result's Download menu is a <details> disclosure. Choosing a download, clicking
+  // elsewhere or pressing Escape closes it; Escape returns focus to its button.
+  const menus = () => document.querySelectorAll("details[data-download-menu][open]");
+  document.addEventListener("click", (event) => {
+    for (const menu of menus()) {
+      if (!menu.contains(event.target) || event.target.closest("a[download]")) menu.open = false;
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    for (const menu of menus()) {
+      const focused = menu.contains(document.activeElement);
+      menu.open = false;
+      if (focused) menu.querySelector("summary").focus();
+    }
+  });
 })();

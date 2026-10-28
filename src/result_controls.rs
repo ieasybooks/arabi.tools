@@ -4,14 +4,125 @@ use topcoat::{
     Result,
     asset::{Asset, asset},
     icon::icon,
-    view::{View, component, view},
+    view::{Child, View, component, view},
 };
 
 use crate::i18n::Locale;
 use crate::icons;
 
 pub const SEARCH_SCRIPT: Asset = asset!("./app/search.js");
+/// Also closes the download menus, so every page with a result loads it.
 pub const COPY_SCRIPT: Asset = asset!("./app/copy.js");
+
+/// One of a result's downloads: its full localized label, also its accessible name, and its URL.
+pub struct DownloadLink {
+    pub label: &'static str,
+    pub href: String,
+}
+
+/// What a result's Copy all button copies. Each result's own script handles the click.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CopyAll {
+    /// The whole transcript, from `transcript.js`.
+    Transcript,
+    /// Every recognized page, from `ocr-review.js`.
+    Ocr,
+    /// The read-only field with this id, from `diacritize.js`.
+    Field(&'static str),
+}
+
+/// A result's header, the same on every tool: its name with one muted line under it (`child`),
+/// then Copy all text and Download. Several downloads open a small menu that lists each by its
+/// full label; a single download is a plain link named by its full label.
+#[component]
+pub async fn result_header(
+    locale: Locale,
+    name: String,
+    copy: Option<CopyAll>,
+    mut downloads: Vec<DownloadLink>,
+    #[default] child: Child<'_>,
+) -> Result<impl View> {
+    let text = &locale.text().review;
+    let single = (downloads.len() == 1).then(|| downloads.remove(0));
+    Ok(view! {
+        <div class="result-heading">
+            <div class="result-title">
+                <p class="result-name">
+                    icon(data: icons::TRANSCRIPT, size: 20)
+                    <span dir="auto">(name)</span>
+                </p>
+                <p class="result-meta">(child)</p>
+            </div>
+            <div class="result-actions">
+                if let Some(copy) = copy {
+                    match copy {
+                        CopyAll::Transcript => {
+                            <button
+                                type="button"
+                                class="button secondary compact"
+                                data-copy-all=(true)
+                            >
+                                icon(data: icons::COPY, size: 16)
+                                <span>(text.copy_all)</span>
+                            </button>
+                        }
+                        CopyAll::Ocr => {
+                            <button
+                                type="button"
+                                class="button secondary compact"
+                                data-ocr-copy-all=""
+                            >
+                                icon(data: icons::COPY, size: 16)
+                                <span>(text.copy_all)</span>
+                            </button>
+                        }
+                        CopyAll::Field(field) => {
+                            <button
+                                type="button"
+                                class="button secondary compact"
+                                data-copy=(field)
+                            >
+                                icon(data: icons::COPY, size: 16)
+                                <span>(text.copy_all)</span>
+                            </button>
+                        }
+                    }
+                }
+                if let Some(link) = single {
+                    <a
+                        class="button primary compact"
+                        href=(link.href.as_str())
+                        download=(true)
+                        aria-label=(link.label)
+                        title=(link.label)
+                    >
+                        icon(data: icons::DOWNLOAD, size: 16)
+                        <span>(text.download)</span>
+                    </a>
+                } else {
+                    <details class="download-menu" data-download-menu="">
+                        <summary class="button primary compact">
+                            icon(data: icons::DOWNLOAD, size: 16)
+                            <span>(text.download)</span>
+                            <span class="download-chevron">
+                                icon(data: icons::DOWN, size: 16)
+                            </span>
+                        </summary>
+                        <ul class="download-list" role="list">
+                            for link in &downloads {
+                                <li>
+                                    <a href=(link.href.as_str()) download=(true)>
+                                        (link.label)
+                                    </a>
+                                </li>
+                            }
+                        </ul>
+                    </details>
+                }
+            </div>
+        </div>
+    })
+}
 
 /// Load `SEARCH_SCRIPT` from the owning page, including pages with live results.
 #[component]
