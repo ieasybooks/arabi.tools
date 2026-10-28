@@ -1596,7 +1596,7 @@ progress::-moz-progress-bar {
   grid-area: name;
 }
 
-/* Copy all text, then Download. */
+/* Copy all text, a quiet button, then Download, the result's one filled button. */
 .result-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1706,10 +1706,6 @@ progress::-moz-progress-bar {
   white-space: pre-wrap;
   unicode-bidi: plaintext;
   resize: vertical;
-}
-
-.copy-panel .button {
-  align-self: flex-start;
 }
 
 /* Search: a find bar. The count, the two steps and Clear sit inside the field at its end; the
@@ -2234,16 +2230,18 @@ progress::-moz-progress-bar {
   font: inherit;
 }
 
+/* Tinted, not outlined: the result's only filled button is Download. */
 .ocr-source-picker input::file-selector-button {
   min-block-size: 2.5rem;
   max-inline-size: 100%;
   margin-inline-end: 0.75rem;
   padding: 0.375rem 1rem;
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: 999px;
-  background: var(--surface);
+  background: var(--well);
   color: var(--text);
   font: inherit;
+  cursor: pointer;
 }
 
 .ocr-source-picker .ocr-confirm {
@@ -2259,8 +2257,11 @@ progress::-moz-progress-bar {
   accent-color: var(--green);
 }
 
-.ocr-source-picker .button {
+.ocr-source-picker .button,
+.copy-panel .button {
   align-self: flex-start;
+  background: var(--well);
+  color: var(--text);
 }
 
 /* Side by side, the source fills the height its text pane sets; the page's top meets the text's

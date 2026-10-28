@@ -36,7 +36,7 @@
         label.append(field);
         const close = document.createElement("button");
         close.type = "button";
-        close.className = "button secondary";
+        close.className = "button ghost compact";
         close.textContent = fallback.dataset.copyClose;
         const dismiss = () => {
           const restoreFocus = panel.contains(document.activeElement);

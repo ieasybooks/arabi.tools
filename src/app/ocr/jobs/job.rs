@@ -573,7 +573,7 @@ async fn source_picker(locale: Locale, id: JobId) -> Result<impl View> {
                 />
                 <span>(review.source_confirm)</span>
             </label>
-            <button class="button secondary" type="submit">
+            <button class="button ghost compact" type="submit">
                 (review.source_attach)
             </button>
             <p

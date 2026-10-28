@@ -50,9 +50,9 @@ pub async fn result_header(
     })
 }
 
-/// A result's two whole-result actions: Copy all text, when the result has text, then Download.
-/// Several downloads open a small menu that lists each by its full label; a single download is a
-/// plain link named by its full label.
+/// A result's two whole-result actions: Copy all text, a quiet button, when the result has text,
+/// then Download, the result's one filled button. Several downloads open a small menu that lists
+/// each by its full label; a single download is a plain link named by its full label.
 #[component]
 pub async fn result_actions(
     locale: Locale,
@@ -68,7 +68,7 @@ pub async fn result_actions(
                     CopyAll::Transcript => {
                         <button
                             type="button"
-                            class="button secondary compact"
+                            class="button ghost compact"
                             data-copy-all=(true)
                         >
                             icon(data: icons::COPY, size: 16)
@@ -78,7 +78,7 @@ pub async fn result_actions(
                     CopyAll::Ocr => {
                         <button
                             type="button"
-                            class="button secondary compact"
+                            class="button ghost compact"
                             data-ocr-copy-all=""
                         >
                             icon(data: icons::COPY, size: 16)
@@ -88,7 +88,7 @@ pub async fn result_actions(
                     CopyAll::Field(field) => {
                         <button
                             type="button"
-                            class="button secondary compact"
+                            class="button ghost compact"
                             data-copy=(field)
                         >
                             icon(data: icons::COPY, size: 16)
