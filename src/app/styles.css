@@ -848,19 +848,22 @@ progress::-moz-progress-bar {
   color: var(--text);
 }
 
-.footer-links,
-.footer-links ul {
-  display: flex;
-  flex-wrap: wrap;
-  column-gap: 1.25rem;
+/* The links run like words, so the accounts and the source code wrap as one line. */
+.footer-links :is(ul, li) {
+  display: inline;
 }
 
 /* Tall enough to tap. */
 .footer-links a {
   display: inline-block;
+  margin-inline-end: 1.25rem;
   padding-block: 0.25rem;
   color: var(--muted);
   text-decoration: none;
+}
+
+.footer-links > a {
+  margin-inline-end: 0;
 }
 
 .footer-links a:hover {
