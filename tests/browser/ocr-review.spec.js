@@ -267,7 +267,7 @@ test('OCR preview failures and denied clipboard keep text and exact copy scopes'
   const posts = [];
   page.on('request', (request) => { if (request.method() === 'POST') posts.push(request.url()); });
   await restore(page, Buffer.from('GIF89a'), 'wrong.png', 'image/png');
-  await expect(root.locator('[data-ocr-source-error]')).toHaveText('Choose exactly one PDF, JPG or PNG file.');
+  await expect(root.locator('[data-ocr-source-error]')).toHaveText('\u2068wrong.png\u2069 is not a PDF, JPG or PNG file.');
   await restore(page, Buffer.from('%PDF-not a readable document'), 'broken.pdf');
   await expect(root.locator('[data-ocr-source-error]')).toContainText('local preview could not be displayed');
   await screenshot(page, 'en-desktop-ocr-preview-failure');

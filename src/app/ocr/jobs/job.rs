@@ -312,7 +312,7 @@ async fn result(
             data-pdf-module=(PDF_MODULE)
             data-pdf-worker=(PDF_WORKER)
             data-pdf-resources=(resources)
-            data-wrong-type=(text.wrong_type)
+            data-wrong-file=(text.wrong_file)
             data-no-text=(text.no_text)
         >
             result_controls::result_header(

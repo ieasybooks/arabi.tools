@@ -466,6 +466,8 @@ pub struct TranscriptionText {
     pub no_reservation: &'static str,
     pub missing: &'static str,
     pub wrong_type: &'static str,
+    /// A chosen file of the wrong type, named by `{name}`.
+    pub wrong_file: &'static str,
     pub unreadable: &'static str,
 }
 
@@ -503,6 +505,8 @@ pub struct OcrText {
     pub no_reservation: &'static str,
     pub missing: &'static str,
     pub wrong_type: &'static str,
+    /// A chosen file of the wrong type, named by `{name}`.
+    pub wrong_file: &'static str,
     pub unreadable: &'static str,
     pub unavailable: &'static str,
     pub privacy: &'static str,
@@ -593,6 +597,8 @@ pub struct DiacritizationText {
     pub no_reservation: &'static str,
     pub missing: &'static str,
     pub wrong_type: &'static str,
+    /// A chosen file of the wrong type, named by `{name}`.
+    pub wrong_file: &'static str,
     pub invalid_utf8: &'static str,
     pub invalid_docx: &'static str,
     pub unsupported_docx: &'static str,
@@ -744,6 +750,7 @@ static AR: Text = Text {
         no_reservation: "انتهت مهلة هذا الطلب. حاول مرة أخرى.",
         missing: "اختر مستندًا أولًا.",
         wrong_type: "نقبل ملف TXT أو DOCX واحدًا فقط. ملفات DOC غير مدعومة.",
+        wrong_file: "الملف {name} ليس بصيغة TXT أو DOCX.",
         invalid_utf8: "تعذّر قراءة ترميز النص. احفظ ملف TXT بترميز UTF-8 ثم حاول مرة أخرى.",
         invalid_docx: "تعذّر قراءة مستند Word. تأكد أنه ملف DOCX سليم وغير محمي بكلمة مرور.",
         unsupported_docx: "يحتوي مستند Word على عناصر لا نستطيع الحفاظ عليها أثناء التشكيل. احفظ نسخة DOCX بتنسيق أبسط أو حوّل النص إلى ملف TXT.",
@@ -782,6 +789,7 @@ static AR: Text = Text {
         no_reservation: "انتهت مهلة هذا الرفع. حاول مرة أخرى.",
         missing: "اختر ملفًا صوتيًا أولًا.",
         wrong_type: "نقبل ملفات MP3 وM4A فقط.",
+        wrong_file: "الملف {name} ليس بصيغة MP3 أو M4A.",
         unreadable: "لم نتمكن من قراءة الملف تسجيلًا صوتيًا بصيغة MP3 أو M4A.",
     },
     ocr: OcrText {
@@ -846,6 +854,7 @@ static AR: Text = Text {
         no_reservation: "انتهت مهلة هذا الرفع. حاول مرة أخرى.",
         missing: "اختر ملف PDF أو صورة أولًا.",
         wrong_type: "نقبل ملف PDF واحدًا أو صورة JPG أو PNG واحدة فقط.",
+        wrong_file: "الملف {name} ليس بصيغة PDF أو JPG أو PNG.",
         unreadable: "لم نتمكن من قراءة الملف. تأكد من سلامته وأنه غير محمي بكلمة مرور.",
         unavailable: "أداة استخراج النص غير متاحة مؤقتًا. حاول مرة أخرى لاحقًا.",
         privacy: "نرسل الصفحات إلى Google Drive لاستخراج النص ونحذفها منه فورًا بعد ذلك. نحذف ملفك عند انتهاء المهمة، والنتائج بعد 30 دقيقة.",
@@ -995,6 +1004,7 @@ static EN: Text = Text {
         no_reservation: "This request expired. Please try again.",
         missing: "Choose a document first.",
         wrong_type: "Choose exactly one TXT or DOCX file. DOC files are not supported.",
+        wrong_file: "{name} is not a TXT or DOCX file.",
         invalid_utf8: "We could not read the text encoding. Save the TXT file as UTF-8 and try again.",
         invalid_docx: "We could not read this Word document. Check that it is a valid DOCX file and is not password protected.",
         unsupported_docx: "This Word document contains content we cannot preserve during diacritization. Save a simpler DOCX copy or convert the text to TXT.",
@@ -1033,6 +1043,7 @@ static EN: Text = Text {
         no_reservation: "This upload expired. Please try again.",
         missing: "Choose an audio file first.",
         wrong_type: "Only MP3 and M4A files are accepted.",
+        wrong_file: "{name} is not an MP3 or M4A file.",
         unreadable: "We couldn't read this file as MP3 or M4A audio.",
     },
     ocr: OcrText {
@@ -1097,6 +1108,7 @@ static EN: Text = Text {
         no_reservation: "This upload expired. Please try again.",
         missing: "Choose a PDF or image first.",
         wrong_type: "Choose exactly one PDF, JPG or PNG file.",
+        wrong_file: "{name} is not a PDF, JPG or PNG file.",
         unreadable: "We could not read this file. Check that it is valid and is not password protected.",
         unavailable: "Text recognition is temporarily unavailable. Please try again later.",
         privacy: "Pages are sent to Google Drive for OCR and deleted right afterward. We delete your upload when the job ends and results after 30 minutes.",

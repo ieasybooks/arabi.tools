@@ -58,7 +58,7 @@ for (const locale of [
     file: "ملف TXT أو DOCX", done: "اكتمل التشكيل.", copy: "نسخ النص كاملًا", copied: "نُسخ النص",
     txt: "تنزيل النص (TXT)", docx: "تنزيل مستند Word (DOCX)", originalFile: "تنزيل الملف الأصلي",
     limit: "أدخل نصًا لا يتجاوز 1000 حرفًا، بما فيها الحركات والمسافات.",
-    wrongType: "نقبل ملف TXT أو DOCX واحدًا فقط. ملفات DOC غير مدعومة.",
+    wrongFile: "الملف \u2068legacy.doc\u2069 ليس بصيغة TXT أو DOCX.",
     invalidUtf8: "تعذّر قراءة ترميز النص. احفظ ملف TXT بترميز UTF-8 ثم حاول مرة أخرى.",
     invalidDocx: "تعذّر قراءة مستند Word. تأكد أنه ملف DOCX سليم وغير محمي بكلمة مرور.",
     docxLimits: "يتجاوز محتوى مستند Word أو ناتج تشكيله حدود المعالجة. قسّمه إلى مستندات أصغر وفقرات أقصر ثم حاول مرة أخرى.",
@@ -74,7 +74,7 @@ for (const locale of [
     file: "TXT or DOCX file", done: "Diacritization complete.", copy: "Copy all text", copied: "Text copied",
     txt: "Download text (.txt)", docx: "Download Word document (.docx)", originalFile: "Download original file",
     limit: "Enter up to 1000 characters, including diacritics and spaces.",
-    wrongType: "Choose exactly one TXT or DOCX file. DOC files are not supported.",
+    wrongFile: "\u2068legacy.doc\u2069 is not a TXT or DOCX file.",
     invalidUtf8: "We could not read the text encoding. Save the TXT file as UTF-8 and try again.",
     invalidDocx: "We could not read this Word document. Check that it is a valid DOCX file and is not password protected.",
     docxLimits: "This Word document's content or diacritized output exceeds processing limits. Split it into smaller documents and shorter paragraphs, then try again.",
@@ -271,7 +271,7 @@ for (const locale of [
     await page.getByRole("radio", { name: locale.document, exact: true }).check();
     const input = page.getByLabel(locale.file, { exact: true });
     await input.setInputFiles({ name: "legacy.doc", mimeType: "application/msword", buffer: Buffer.from("legacy") });
-    await expect(page.getByRole("alert")).toHaveText(locale.wrongType);
+    await expect(page.getByRole("alert")).toHaveText(locale.wrongFile);
     // A sparse local file exercises the real size in both engines without a large
     // in-memory buffer or an override on a browser-owned File wrapper.
     const oversized = testInfo.outputPath("large.txt");

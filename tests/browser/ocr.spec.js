@@ -17,8 +17,8 @@ function pdf(pages) {
 
 const text = "مرحبا بالعالم\nهذا نص من صفحة كتاب.";
 for (const locale of [
-  { code: "ar", dir: "rtl", name: "استخراج النص من الصور", file: "ملف PDF أو صورة", submit: "ابدأ استخراج النص", done: "اكتمل استخراج النص.", downloads: ["تنزيل النص (TXT)", "تنزيل مستند Word (DOCX)", "تنزيل بيانات الصفحات (JSON)"], invalid: "نقبل ملف PDF واحدًا أو صورة JPG أو PNG واحدة فقط.", unreadable: "لم نتمكن من قراءة الملف.", pageCap: "الملف يتجاوز الحد الأقصى البالغ 1000 صفحة.", unavailable: "أداة استخراج النص غير متاحة مؤقتًا." },
-  { code: "en", dir: "ltr", name: "Text recognition (OCR)", file: "PDF or image file", submit: "Extract text", done: "Text recognition complete.", downloads: ["Download text (.txt)", "Download Word document (.docx)", "Download pages (.json)"], invalid: "Choose exactly one PDF, JPG or PNG file.", unreadable: "We could not read this file.", pageCap: "The file exceeds the 1000-page limit.", unavailable: "Text recognition is temporarily unavailable." },
+  { code: "ar", dir: "rtl", name: "استخراج النص من الصور", file: "ملف PDF أو صورة", submit: "ابدأ استخراج النص", done: "اكتمل استخراج النص.", downloads: ["تنزيل النص (TXT)", "تنزيل مستند Word (DOCX)", "تنزيل بيانات الصفحات (JSON)"], invalid: "الملف \u2068bad.gif\u2069 ليس بصيغة PDF أو JPG أو PNG.", unreadable: "لم نتمكن من قراءة الملف.", pageCap: "الملف يتجاوز الحد الأقصى البالغ 1000 صفحة.", unavailable: "أداة استخراج النص غير متاحة مؤقتًا." },
+  { code: "en", dir: "ltr", name: "Text recognition (OCR)", file: "PDF or image file", submit: "Extract text", done: "Text recognition complete.", downloads: ["Download text (.txt)", "Download Word document (.docx)", "Download pages (.json)"], invalid: "\u2068bad.gif\u2069 is not a PDF, JPG or PNG file.", unreadable: "We could not read this file.", pageCap: "The file exceeds the 1000-page limit.", unavailable: "Text recognition is temporarily unavailable." },
 ]) {
   async function open(page, url = "/ocr") {
     await page.goto(url);
@@ -70,7 +70,8 @@ for (const locale of [
     await open(page);
     const file = page.getByLabel(locale.file, { exact: true });
     await file.setInputFiles({ name: "bad.gif", mimeType: "image/gif", buffer: Buffer.from("bad") });
-    // An unsupported file is refused as it is chosen: the drop zone stays and nothing can be sent.
+    // An unsupported file is refused as it is chosen, by name: the drop zone stays, and without a
+    // file there is no run button.
     await expect(page.getByRole("alert")).toHaveText(locale.invalid);
     await expect(page.locator(".file-row")).toBeHidden();
     await expect(page.locator("#upload-form [type=submit]")).toBeHidden();

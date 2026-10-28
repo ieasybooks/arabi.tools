@@ -35,12 +35,14 @@
     const dot = name.lastIndexOf('.');
     return dot > 0 ? name.slice(dot + 1).toLowerCase() : '';
   };
-  // Why the chosen file cannot be sent, in the form's own words, or null. The server checks again.
+  // Why the chosen file cannot be sent, in the form's own words, or null. A file of the wrong type
+  // is named, isolated so its own direction cannot reorder the sentence. The server checks again.
   app.fileProblem = form => {
     const input = form.elements.file;
     const file = input.files[0];
     if (!file) return form.dataset.missing;
-    if (input.files.length !== 1 || !form.dataset.extensions.split(',').includes(extensionOf(file.name))) return form.dataset.wrongType;
+    if (input.files.length !== 1) return form.dataset.wrongType;
+    if (!form.dataset.extensions.split(',').includes(extensionOf(file.name))) return form.dataset.wrongFile.replace('{name}', `\u2068${file.name}\u2069`);
     if (file.size > Number(form.dataset.maxBytes)) return form.dataset.tooLarge;
     return null;
   };

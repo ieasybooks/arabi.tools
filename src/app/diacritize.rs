@@ -210,6 +210,7 @@ async fn input_form(
             data-text-missing=(text.text_missing)
             data-missing=(text.missing)
             data-wrong-type=(text.wrong_type)
+            data-wrong-file=(text.wrong_file)
             data-too-large=(locale.too_large())
             data-failed=(text.upload_failed)
             data-model-unavailable=(text.model_unavailable)

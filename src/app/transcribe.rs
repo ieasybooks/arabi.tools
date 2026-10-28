@@ -92,6 +92,7 @@ async fn upload_form(cx: &Cx, locale: Locale) -> Result<impl View> {
                 data-max-bytes=(MAX_UPLOAD_BYTES)
                 data-missing=(text.missing)
                 data-wrong-type=(text.wrong_type)
+                data-wrong-file=(text.wrong_file)
                 data-too-large=(locale.audio_too_large())
                 data-failed=(text.upload_failed)
                 data-uploading=(text.uploading)
