@@ -1183,7 +1183,9 @@ progress::-moz-progress-bar {
 /* Workspace: one width per page, centred on the page axis. Transcription keeps the reading
    column; OCR and diacritization use the wide one for the title, input, notes and result. */
 
-.container-wide {
+/* The site header lines up with a wide page below it. */
+.container-wide,
+body:has(main .container-wide) .header-inner {
   max-width: calc(var(--wide) + 4rem);
 }
 
