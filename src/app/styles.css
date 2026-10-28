@@ -590,6 +590,12 @@ svg {
   justify-content: flex-end;
 }
 
+/* With very large text these labels wrap rather than push past the card. */
+:is(.form-actions, .file-row, .upload-progress) .button {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
 /* Buttons: one primary per page; the rest are secondary. */
 
 .button {
