@@ -826,61 +826,46 @@ progress::-moz-progress-bar {
   margin-block-start: 2rem;
 }
 
-/* Footer */
+/* Footer: one flat line, the initiative's credit, then plain links. Phones wrap it. */
 
 .site-footer {
   margin-block-start: 2rem;
-  border-radius: 2rem 2rem 0 0;
-  background: var(--well);
+  border-block-start: 1px solid var(--line-soft);
   color: var(--muted);
+  font-size: 0.875rem;
 }
 
 .footer-inner {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.75rem;
-  padding-block: 2rem;
-  text-align: center;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 2rem;
+  padding-block: 1rem;
 }
 
 .site-footer .brand-name {
   color: var(--text);
 }
 
-.social {
+.footer-links,
+.footer-links ul {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.5rem;
+  column-gap: 1.25rem;
 }
 
-.social a {
-  display: inline-grid;
-  place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--green);
-}
-
-.social a:hover {
-  border-color: var(--gold);
-  color: var(--green-strong);
-}
-
-.footer-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  color: var(--faint);
+/* Tall enough to tap. */
+.footer-links a {
+  display: inline-block;
+  padding-block: 0.25rem;
+  color: var(--muted);
   text-decoration: none;
 }
 
-.footer-link:hover {
+.footer-links a:hover {
   color: var(--text);
+  text-decoration: underline;
 }
 
 /* Phones: smaller titles and full-width actions. */

@@ -430,16 +430,22 @@ pub struct WorkspaceText {
     pub result: &'static str,
 }
 
-/// Names of the initiative's accounts, linked from the footer.
+/// The initiative's accounts, linked from the footer.
 pub struct SocialText {
     /// The list's accessible name.
     pub label: &'static str,
-    pub telegram: &'static str,
-    pub youtube: &'static str,
-    pub x: &'static str,
-    pub facebook: &'static str,
-    pub github: &'static str,
-    pub email: &'static str,
+    pub telegram: Account,
+    pub youtube: Account,
+    pub x: Account,
+    pub facebook: Account,
+    pub github: Account,
+    pub email: Account,
+}
+
+/// One of the initiative's accounts: the link's short text, and its full accessible name.
+pub struct Account {
+    pub name: &'static str,
+    pub label: &'static str,
 }
 
 /// Fixed text of the transcription tool.
@@ -632,12 +638,30 @@ static AR: Text = Text {
     initiative_after: ".",
     social: SocialText {
         label: "روابط التواصل",
-        telegram: "قناتنا على تيليجرام",
-        youtube: "قناتنا على يوتيوب",
-        x: "حسابنا على إكس",
-        facebook: "صفحتنا على فيسبوك",
-        github: "حسابنا على GitHub للمبرمجين",
-        email: "بريدنا الإلكتروني",
+        telegram: Account {
+            name: "تيليجرام",
+            label: "قناتنا على تيليجرام",
+        },
+        youtube: Account {
+            name: "يوتيوب",
+            label: "قناتنا على يوتيوب",
+        },
+        x: Account {
+            name: "إكس",
+            label: "حسابنا على إكس",
+        },
+        facebook: Account {
+            name: "فيسبوك",
+            label: "صفحتنا على فيسبوك",
+        },
+        github: Account {
+            name: "GitHub",
+            label: "حسابنا على GitHub للمبرمجين",
+        },
+        email: Account {
+            name: "البريد الإلكتروني",
+            label: "بريدنا الإلكتروني",
+        },
     },
     not_found_title: "الصفحة غير موجودة",
     not_found: "هذه الصفحة غير موجودة، أو انتهت صلاحيتها.",
@@ -867,12 +891,30 @@ static EN: Text = Text {
     initiative_after: " initiative.",
     social: SocialText {
         label: "Social links",
-        telegram: "Our Telegram channel",
-        youtube: "Our YouTube channel",
-        x: "Our X account",
-        facebook: "Our Facebook page",
-        github: "Our GitHub account for developers",
-        email: "Our email",
+        telegram: Account {
+            name: "Telegram",
+            label: "Our Telegram channel",
+        },
+        youtube: Account {
+            name: "YouTube",
+            label: "Our YouTube channel",
+        },
+        x: Account {
+            name: "X",
+            label: "Our X account",
+        },
+        facebook: Account {
+            name: "Facebook",
+            label: "Our Facebook page",
+        },
+        github: Account {
+            name: "GitHub",
+            label: "Our GitHub account for developers",
+        },
+        email: Account {
+            name: "Email",
+            label: "Our email",
+        },
     },
     not_found_title: "Page not found",
     not_found: "This page doesn't exist, or it has expired.",

@@ -1,6 +1,6 @@
-//! Icons used across the site, each drawn in the text color. Most are Heroicons (MIT,
+//! Icons used across the site, each drawn in the text color. All are Heroicons (MIT,
 //! github.com/tailwindlabs/heroicons): outline icons are 24 px, solid icons 20 px, and micro icons
-//! 16 px. The social links use Lucide icons (ISC, lucide.dev) and the X logo.
+//! 16 px.
 
 use topcoat::{icon::IconData, view::svg::ViewBox};
 
@@ -113,39 +113,4 @@ pub const FORWARD: IconData = IconData::unescaped_unchecked(
 pub const TRANSLATE: IconData = IconData::unescaped_unchecked(
     ViewBox::new(0.0, 0.0, 16.0, 16.0),
     r#"<g fill="currentColor"><path fill-rule="evenodd" d="M11 5a.75.75 0 0 1 .688.452l3.25 7.5a.75.75 0 1 1-1.376.596L12.89 12H9.109l-.67 1.548a.75.75 0 1 1-1.377-.596l3.25-7.5A.75.75 0 0 1 11 5Zm-1.24 5.5h2.48L11 7.636 9.76 10.5ZM5 1a.75.75 0 0 1 .75.75v1.261a25.27 25.27 0 0 1 2.598.211.75.75 0 1 1-.2 1.487c-.22-.03-.44-.056-.662-.08A12.939 12.939 0 0 1 5.92 8.058c.237.304.488.595.752.873a.75.75 0 0 1-1.086 1.035A13.075 13.075 0 0 1 5 9.307a13.068 13.068 0 0 1-2.841 2.546.75.75 0 0 1-.827-1.252A11.566 11.566 0 0 0 4.08 8.057a12.991 12.991 0 0 1-.554-.938.75.75 0 1 1 1.323-.707c.049.09.099.181.15.271.388-.68.708-1.405.952-2.164a23.941 23.941 0 0 0-4.1.19.75.75 0 0 1-.2-1.487c.853-.114 1.72-.185 2.598-.211V1.75A.75.75 0 0 1 5 1Z" clip-rule="evenodd"/></g>"#,
-);
-/// Source code.
-pub const CODE: IconData = IconData::unescaped_unchecked(
-    ViewBox::new(0.0, 0.0, 16.0, 16.0),
-    r#"<g fill="currentColor"><path fill-rule="evenodd" d="M4.78 4.97a.75.75 0 0 1 0 1.06L2.81 8l1.97 1.97a.75.75 0 1 1-1.06 1.06l-2.5-2.5a.75.75 0 0 1 0-1.06l2.5-2.5a.75.75 0 0 1 1.06 0ZM11.22 4.97a.75.75 0 0 0 0 1.06L13.19 8l-1.97 1.97a.75.75 0 1 0 1.06 1.06l2.5-2.5a.75.75 0 0 0 0-1.06l-2.5-2.5a.75.75 0 0 0-1.06 0ZM8.856 2.008a.75.75 0 0 1 .636.848l-1.5 10.5a.75.75 0 0 1-1.484-.212l1.5-10.5a.75.75 0 0 1 .848-.636Z" clip-rule="evenodd"/></g>"#,
-);
-/// Telegram, drawn as a paper plane.
-pub const TELEGRAM: IconData = IconData::unescaped_unchecked(
-    ViewBox::new(0.0, 0.0, 24.0, 24.0),
-    r#"<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></g>"#,
-);
-/// The `YouTube` logo.
-pub const YOUTUBE: IconData = IconData::unescaped_unchecked(
-    ViewBox::new(0.0, 0.0, 24.0, 24.0),
-    r#"<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17"/><path d="m10 15 5-3-5-3z"/></g>"#,
-);
-/// The X logo.
-pub const X: IconData = IconData::unescaped_unchecked(
-    ViewBox::new(0.0, 0.0, 1200.0, 1227.0),
-    r#"<g fill="currentColor"><path d="M714.163 519.284L1160.89 0H1055.03L667.137 450.887L357.328 0H0L468.492 681.821L0 1226.37H105.866L515.491 750.218L842.672 1226.37H1200L714.137 519.284H714.163ZM569.165 687.828L521.697 619.934L144.011 79.6944H306.615L611.412 515.685L658.88 583.579L1055.08 1150.3H892.476L569.165 687.854V687.828Z"/></g>"#,
-);
-/// The Facebook logo.
-pub const FACEBOOK: IconData = IconData::unescaped_unchecked(
-    ViewBox::new(0.0, 0.0, 24.0, 24.0),
-    r#"<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></g>"#,
-);
-/// The GitHub logo.
-pub const GITHUB: IconData = IconData::unescaped_unchecked(
-    ViewBox::new(0.0, 0.0, 24.0, 24.0),
-    r#"<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></g>"#,
-);
-/// Email.
-pub const MAIL: IconData = IconData::unescaped_unchecked(
-    ViewBox::new(0.0, 0.0, 24.0, 24.0),
-    r#"<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/></g>"#,
 );

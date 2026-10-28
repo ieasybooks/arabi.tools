@@ -439,30 +439,19 @@ impl IntoResponse for Typed {
     }
 }
 
-/// The initiative behind the site, its accounts, and the site's source code.
+/// One flat line: the initiative behind the site, then plain links to its accounts and to the
+/// site's source code. Each account keeps its full name as the link's accessible name.
 #[component]
 async fn site_footer(locale: Locale) -> Result<impl View> {
     let text = locale.text();
     let social = &text.social;
     let links = [
-        ("https://t.me/ieasybooks", icons::TELEGRAM, social.telegram),
-        (
-            "https://youtube.com/@ieasybooks",
-            icons::YOUTUBE,
-            social.youtube,
-        ),
-        ("https://x.com/iieasybooks", icons::X, social.x),
-        (
-            "https://fb.com/ieasybooks",
-            icons::FACEBOOK,
-            social.facebook,
-        ),
-        (
-            "https://github.com/ieasybooks",
-            icons::GITHUB,
-            social.github,
-        ),
-        ("mailto:easybooksdev@gmail.com", icons::MAIL, social.email),
+        ("https://t.me/ieasybooks", &social.telegram),
+        ("https://youtube.com/@ieasybooks", &social.youtube),
+        ("https://x.com/iieasybooks", &social.x),
+        ("https://fb.com/ieasybooks", &social.facebook),
+        ("https://github.com/ieasybooks", &social.github),
+        ("mailto:easybooksdev@gmail.com", &social.email),
     ];
     Ok(view! {
         <footer class="site-footer">
@@ -473,19 +462,18 @@ async fn site_footer(locale: Locale) -> Result<impl View> {
                     <a href=(INITIATIVE_URL)>(text.initiative_name)</a>
                     (text.initiative_after)
                 </p>
-                <ul class="social" role="list" aria-label=(social.label)>
-                    for (href, data, label) in links {
-                        <li>
-                            <a href=(href) title=(label) aria-label=(label)>
-                                icon(data: data, size: 20)
-                            </a>
-                        </li>
-                    }
-                </ul>
-                <a class="footer-link" href=(SOURCE_URL)>
-                    icon(data: icons::CODE, size: 16)
-                    <span>(text.source_code)</span>
-                </a>
+                <div class="footer-links">
+                    <ul role="list" aria-label=(social.label)>
+                        for (href, account) in links {
+                            <li>
+                                <a href=(href) aria-label=(account.label)>
+                                    (account.name)
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                    <a href=(SOURCE_URL)>(text.source_code)</a>
+                </div>
             </div>
         </footer>
     })
