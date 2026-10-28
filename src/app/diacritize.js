@@ -13,6 +13,7 @@
     const documentButton = form.querySelector('[type=submit][data-mode=document]');
     const unavailable = new Set(models.filter(input => input.disabled));
     const count = form.querySelector('#text-count');
+    const marks = form.querySelector('#text-marks');
     const error = form.querySelector('.error');
     const back = form.querySelector('.return-to-job');
     const progress = form.querySelector('.upload-progress');
@@ -75,6 +76,9 @@
       fraction.textContent = `${length} / ${form.dataset.maxCharacters}`;
       count.replaceChildren(fraction, document.createTextNode(form.dataset.count.split('{max}')[1] || ''));
       count.setAttribute('aria-label', form.dataset.count.replace('{count}', length).replace('{max}', form.dataset.maxCharacters));
+      // Diacritics already in the text are replaced, so the note shows only while there are some.
+      marks.hidden = !/[\u064b-\u0652]/u.test(source.value);
+      source.setAttribute('aria-describedby', `text-limit text-count${marks.hidden ? '' : ' text-marks'} diacritize-error`);
       const invalid = length > Number(form.dataset.maxCharacters);
       source.setAttribute('aria-invalid', String(invalid));
       count.dataset.invalid = String(invalid);

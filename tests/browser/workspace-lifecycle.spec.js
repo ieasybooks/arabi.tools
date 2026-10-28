@@ -180,10 +180,22 @@ for (const tool of ['transcribe', 'ocr']) {
   });
 }
 
-test('diacritization says what it replaces in the empty output and keeps one privacy line', async ({ page }) => {
+test('diacritization notes replaced diacritics only when the text has some and keeps one privacy line', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await locale(page, 'diacritize', 'en');
-  await expect(page.locator('.result-placeholder')).toHaveText('The diacritized text appears here, with new diacritics replacing any common ones in your text; review it before use.');
+  await expect(page.locator('.result-placeholder')).toHaveText('The diacritized text appears here.');
+  // The note that existing diacritics are replaced shows by the count only while there are some.
+  const note = page.locator('#text-marks');
+  await expect(note).toBeHidden();
+  await page.locator('#source-text').fill('اللُّغة العربية');
+  await expect(note).toHaveText('Existing diacritics are replaced; review the result.');
+  await expect(page.locator('#source-text')).toHaveAttribute('aria-describedby', /\btext-marks\b/);
+  expect(Math.abs(await note.evaluate(node => node.getBoundingClientRect().top)
+    - await page.locator('#text-count').evaluate(node => node.getBoundingClientRect().top))).toBeLessThanOrEqual(2);
+  expect(await note.evaluate(node => node.getClientRects().length && node.getBoundingClientRect().height)).toBeLessThan(24);
+  await page.locator('#source-text').fill('اللغة العربية');
+  await expect(note).toBeHidden();
+  await expect(page.locator('#source-text')).not.toHaveAttribute('aria-describedby', /\btext-marks\b/);
   // The placeholder sits where the text will appear, level with the input's text.
   expect(Math.abs(await page.locator('.result-placeholder').evaluate(node => node.getBoundingClientRect().top)
     - await page.locator('#source-text').evaluate(node => node.getBoundingClientRect().top))).toBeLessThanOrEqual(1);

@@ -1046,8 +1046,9 @@ progress::-moz-progress-bar {
 
 /* Diacritization: one container, as in a translation tool. The input panel (tabs across its top,
    a borderless field with its count, then the model and the run button) and the output panel
-   (faintly tinted, the result where its text appears and the result's actions at its foot) sit
-   side by side, split by one line; narrow screens stack them with a line between. */
+   (faintly tinted: a slim header row with the model and the result's two quiet actions, then the
+   result where its text appears) sit side by side, split by one line; narrow screens stack them
+   with a line between. */
 
 .diacritize-box {
   --dz-pad: 1.5rem;
@@ -1071,7 +1072,7 @@ progress::-moz-progress-bar {
   padding: 0 var(--dz-pad) 1.25rem;
 }
 
-.diacritize-form fieldset {
+.diacritize-form fieldset:not(.diacritize-top) {
   min-width: 0;
   margin: 0;
   padding: 0;
@@ -1082,9 +1083,13 @@ progress::-moz-progress-bar {
 .diacritize-top {
   display: flex;
   align-items: flex-end;
+  min-width: 0;
   min-block-size: var(--dz-band);
+  margin-block: 0;
   margin-inline: calc(-1 * var(--dz-pad));
+  padding-block: 0;
   padding-inline: calc(var(--dz-pad) - 1rem);
+  border: 0;
   border-block-end: 1px solid var(--line);
 }
 
@@ -1189,10 +1194,25 @@ progress::-moz-progress-bar {
   opacity: 1;
 }
 
-.diacritize-count {
-  align-self: flex-end;
+/* The field's foot: while the text already has diacritics, a note that they will be replaced,
+   then the count at the end. */
+.diacritize-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 1rem;
   color: var(--muted);
   font-size: 0.8125rem;
+}
+
+.diacritize-marks {
+  flex: 1 1 0;
+  min-inline-size: min(100%, 12rem);
+}
+
+.diacritize-count {
+  flex: none;
+  margin-inline-start: auto;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1252,8 +1272,9 @@ progress::-moz-progress-bar {
   cursor: default;
 }
 
-/* The output panel: tinted, its text starting level with the input's under the tabs. While another
-   job runs, the space beside the tabs names the result below as the previous one. */
+/* The output panel: tinted, its text starting level with the input's under the tabs. The band
+   beside the tabs holds the result's header row; while another job runs, it names the result below
+   as the previous one there instead of its model. */
 [data-workspace="diacritization"] .workspace-review {
   position: relative;
   display: flex;
@@ -1298,7 +1319,36 @@ progress::-moz-progress-bar {
 
 .diacritize-result {
   flex: 1 1 auto;
-  gap: 0.75rem;
+  gap: 0.5rem;
+}
+
+/* The slim header row: the model, muted, at its start; Copy all text and Download, quiet, at its
+   end. */
+.diacritize-output-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem 0.5rem;
+  min-block-size: 2.75rem;
+}
+
+.diacritize-output-head > .result-actions {
+  gap: 0.25rem;
+  margin-inline-end: -0.75rem;
+}
+
+/* Small buttons that keep their own width, so the row stays one line on phones too. */
+.diacritize-output-head .result-actions > * {
+  flex: none;
+}
+
+.diacritize-output-head .button.compact {
+  padding-inline: 0.625rem;
+}
+
+.diacritize-result > .copy-status {
+  font-size: 0.875rem;
 }
 
 .diacritize-result .diacritize-text {
@@ -1323,28 +1373,13 @@ progress::-moz-progress-bar {
   color: var(--gold);
 }
 
-/* The output's foot: the model that produced it, then Copy all text and Download. A copy message
-   takes its own line above them. */
-.diacritize-output-foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 1rem;
-}
-
 .diacritize-model {
   color: var(--faint);
   font-size: 0.875rem;
 }
 
-.diacritize-output-foot > .copy-status {
-  flex-basis: 100%;
-  order: -1;
-  font-size: 0.875rem;
-}
-
-.diacritize-output-foot > .result-actions {
-  margin-inline-start: auto;
+[data-workspace="diacritization"] .workspace-review:has(> .previous-result:not([hidden])) .diacritize-model {
+  visibility: hidden;
 }
 
 @media (min-width: 60rem) {
@@ -1360,22 +1395,42 @@ progress::-moz-progress-bar {
     border-start-end-radius: calc(var(--radius) - 1px);
   }
 
-  /* Level with the tabs, so showing or hiding it moves nothing. */
-  [data-workspace="diacritization"] .workspace-review > .previous-result {
+  /* Level with the tabs, so showing or hiding them moves nothing: the header row, and in its
+     place at the start, the previous-result line. */
+  [data-workspace="diacritization"] .workspace-review > .previous-result,
+  .diacritize-output-head {
     position: absolute;
     inset-block-start: 0;
     inset-inline: var(--dz-pad);
-    display: flex;
-    align-items: center;
     block-size: var(--dz-band);
     margin: 0;
+  }
+
+  [data-workspace="diacritization"] .workspace-review > .previous-result {
+    display: flex;
+    align-items: center;
+    inset-inline-end: auto;
+  }
+
+  .diacritize-output-head {
+    flex-wrap: nowrap;
+    min-block-size: 0;
+  }
+
+  /* One line across both panels under the tabs and the header row, as in a translation tool. */
+  [data-workspace="diacritization"] .workspace-review::before {
+    content: "";
+    position: absolute;
+    inset-block-start: calc(var(--dz-band) - 1px);
+    inset-inline: 0;
+    border-block-start: 1px solid var(--line);
   }
 }
 
 @media (max-width: 39.99rem) {
   .diacritize-box {
     --dz-pad: 1.25rem;
-    --dz-field: 14rem;
+    --dz-field: 10rem;
   }
 
   .diacritize-text {
@@ -1386,12 +1441,32 @@ progress::-moz-progress-bar {
     font-size: 1.375rem;
   }
 
+  /* The panels follow their text rather than keep one height. */
+  .diacritize-panel {
+    min-block-size: 0;
+  }
+
   .diacritize-result .diacritize-text {
-    min-block-size: 10rem;
+    flex: none;
+    block-size: var(--dz-field);
+    min-block-size: 0;
   }
 
   .diacritize-foot > .form-actions {
     flex: 1 1 100%;
+  }
+}
+
+/* Phones: both text areas grow with their text from a small height, where the browser can size a
+   field by its content; elsewhere they keep the fixed height above. */
+@supports (field-sizing: content) {
+  @media (max-width: 39.99rem) {
+    .diacritize-text,
+    .diacritize-result .diacritize-text {
+      field-sizing: content;
+      block-size: auto;
+      min-block-size: 7.5rem;
+    }
   }
 }
 

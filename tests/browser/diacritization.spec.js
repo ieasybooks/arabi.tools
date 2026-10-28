@@ -135,15 +135,18 @@ for (const locale of [
       await expect(page.getByRole("radio", { name: model, exact: true })).toBeChecked();
       if (model === "شكِّلها") {
         // One container: input and output side by side, the same height, split by one line; the
-        // output has no grip, its text starts level with the input's, and its foot holds the
-        // model and the two actions on one line.
+        // output has no grip, its text starts level with the input's, and a slim header row above
+        // it, level with the tabs, holds the model and the two actions on one line. Only the
+        // Diacritize button is filled.
         const layout = await page.evaluate(() => {
           const box = (selector) => document.querySelector(selector).getBoundingClientRect();
-          const foot = [...document.querySelectorAll(".diacritize-output-foot > :not(.copy-status), .diacritize-output-foot .result-actions > *")]
+          const head = [...document.querySelectorAll(".diacritize-output-head > .diacritize-model, .diacritize-output-head .result-actions > *")]
             .map((element) => Math.round(element.getBoundingClientRect().top + element.getBoundingClientRect().height / 2));
           return {
             input: box("#diacritize-form"), output: box(".workspace-review"), box: box(".diacritize-box"),
-            source: box("#source-text"), result: box("#diacritized-text"), foot,
+            source: box("#source-text"), result: box("#diacritized-text"), head, tabs: box(".diacritize-top"),
+            actions: box(".diacritize-output-head .result-actions"),
+            filled: [...document.querySelectorAll(".diacritize-box .button.primary")].filter((button) => button.getClientRects().length).length,
             resize: getComputedStyle(document.querySelector("#diacritized-text")).resize,
             border: getComputedStyle(document.querySelector("#diacritized-text")).borderTopStyle,
           };
@@ -154,7 +157,9 @@ for (const locale of [
         expect(Math.abs(layout.source.top - layout.result.top)).toBeLessThanOrEqual(1);
         expect(layout.resize).toBe("none");
         expect(layout.border).toBe("none");
-        expect(Math.max(...layout.foot) - Math.min(...layout.foot)).toBeLessThanOrEqual(4);
+        expect(Math.max(...layout.head) - Math.min(...layout.head)).toBeLessThanOrEqual(4);
+        expect(layout.actions.bottom).toBeLessThanOrEqual(layout.tabs.bottom + 1);
+        expect(layout.filled).toBe(1);
       }
       await page.getByRole("button", { name: locale.copy, exact: true }).click();
       await expect(page.locator(".copy-status")).toHaveText(locale.copied);
@@ -240,8 +245,8 @@ for (const locale of [
       await page.getByRole("button", { name: locale.upload, exact: true }).click();
       await expect(page.locator(".workspace-recovery")).toHaveAttribute("href", /\/diacritize\/jobs\/[a-f0-9]{32}$/);
       await expect(page.locator("#job-status")).toHaveText(locale.done, { timeout: 60_000 });
-      // The result is labelled with the model that produced it, at the output's foot.
-      await expect(page.locator(".diacritize-output-foot .diacritize-model bdi")).toHaveText(model);
+      // The result is labelled with the model that produced it, in the output's header row.
+      await expect(page.locator(".diacritize-output-head .diacritize-model bdi")).toHaveText(model);
       const result = await download(page, locale[extension], true);
       expect(result.name).toBe(`مستند.${extension}`);
       if (extension === "txt") {

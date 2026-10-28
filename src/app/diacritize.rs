@@ -265,11 +265,13 @@ async fn input_form(
     })
 }
 
-/// The text: a borderless field under the tabs, its character count small at its foot.
+/// The text: a borderless field under the tabs, with a small line at its foot: while the text
+/// already has diacritics, a note that they will be replaced, then the character count.
 #[component]
 async fn text_input(locale: Locale, source: String) -> Result<impl View> {
     let text = &locale.text().diacritization;
     let count = source.chars().count();
+    let marked = has_marks(&source);
     Ok(view! {
         <div id="diacritize-text-panel" class="diacritize-panel">
             <label class="visually-hidden" for="source-text">(text.source_label)</label>
@@ -280,24 +282,38 @@ async fn text_input(locale: Locale, source: String) -> Result<impl View> {
                 dir="auto"
                 rows="7"
                 placeholder=(text.placeholder)
-                aria-describedby="text-limit text-count diacritize-error"
+                aria-describedby=(if marked {
+                    "text-limit text-count text-marks diacritize-error"
+                } else {
+                    "text-limit text-count diacritize-error"
+                })
             >
                 "\n"
                 (source)
             </textarea>
-            <p
-                id="text-count"
-                class="diacritize-count"
-                aria-label=(locale.diacritization_count(count))
-            >
-                <bdi dir="ltr">(format!("{count} / {MAX_TEXT_CHARACTERS}"))</bdi>
-                (text.character_count.split("{max}").last().unwrap_or_default())
-            </p>
+            <div class="diacritize-meta">
+                <p id="text-marks" class="diacritize-marks" hidden=(!marked)>
+                    (text.marks_note)
+                </p>
+                <p
+                    id="text-count"
+                    class="diacritize-count"
+                    aria-label=(locale.diacritization_count(count))
+                >
+                    <bdi dir="ltr">(format!("{count} / {MAX_TEXT_CHARACTERS}"))</bdi>
+                    (text.character_count.split("{max}").last().unwrap_or_default())
+                </p>
+            </div>
             <p id="text-limit" class="visually-hidden">
                 (locale.diacritization_text_limit())
             </p>
         </div>
     })
+}
+
+/// Whether `text` has any of the common diacritics a run replaces (U+064B to U+0652).
+fn has_marks(text: &str) -> bool {
+    text.chars().any(|c| ('\u{064b}'..='\u{0652}').contains(&c))
 }
 
 #[component]

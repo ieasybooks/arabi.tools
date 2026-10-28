@@ -203,8 +203,9 @@ async fn job_status(
     })
 }
 
-/// The output panel's content: the diacritized text (or the document's name) where the text
-/// appears, then a foot with the model that produced it and the result's two actions.
+/// The output panel's content: a slim header row with the model that produced the result, muted,
+/// at its start and the result's two quiet actions at its end; then the diacritized text (or the
+/// document's name) where the text appears, and a line saying whether a copy worked.
 #[component]
 async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> Result<impl View> {
     let text = &locale.text().diacritization;
@@ -237,6 +238,21 @@ async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> 
             data-source=(document.text.as_ref().map(|text| text.source.as_str()))
             data-mode=(if document.text.is_some() { "text" } else { "document" })
         >
+            <div class="diacritize-output-head">
+                <p class="diacritize-model">
+                    <span class="visually-hidden">
+                        (text.model)
+                        ": "
+                    </span>
+                    <bdi dir="auto">(model)</bdi>
+                </p>
+                result_controls::result_actions(
+                    locale: locale,
+                    copy: copy,
+                    downloads: downloads,
+                    quiet: true
+                )
+            </div>
             if let Some(text_result) = document.text.as_ref() {
                 <label class="visually-hidden" for="diacritized-text">
                     (text.result_label)
@@ -258,21 +274,9 @@ async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> 
                     <span dir="auto">(document.name.as_str())</span>
                 </p>
             }
-            <div class="diacritize-output-foot">
-                <p class="diacritize-model">
-                    (text.model)
-                    ": "
-                    <bdi dir="auto">(model)</bdi>
-                </p>
-                if copy.is_some() {
-                    result_controls::copy_status(locale: locale)
-                }
-                result_controls::result_actions(
-                    locale: locale,
-                    copy: copy,
-                    downloads: downloads
-                )
-            </div>
+            if copy.is_some() {
+                result_controls::copy_status(locale: locale)
+            }
         </div>
     })
 }
