@@ -379,7 +379,9 @@ pub struct ReviewText {
     pub copy_all: &'static str,
     /// Opens the menu of a result's downloads, or names its only download.
     pub download: &'static str,
+    /// The accessible name of a cue's Copy button, whose visible label is `copy`.
     pub copy_cue: &'static str,
+    pub copy: &'static str,
     pub copied: &'static str,
     pub copy_failed: &'static str,
     pub copy_label: &'static str,
@@ -679,6 +681,7 @@ static AR: Text = Text {
         copy_all: "نسخ النص كاملًا",
         download: "تنزيل",
         copy_cue: "نسخ هذا المقطع",
+        copy: "نسخ",
         copied: "نُسخ النص",
         copy_failed: "تعذّر النسخ. حدّد النص وانسخه يدويًا.",
         copy_label: "النص المراد نسخه",
@@ -930,6 +933,7 @@ static EN: Text = Text {
         copy_all: "Copy all text",
         download: "Download",
         copy_cue: "Copy this cue",
+        copy: "Copy",
         copied: "Text copied",
         copy_failed: "Copying was unavailable. Select the text and copy it manually.",
         copy_label: "Text to copy",

@@ -43,7 +43,13 @@ for (const locale of ["ar", "en"]) {
       await next.click();
       await expect(next).toBeFocused();
       await expect(page.locator("[data-cue-select]")).toHaveValue("1");
-      await expect(page.locator("[data-search-active]")).toContainText("00:");
+      // One short time format: the row, the cue picker and the active match agree; the precise
+      // SRT time stays in the download.
+      const firstTime = await page.locator("[data-cue-time]").first().textContent();
+      expect(firstTime).toMatch(/^\d+:\d{2}(:\d{2})?$/);
+      await expect(page.locator("[data-search-active]")).toContainText(firstTime);
+      await expect(page.locator("[data-cue-select] option").first()).toContainText(firstTime);
+      expect((await page.locator("[data-cue-select] option").allTextContents()).join("")).not.toContain(",");
       expect(page.url()).toBe(originalURL);
       expect(await page.evaluate(() => [Object.entries(localStorage), Object.entries(sessionStorage)])).toEqual(storageBefore);
       expect(searchRequests).toEqual([]);
@@ -59,7 +65,11 @@ for (const locale of ["ar", "en"]) {
       await expect(page.locator("[data-copy-all]")).toBeFocused();
       await expect(page.locator("[data-copy-status]")).toHaveText(locale === "ar" ? "نُسخ النص" : "Text copied");
       expect(await page.evaluate(() => window.copies.at(-1))).toBe(bytes.txt.toString());
-      await page.locator("[data-copy-cue]").last().click();
+      // Each cue's Copy shows a short label and is named in full.
+      const copyCue = page.getByRole("button", { name: locale === "ar" ? "نسخ هذا المقطع" : "Copy this cue", exact: true });
+      await expect(copyCue).toHaveCount(texts.length);
+      await expect(copyCue.last()).toHaveText(locale === "ar" ? "نسخ" : "Copy");
+      await copyCue.last().click();
       expect(await page.evaluate(() => window.copies.at(-1))).toBe(texts.at(-1));
       expect(await page.locator(".copy-panel").count()).toBe(0);
 

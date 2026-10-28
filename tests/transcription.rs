@@ -151,18 +151,22 @@ fn assert_subtitles(body: &str) -> anyhow::Result<()> {
 }
 
 /// The page lists the same cues as `srt`, each with its number and short start time; the cue
-/// picker keeps each exact SRT start time.
+/// picker names each cue by the same short time, so the exact time stays in the SRT file.
 fn assert_cues_shown(page: &str, srt: &str) -> anyhow::Result<()> {
     for (number, cue) in (1..).zip(srt.trim().split("\n\n")) {
         let timing = cue.lines().nth(1).context("missing cue times")?;
         let (start, _) = timing.split_once(" --> ").context("invalid SRT timing")?;
+        let short = short_time(start)?;
         let shown = format!(
-            "<span class=\"cue-number visually-hidden\">{number}</span><bdi dir=\"ltr\" data-cue-time=\"\">{}</bdi>",
-            short_time(start)?
+            "<span class=\"cue-number visually-hidden\">{number}</span><bdi dir=\"ltr\" data-cue-time=\"\">{short}</bdi>"
         );
         assert!(page.contains(&shown), "missing {shown:?}: {page}");
-        let option = format!("المقطع {number} عند \u{2066}{start}\u{2069}");
+        let option = format!("المقطع {number} عند \u{2066}{short}\u{2069}");
         assert!(page.contains(&option), "missing {option:?}: {page}");
+        assert!(
+            !page.contains(start),
+            "the page shows the exact time {start:?}"
+        );
     }
     Ok(())
 }

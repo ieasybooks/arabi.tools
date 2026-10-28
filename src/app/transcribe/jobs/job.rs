@@ -333,13 +333,13 @@ async fn result(
                             </p>
                             <button
                                 type="button"
-                                class="icon-button copy-cue"
+                                class="button ghost compact copy-cue"
                                 data-copy-cue=(true)
                                 aria-label=(review.copy_cue)
-                                title=(review.copy_cue)
                                 hidden=(true)
                             >
                                 icon(data: icons::COPY, size: 16)
+                                <span>(review.copy)</span>
                             </button>
                         </li>
                     }
@@ -350,7 +350,8 @@ async fn result(
     })
 }
 
-/// The start of the toolbar: the timestamps switch, then the cue picker.
+/// The start of the toolbar: the timestamps switch, then the cue picker, each cue named by its
+/// short start time.
 #[component]
 async fn reading_controls(locale: Locale, transcript: Arc<Transcript>) -> Result<impl View> {
     let text = &locale.text().review;
@@ -371,7 +372,7 @@ async fn reading_controls(locale: Locale, transcript: Arc<Transcript>) -> Result
                                     .replace("{number}", &number.to_string())
                                     .replace(
                                         "{time}",
-                                        &format!("\u{2066}{}\u{2069}", cue.start),
+                                        &format!("\u{2066}{}\u{2069}", short_time(&cue.start)),
                                     ))
                             </option>
                         }
@@ -383,7 +384,8 @@ async fn reading_controls(locale: Locale, transcript: Arc<Transcript>) -> Result
 }
 
 /// A cue's start time as a reader expects it, from the SRT form `HH:MM:SS,mmm`: `0:03`,
-/// `12:45` or `1:02:03`. The milliseconds stay in the SRT file and the cue picker.
+/// `12:45` or `1:02:03`. The rows, the cue picker and search show this; the precise time stays in
+/// the SRT file.
 fn short_time(srt: &str) -> String {
     let clock = srt.split_once(',').map_or(srt, |(clock, _)| clock);
     let mut parts = clock

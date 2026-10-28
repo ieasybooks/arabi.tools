@@ -2004,12 +2004,14 @@ progress::-moz-progress-bar {
   text-align: match-parent;
 }
 
-.copy-cue {
+/* A small labelled button: the icon and a short Copy, named in full for screen readers. */
+.button.compact.copy-cue {
   align-self: flex-start;
+  min-block-size: 2rem;
   margin-inline-start: auto;
   margin-block-start: 0.25rem;
-  inline-size: 2rem;
-  block-size: 2rem;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.8125rem;
 }
 
 .transcript-result.timestamps-hidden .cue-time {
