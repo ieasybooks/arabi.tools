@@ -216,7 +216,9 @@
       const element = await adapter.show(match.segment);
       if (disposed || current !== generation || request !== navigation) return;
       refresh();
-      // Reveal the exact hit in the nearest scrolling viewer, never the page.
+      // Reveal the exact hit in the nearest scrolling viewer. Only where the viewer has no scroll
+      // region of its own (as on phones) does the page scroll, as little as it takes, below the
+      // toolbar that stays in view while searching.
       const range = rangeFor(element, match.start, match.end);
       if (!range) return;
       const box = range.getBoundingClientRect();
@@ -224,8 +226,12 @@
         if (!/auto|scroll/.test(getComputedStyle(region).overflowY)) continue;
         const area = region.getBoundingClientRect();
         if (box.top < area.top || box.bottom > area.bottom) region.scrollTop += box.top - area.top - 12;
-        break;
+        return;
       }
+      const bar = toolbar.closest(".result-toolbar") ?? toolbar;
+      const top = getComputedStyle(bar).position === "sticky" ? Math.max(0, bar.getBoundingClientRect().bottom) : 0;
+      if (box.top < top) window.scrollBy(0, box.top - top - 12);
+      else if (box.bottom > window.innerHeight) window.scrollBy(0, box.bottom - window.innerHeight + 12);
     }
 
     function move(step) {

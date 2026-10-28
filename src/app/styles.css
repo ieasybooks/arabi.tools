@@ -1031,13 +1031,14 @@ progress::-moz-progress-bar {
 
 }
 
-/* Hidden from sight, still read by screen readers. */
+/* Hidden from sight, still read by screen readers. Positioned out of the flow, it needs no
+   negative margin, which would push it a pixel past an end-aligned container. */
 .visually-hidden {
   position: absolute;
   width: 1px;
   height: 1px;
   padding: 0;
-  margin: -1px;
+  margin: 0;
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
@@ -1686,7 +1687,7 @@ progress::-moz-progress-bar {
   width: 1px;
   height: 1px;
   padding: 0;
-  margin: -1px;
+  margin: 0;
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
@@ -2364,7 +2365,7 @@ progress::-moz-progress-bar {
   width: 1px;
   height: 1px;
   padding: 0;
-  margin: -1px;
+  margin: 0;
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
@@ -2629,8 +2630,15 @@ progress::-moz-progress-bar {
     font-size: 0.8125rem;
   }
 
+  /* The page scrolls the transcript, which stays one focusable, named list. */
+  .cues {
+    max-block-size: none;
+    overflow-y: visible;
+  }
+
   .cue-text {
-    font-size: 1.1875rem;
+    font-size: 1.0625rem;
+    line-height: 1.85;
   }
 
   .search-options,
@@ -2638,5 +2646,27 @@ progress::-moz-progress-bar {
     justify-content: flex-start;
     column-gap: 1rem;
     padding-inline: 0.5rem;
+  }
+
+  /* While searching, the toolbar stays at the top of the screen over the result it searches, so
+     the steps stay at hand as the page scrolls from match to match. It keeps one size either way,
+     so starting a search moves nothing; its background and the line under it reach across the
+     card's padding as shadows, which take no room. */
+  .result-toolbar {
+    margin-block: -0.5rem;
+    padding-block: 0.5rem;
+  }
+
+  .result-toolbar:has([data-search-open], [data-search-query]:not(:placeholder-shown)) {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 3;
+    background: var(--surface);
+    box-shadow:
+      -1.25rem 0 var(--surface),
+      1.25rem 0 var(--surface),
+      0 1px var(--line-soft),
+      -1.25rem 1px var(--line-soft),
+      1.25rem 1px var(--line-soft);
   }
 }

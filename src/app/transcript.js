@@ -40,7 +40,15 @@
     on(root.querySelector("[data-copy-all]"), "click", () => {
       void copy(copyOverride ?? texts.map((text) => `${text}\n`).join(""));
     });
-    on(select, "change", () => show(select.selectedIndex));
+    on(select, "change", () => {
+      show(select.selectedIndex);
+      // Phones: the page scrolls the transcript, so the chosen cue comes to the top of the screen,
+      // under the toolbar while a search keeps it there.
+      if (/auto|scroll/.test(getComputedStyle(region).overflowY)) return;
+      const bar = root.querySelector(".result-toolbar");
+      const top = bar && getComputedStyle(bar).position === "sticky" ? Math.max(0, bar.getBoundingClientRect().bottom) : 0;
+      window.scrollBy(0, cues[select.selectedIndex].getBoundingClientRect().top - top - 12);
+    });
     on(root.querySelector("[data-show-timestamps]"), "change", (event) => {
       root.classList.toggle("timestamps-hidden", !event.target.checked);
     });

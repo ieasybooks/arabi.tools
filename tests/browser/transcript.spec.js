@@ -108,6 +108,9 @@ for (const locale of ["ar", "en"]) {
       await expect(page.locator(".cues")).toBeFocused();
       expect(await page.locator(".cues").evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe("none");
       if (width === 320) {
+        // Phones: the page scrolls the transcript, which stays one focusable, named list.
+        expect(await page.locator(".cues").evaluate((element) => [getComputedStyle(element).overflowY, element.getAttribute("aria-label")]))
+          .toEqual(["visible", locale === "ar" ? "النص" : "Transcript"]);
         await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
         for (const selector of ['[data-result="transcript"]', '.cues']) {
           const size = await page.locator(selector).evaluate((element) => [element.scrollWidth, element.clientWidth]);
