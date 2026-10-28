@@ -202,6 +202,7 @@ svg {
   display: inline-flex;
   align-items: center;
   gap: 0.625rem;
+  min-inline-size: 0;
   color: var(--text);
   text-decoration: none;
 }
@@ -222,7 +223,9 @@ svg {
 }
 
 .brand .brand-name {
+  min-inline-size: 0;
   font-size: 1.1875rem;
+  overflow-wrap: anywhere;
 }
 
 /* Thmanyah has one weight, and Arabic reads larger at it. */
@@ -894,12 +897,16 @@ progress::-moz-progress-bar {
 
 /* Under the workspace's bar, which names the file, the header is only its actions, at the end of
    the row under the bar, close above the toolbar. */
-.result-heading:not(:has(> .result-name)) {
+[data-workspace]:has(> .upload[data-collapsed]) .result-heading {
   display: flex;
   justify-content: flex-end;
   margin-block-end: -0.5rem;
   padding-block-end: 0;
   border-block-end: 0;
+}
+
+[data-workspace]:has(> .upload[data-collapsed]) .result-name {
+  display: none;
 }
 
 .result-name {
@@ -2601,7 +2608,7 @@ progress::-moz-progress-bar {
     inline-size: 100%;
   }
 
-  .result-heading:not(:has(> .result-name)) > .result-actions {
+  [data-workspace]:has(> .upload[data-collapsed]) .result-heading > .result-actions {
     flex: 1;
   }
 

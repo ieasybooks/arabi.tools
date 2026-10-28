@@ -266,7 +266,7 @@
         const pdf = extension === 'pdf' && String.fromCharCode(...bytes.subarray(0, 5)) === '%PDF-';
         const png = extension === 'png' && bytes.join(',') === '137,80,78,71,13,10,26,10';
         const jpeg = ['jpg', 'jpeg'].includes(extension) && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
-        if (!pdf && !png && !jpeg) { previewFailure(root.dataset.wrongFile.replace('{name}', `\u2068${file.name}\u2069`)); return; }
+        if (!pdf && !png && !jpeg) { previewFailure(root.dataset.wrongFile.replace('{name}', () => `\u2068${file.name}\u2069`)); return; }
         let count = 1;
         if (pdf) {
           const library = await import(root.dataset.pdfModule);

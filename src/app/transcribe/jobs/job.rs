@@ -221,12 +221,7 @@ async fn job_status(
                 </p>
             }
             if let Some(transcript) = transcript {
-                result(
-                    locale: locale,
-                    id: id,
-                    transcript: transcript,
-                    embedded: embedded
-                )
+                result(locale: locale, id: id, transcript: transcript)
             } else if !embedded {
                 // The job's own page has no input to carry the line before a result.
                 crate::workspace::privacy_note(text: locale.privacy_note())
@@ -250,15 +245,13 @@ async fn job_status(
 }
 
 /// A finished job's header, its toolbar (reading controls, then search) and transcript, with the
-/// page's privacy line at its foot. In the workspace (`embedded`), the input bar above names the
-/// file, so the header holds only the actions.
+/// page's privacy line at its foot. A matching folded input bar takes over the name visually.
 #[component]
 async fn result(
     cx: &Cx,
     locale: Locale,
     id: JobId,
     transcript: Arc<Transcript>,
-    embedded: bool,
 ) -> Result<impl View> {
     let text = &locale.text().transcription;
     let review = &locale.text().review;
@@ -292,7 +285,7 @@ async fn result(
         >
             result_controls::result_header(
                 locale: locale,
-                name: (!embedded).then(|| transcript.name.clone()),
+                name: transcript.name.clone(),
                 copy: Some(CopyAll::Transcript),
                 downloads: downloads
             )

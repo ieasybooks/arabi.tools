@@ -128,7 +128,7 @@ for (const tool of ['transcribe', 'ocr']) {
     // header keeps only Copy and Download, as the bar already names the file.
     expect(await page.evaluate(() => Math.round(document.querySelector('.workspace-review').getBoundingClientRect().top
       - document.querySelector('#upload-form').getBoundingClientRect().bottom))).toBe(0);
-    await expect(page.locator('.workspace-result .result-name')).toHaveCount(0);
+    await expect(page.locator('.workspace-result .result-name')).toBeHidden();
     await expect(page.locator('.workspace-result .result-actions')).toBeVisible();
     // The privacy line moves to the foot of the result; the header has no retention line.
     await expect(inputNote).toBeHidden();

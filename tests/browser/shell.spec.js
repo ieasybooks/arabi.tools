@@ -38,6 +38,15 @@ for (const locale of locales) {
         await expect(email).toHaveText(locale.email);
         await expect(email).not.toHaveAttribute("aria-label", /./);
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+        if (width === 320) {
+          await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+          // Enlarging text must keep the whole brand link and its wordmark inside the viewport.
+          for (const selector of [".brand", ".brand .brand-name"]) {
+            const box = await page.locator(selector).boundingBox();
+            expect(box.x).toBeGreaterThanOrEqual(0);
+            expect(box.x + box.width).toBeLessThanOrEqual(width);
+          }
+        }
       });
     }
   }

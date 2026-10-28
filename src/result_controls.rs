@@ -51,23 +51,21 @@ pub async fn menu(
     })
 }
 
-/// A result's header: its name, then its actions. Beside the workspace's input bar, which already
-/// names the file, it has no name, only the actions at its end.
+/// A result's header: its name, then its actions. The workspace hides the name only while the
+/// matching input bar is folded into this result; changing or removing that input reveals it.
 #[component]
 pub async fn result_header(
     locale: Locale,
-    name: Option<String>,
+    name: String,
     copy: Option<CopyAll>,
     downloads: Vec<DownloadLink>,
 ) -> Result<impl View> {
     Ok(view! {
         <div class="result-heading">
-            if let Some(name) = name {
-                <p class="result-name">
-                    icon(data: icons::DOCUMENT, size: 20)
-                    <span dir="auto">(name)</span>
-                </p>
-            }
+            <p class="result-name">
+                icon(data: icons::DOCUMENT, size: 20)
+                <span dir="auto">(name)</span>
+            </p>
             result_actions(
                 locale: locale,
                 copy: copy,

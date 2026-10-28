@@ -42,7 +42,7 @@
     const file = input.files[0];
     if (!file) return form.dataset.missing;
     if (input.files.length !== 1) return form.dataset.wrongType;
-    if (!form.dataset.extensions.split(',').includes(extensionOf(file.name))) return form.dataset.wrongFile.replace('{name}', `\u2068${file.name}\u2069`);
+    if (!form.dataset.extensions.split(',').includes(extensionOf(file.name))) return form.dataset.wrongFile.replace('{name}', () => `\u2068${file.name}\u2069`);
     if (file.size > Number(form.dataset.maxBytes)) return form.dataset.tooLarge;
     return null;
   };
