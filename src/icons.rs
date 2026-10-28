@@ -59,11 +59,6 @@ pub const INFO: IconData = IconData::unescaped_unchecked(
     ViewBox::new(0.0, 0.0, 20.0, 20.0),
     r#"<g fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z" clip-rule="evenodd"/></g>"#,
 );
-/// A completed step.
-pub const CHECK: IconData = IconData::unescaped_unchecked(
-    ViewBox::new(0.0, 0.0, 16.0, 16.0),
-    r#"<g fill="currentColor"><path fill-rule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clip-rule="evenodd"/></g>"#,
-);
 /// A download.
 pub const DOWNLOAD: IconData = IconData::unescaped_unchecked(
     ViewBox::new(0.0, 0.0, 16.0, 16.0),

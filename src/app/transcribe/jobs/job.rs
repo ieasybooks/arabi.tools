@@ -174,11 +174,6 @@ async fn job_status(
         Status::Done(_) => ("done", Some(icons::DONE)),
         Status::Failed | Status::Cancelled(_) => ("failed", Some(icons::FAILED)),
     };
-    let step = if state == "done" {
-        transcribe::Step::Download
-    } else {
-        transcribe::Step::Transcribe
-    };
     let percent = match status {
         Status::Running { percent, .. } => Some(percent),
         _ => None,
@@ -199,7 +194,6 @@ async fn job_status(
                 .unwrap_or_default()
                 .as_millis())
         >
-            transcribe::steps(locale: locale, current: step, failed: state == "failed")
             <div class="job-heading">
                 if let Some(state_icon) = state_icon {
                     <span class="job-icon">icon(data: state_icon, size: 20)</span>

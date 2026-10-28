@@ -2,8 +2,6 @@
 
 mod jobs;
 
-use std::cmp::Ordering;
-
 use serde_json::json;
 use topcoat::{
     Result,
@@ -42,7 +40,6 @@ pub async fn page(cx: &Cx) -> Result<impl View> {
                     match transcription.queue.availability(client_ip(cx)) {
                         Err(rejection) => {
                             <div class="workspace-card">
-                                steps(locale: locale, current: Step::Upload, failed: false)
                                 <div class="notice">
                                     icon(data: icons::WARNING, size: 20)
                                     <div class="notice-body">
@@ -103,9 +100,6 @@ async fn upload_form(cx: &Cx, locale: Locale) -> Result<impl View> {
                 data-kilobytes=(workspace.kilobytes)
                 data-megabytes=(workspace.megabytes)
             >
-                <div class="card-steps">
-                    steps(locale: locale, current: Step::Upload, failed: false)
-                </div>
                 <div class="dropzone">
                     <input
                         id="audio"
@@ -221,49 +215,5 @@ pub(crate) async fn tool_hero(locale: Locale, lead: bool) -> Result<impl View> {
                 }
             </div>
         </section>
-    })
-}
-
-/// A step of a transcription, as shown above the form and the job's status.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum Step {
-    Upload,
-    Transcribe,
-    Download,
-}
-
-/// The three steps of a transcription, with `current` marked, and failed if `failed`.
-#[component]
-pub(crate) async fn steps(locale: Locale, current: Step, failed: bool) -> Result<impl View> {
-    let text = &locale.text().transcription;
-    let all = [
-        (Step::Upload, text.step_upload),
-        (Step::Transcribe, text.step_transcribe),
-        (Step::Download, text.step_download),
-    ];
-    Ok(view! {
-        <ol class="steps" role="list" aria-label=(text.steps_label)>
-            for (number, (step, label)) in (1..).zip(all) {
-                <li
-                    class="step"
-                    data-state=(match step.cmp(&current) {
-                        Ordering::Less => "done",
-                        Ordering::Equal if failed => "failed",
-                        Ordering::Equal => "current",
-                        Ordering::Greater => "upcoming",
-                    })
-                    aria-current=((step == current).then_some("step"))
-                >
-                    <span class="step-marker">
-                        if step < current {
-                            icon(data: icons::CHECK, size: 16)
-                        } else {
-                            (number.to_string())
-                        }
-                    </span>
-                    <span class="step-label">(label)</span>
-                </li>
-            }
-        </ol>
     })
 }

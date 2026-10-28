@@ -171,15 +171,6 @@ async fn job_status(
             data-job-id=(id.to_string())
             data-phase=(phase)
         >
-            diacritize::steps(
-                locale: locale,
-                current: if state == "done" {
-                    diacritize::Step::Download
-                } else {
-                    diacritize::Step::Diacritize
-                },
-                failed: state == "failed"
-            )
             <div class="job-heading">
                 if let Some(state_icon) = state_icon {
                     <span class="job-icon">icon(data: state_icon, size: 20)</span>
