@@ -35,7 +35,7 @@ pub async fn page(cx: &Cx) -> Result<impl View> {
     Ok(view! {
         tool_hero(locale: locale, lead: true)
         <section class="workspace">
-            <div class="container workspace-layout workspace-wide">
+            <div class="container workspace-layout">
                 <div class="workspace-entry">
                     match transcription.queue.availability(client_ip(cx)) {
                         Err(rejection) => {

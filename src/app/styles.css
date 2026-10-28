@@ -419,6 +419,7 @@ svg {
 .job {
   display: flex;
   flex-direction: column;
+  min-inline-size: 0;
   padding: 2rem;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -1144,10 +1145,10 @@ progress::-moz-progress-bar {
   outline: none;
 }
 
-/* Workspace: forms and reading keep the 48rem column; only paired panels use the wide one.
-   Everything is centred on the same axis as the title. */
+/* Workspace: one width per page, centred on the page axis. Transcription keeps the reading
+   column; OCR and diacritization use the wide one for the title, input, notes and result. */
 
-.workspace-wide {
+.container-wide {
   max-width: calc(var(--wide) + 4rem);
 }
 
@@ -1157,20 +1158,6 @@ progress::-moz-progress-bar {
   flex-direction: column;
   gap: 1.5rem;
   min-width: 0;
-}
-
-.workspace-card,
-.workspace-input,
-.job,
-:is([data-workspace="transcript"], [data-workspace="ocr"]) > .workspace-note,
-[data-workspace="transcript"] .workspace-review {
-  inline-size: 100%;
-  max-inline-size: var(--container);
-  margin-inline: auto;
-}
-
-.job:has(.ocr-review) {
-  max-inline-size: none;
 }
 
 .workspace-card,
@@ -1741,10 +1728,6 @@ progress::-moz-progress-bar {
 }
 
 /* OCR: the source and its text side by side, each under a header with its own controls. */
-
-.job:has(> .ocr-review) {
-  min-inline-size: 0;
-}
 
 .ocr-review {
   min-inline-size: 0;

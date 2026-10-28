@@ -35,7 +35,7 @@ pub async fn page(cx: &Cx) -> Result<impl View> {
     Ok(view! {
         tool_hero(locale: locale, lead: true)
         <section class="workspace">
-            <div class="container workspace-layout workspace-wide">
+            <div class="container container-wide workspace-layout">
                 <div class="workspace-entry">
                     if !ocr.is_available() {
                         <div class="workspace-card">

@@ -52,7 +52,7 @@ pub(super) async fn page(cx: &Cx) -> Result<impl View> {
         <script src=(transcribe::REVIEW_SCRIPT) defer=(true)></script>
         transcribe::tool_hero(locale: locale, lead: false)
         <section class="workspace">
-            <div class="container workspace-layout workspace-wide">
+            <div class="container workspace-layout">
                 if exists {
                     (live! {
                         let mut watch = app_context::<Transcription>(cx)
