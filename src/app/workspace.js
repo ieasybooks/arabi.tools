@@ -106,6 +106,18 @@
         bridge.dispatchEvent(new Event('input', { bubbles: true }));
       }
     };
+    // When a result arrives, the progress line and the previous-result line above it fold away.
+    // If they are all above the visitor's view, scroll by the space they took, so what the visitor
+    // is reading does not move. A browser that anchors scrolling has then nothing left to correct.
+    const holdReadingPosition = () => {
+      const lines = [previous, root.querySelector('.upload-progress')].filter(line => line?.getClientRects().length);
+      const above = lines.every(line => line.getBoundingClientRect().bottom <= 0);
+      const top = output.getBoundingClientRect().top;
+      return () => {
+        const moved = output.getBoundingClientRect().top - top;
+        if (above && Math.abs(moved) >= 1) window.scrollBy(0, moved);
+      };
+    };
     const release = (id) => {
       if (id && app.sources.delete(id)) document.dispatchEvent(new CustomEvent('arabi:source', { detail: { jobId: id } }));
     };
@@ -117,6 +129,7 @@
       if (retry) retry.hidden = true;
       const phase = update.dataset.phase;
       const result = update.querySelector('[data-result]');
+      const hold = result && holdReadingPosition();
       if (result) {
         if (resultId !== jobId) release(resultId);
         resultId = jobId;
@@ -132,6 +145,7 @@
         sync(); // End the shard subscription without remounting the finished result.
       }
       changed(phase, update.querySelector('.status')?.textContent || '', result, update);
+      if (hold) hold();
     };
     const mutations = new MutationObserver(read);
     mutations.observe(observer, { childList: true, subtree: true, attributes: true, characterData: true });

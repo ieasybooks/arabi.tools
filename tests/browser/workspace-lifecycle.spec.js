@@ -139,9 +139,16 @@ for (const tool of ['transcribe', 'ocr']) {
       window.scrollTo(0, document.querySelector('.workspace-result').getBoundingClientRect().top + window.scrollY + 40);
     });
     expect(await form.evaluate(node => node.getBoundingClientRect().top)).toBeLessThan(0);
+    // The progress line and the previous-result line above fold away when the next result
+    // arrives; what the visitor is reading stays where it is.
+    await expect(page.locator('.previous-result')).toBeVisible();
+    const output = page.locator('.workspace-result');
+    const before = await output.evaluate(node => node.getBoundingClientRect().top);
     reservation.release();
     await expect(page.locator('[data-workspace]')).toHaveAttribute('data-phase', 'completed');
     await expect(page.locator('.workspace-result [data-result]')).toBeVisible();
+    await expect(page.locator('.previous-result')).toBeHidden();
+    expect(Math.abs(await output.evaluate(node => node.getBoundingClientRect().top) - before)).toBeLessThanOrEqual(1);
     await expect(form).not.toHaveAttribute('data-collapsed');
     await expect(submit).toHaveClass(/\bprimary\b/);
     await page.evaluate(() => window.scrollTo(0, 0));
