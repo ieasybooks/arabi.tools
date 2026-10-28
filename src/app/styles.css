@@ -1404,6 +1404,11 @@ progress::-moz-progress-bar {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 
+  /* Leave the same space as the source label and its gap before the empty output. */
+  [data-workspace="diacritization"] .result-placeholder {
+    margin-block-start: calc(0.875rem * 1.6 + 0.5rem);
+  }
+
   [data-workspace="diacritization"] .workspace-review {
     padding-block-start: calc(var(--dz-band) + 0.75rem);
     border-block-start: 0;
