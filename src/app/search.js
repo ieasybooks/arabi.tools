@@ -282,6 +282,22 @@
       count.textContent = toolbar.dataset.unavailable;
     } else {
       const on = (element, type, listener) => element.addEventListener(type, listener, { signal: events.signal });
+      // The matching options show while the user searches: from focusing the find bar until
+      // focus or a press lands elsewhere. CSS keeps them shown while a query is present.
+      // Presses count because Safari does not focus a checkbox it toggles; they close the
+      // options only after their click, so nothing moves under the pointer.
+      let pressedOutside = false;
+      const close = () => { delete toolbar.dataset.searchOpen; };
+      on(toolbar, "focusin", () => { toolbar.dataset.searchOpen = ""; });
+      on(document, "focusin", (event) => {
+        if (!pressedOutside && !toolbar.contains(event.target)) close();
+      });
+      on(document, "pointerdown", (event) => { pressedOutside = !toolbar.contains(event.target); });
+      on(document, "pointerup", () => {
+        if (pressedOutside) setTimeout(close);
+        pressedOutside = false;
+      });
+      on(document, "pointercancel", () => { pressedOutside = false; });
       on(field, "input", () => void search());
       on(marks, "change", () => void search());
       on(tatweel, "change", () => void search());

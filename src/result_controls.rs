@@ -29,30 +29,20 @@ pub async fn search_toolbar(locale: Locale) -> Result<impl View> {
             data-unavailable=(text.search_unavailable)
             hidden=(true)
         >
-            <div class="search-bar">
-                <div class="search-field">
-                    icon(data: icons::SEARCH, size: 16)
-                    <input
-                        type="search"
-                        data-search-query=(true)
-                        dir="auto"
-                        autocomplete="off"
-                        spellcheck="false"
-                        aria-label=(text.search)
-                        placeholder=(text.search)
-                    >
-                    <button
-                        type="button"
-                        class="icon-button"
-                        data-search-clear=(true)
-                        aria-label=(text.clear_search)
-                        title=(text.clear_search)
-                    >
-                        icon(data: icons::CLEAR, size: 16)
-                    </button>
-                </div>
-                <span class="search-count" data-search-count=(true)></span>
-                <div class="search-steps">
+            // A find bar: the count, the two steps and Clear sit inside the field, at its end.
+            <div class="search-field">
+                icon(data: icons::SEARCH, size: 16)
+                <input
+                    type="search"
+                    data-search-query=(true)
+                    dir="auto"
+                    autocomplete="off"
+                    spellcheck="false"
+                    aria-label=(text.search)
+                    placeholder=(text.search)
+                >
+                <span class="search-tools">
+                    <span class="search-count" data-search-count=(true)></span>
                     <button
                         type="button"
                         class="icon-button"
@@ -73,8 +63,18 @@ pub async fn search_toolbar(locale: Locale) -> Result<impl View> {
                     >
                         icon(data: icons::DOWN, size: 16)
                     </button>
-                </div>
+                    <button
+                        type="button"
+                        class="icon-button"
+                        data-search-clear=(true)
+                        aria-label=(text.clear_search)
+                        title=(text.clear_search)
+                    >
+                        icon(data: icons::CLEAR, size: 16)
+                    </button>
+                </span>
             </div>
+            // Shown only while searching, with the active match's cue or page at the end.
             <div class="search-options">
                 <label>
                     <input type="checkbox" data-search-marks=(true) checked=(true)>
