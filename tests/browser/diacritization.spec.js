@@ -133,7 +133,7 @@ for (const locale of [
       expect(output).toMatch(/[\u064b-\u0652]/u);
       await expect(page.getByLabel(locale.original, { exact: true })).toHaveValue(source);
       await expect(page.getByRole("radio", { name: model, exact: true })).toBeChecked();
-      if (model === "شكِّلها") {
+      if (model !== "CATT") {
         // One container: input and output side by side, the same height, split by one line; the
         // output has no grip, its text starts level with the input's, and a slim header row above
         // it, level with the tabs, holds the model and the two actions on one line. Only the
@@ -214,13 +214,13 @@ for (const locale of [
     const input = page.getByLabel(locale.original, { exact: true });
     expect(await input.getAttribute("maxlength")).toBeNull();
     await input.fill("🙂".repeat(1001));
-    await expect(page.locator("#text-count")).toContainText("1001 / 1000");
+    await expect(page.locator("#text-count")).toContainText(locale.code === "ar" ? "1001 من 1000" : "1001 / 1000");
     await expect(page.getByRole("alert")).toHaveText(locale.limit);
     await page.getByRole("button", { name: locale.submit, exact: true }).click();
     await expect(page).toHaveURL(/\/diacritize$/);
     const boundary = `${"🙂".repeat(999)}ا`;
     await input.fill(boundary);
-    await expect(page.locator("#text-count")).toContainText("1000 / 1000");
+    await expect(page.locator("#text-count")).toContainText(locale.code === "ar" ? "1000 من 1000" : "1000 / 1000");
     await expect(page.getByRole("alert")).toBeHidden();
     await page.getByRole("button", { name: locale.submit, exact: true }).click();
     await expect(page.locator(".workspace-recovery")).toHaveAttribute("href", /\/diacritize\/jobs\/[a-f0-9]{32}$/);

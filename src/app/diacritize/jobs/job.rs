@@ -249,12 +249,11 @@ async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> 
                 result_controls::result_actions(
                     locale: locale,
                     copy: copy,
-                    downloads: downloads,
-                    quiet: true
+                    downloads: downloads
                 )
             </div>
             if let Some(text_result) = document.text.as_ref() {
-                <label class="visually-hidden" for="diacritized-text">
+                <label class="reading-label" for="diacritized-text">
                     (text.result_label)
                 </label>
                 <textarea

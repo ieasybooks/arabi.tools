@@ -70,7 +70,7 @@
       if (cancelledFocus && cancel.hidden) buttons.find(button => !button.hidden)?.focus({ preventScroll: true });
     }
     // Each number is isolated left to right inside a line in the page's direction, so Arabic
-    // reads "65 / 1000" from the right as English does from the left.
+    // reads the current count before the limit, as English does from the left.
     const number = value => {
       const isolate = document.createElement('bdi');
       isolate.dir = 'ltr';

@@ -1063,7 +1063,7 @@ progress::-moz-progress-bar {
 .diacritize-box {
   --dz-pad: 1.5rem;
   --dz-band: 3rem;
-  --dz-field: 19rem;
+  --dz-field: 11rem;
   --dz-tint: rgb(74 52 30 / 0.035);
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -1152,7 +1152,7 @@ progress::-moz-progress-bar {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.5rem;
   min-width: 0;
   min-block-size: calc(var(--dz-field) + 1.5rem);
 }
@@ -1184,7 +1184,7 @@ progress::-moz-progress-bar {
   background: transparent;
   color: var(--text);
   font-family: var(--font-transcript);
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   line-height: 2.1;
   resize: none;
   text-align: start;
@@ -1322,12 +1322,19 @@ progress::-moz-progress-bar {
 [data-workspace="diacritization"] .result-placeholder {
   padding-block: 0.75rem;
   color: var(--faint);
-  font-family: var(--font-transcript);
-  font-size: 1.5rem;
-  line-height: 2.1;
+  font-size: 1rem;
 }
 
-.diacritize-result {
+.reading-label,
+.ocr-panel-title {
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+.result.diacritize-result {
   flex: 1 1 auto;
   gap: 0.5rem;
 }
@@ -1364,7 +1371,7 @@ progress::-moz-progress-bar {
 .diacritize-result .diacritize-text {
   flex: 1 1 0;
   block-size: auto;
-  min-block-size: 12rem;
+  min-block-size: var(--dz-field);
 }
 
 /* A document result names its file where the text would appear. */
@@ -1444,10 +1451,6 @@ progress::-moz-progress-bar {
   }
 
   .diacritize-text {
-    font-size: 1.375rem;
-  }
-
-  [data-workspace="diacritization"] .result-placeholder {
     font-size: 1.375rem;
   }
 
@@ -1532,6 +1535,18 @@ progress::-moz-progress-bar {
 
 /* Workspace: the page's one width, centred on the page axis, for the title, input, notes and
    result of every tool. */
+
+.workspace-entry,
+[data-workspace],
+.job {
+  --radius: 0.75rem;
+  --radius-control: 0.5rem;
+  --shadow: none;
+}
+
+:is(.workspace-entry, [data-workspace], .job) .button {
+  border-radius: var(--radius-control);
+}
 
 .workspace-entry,
 [data-workspace] {
@@ -1744,7 +1759,7 @@ progress::-moz-progress-bar {
   grid-area: name;
 }
 
-/* Copy all text, a quiet button, then Download, the result's one filled button. They keep one
+/* Copy and Download use the same quiet style across tools. They keep one
    line beside the name on wide screens. */
 .result-actions {
   display: flex;
@@ -1927,7 +1942,7 @@ progress::-moz-progress-bar {
   overflow-wrap: anywhere;
 }
 
-/* A pill on one line; very large text wraps the tools onto a second line inside it. */
+/* A compact find field; very large text wraps the tools onto a second line inside it. */
 .search-field {
   display: flex;
   flex-wrap: wrap;
@@ -1938,7 +1953,7 @@ progress::-moz-progress-bar {
   min-block-size: 2.5rem;
   padding-inline: 0.875rem 0.25rem;
   border: 1px solid var(--line);
-  border-radius: 1.25rem;
+  border-radius: var(--radius-control);
   background: var(--paper);
 }
 
@@ -2395,7 +2410,7 @@ progress::-moz-progress-bar {
   font: inherit;
 }
 
-/* Tinted, not outlined: the result's only filled button is Download. */
+/* A quiet local file action, separate from the tool's processing action. */
 .ocr-source-picker input::file-selector-button {
   min-block-size: 2.5rem;
   max-inline-size: 100%;
@@ -2436,6 +2451,8 @@ progress::-moz-progress-bar {
   min-inline-size: 0;
   min-block-size: 0;
   padding: 0.5rem 1rem 1.25rem;
+  border-radius: 0.375rem;
+  background: var(--well);
   direction: ltr;
   overflow: auto;
 }
@@ -2461,7 +2478,7 @@ progress::-moz-progress-bar {
 
 .ocr-page-text {
   font-family: var(--font-transcript);
-  font-size: 1.3125rem;
+  font-size: 1.125rem;
   line-height: 2;
   white-space: pre-wrap;
   unicode-bidi: plaintext;
@@ -2526,6 +2543,11 @@ progress::-moz-progress-bar {
 
   .ocr-view-choice {
     display: inline-flex;
+  }
+
+  /* The view switch already names the single visible pane. */
+  .ocr-panel-title {
+    display: none;
   }
 
   /* One column: the search first and full width, then the view switch and the page navigator,

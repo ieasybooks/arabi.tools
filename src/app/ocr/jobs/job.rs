@@ -334,7 +334,7 @@ async fn text_panel(locale: Locale, document: Arc<Document>) -> Result<impl View
     let review = &text.review;
     Ok(view! {
         <section class="ocr-text-panel">
-            <h2 class="visually-hidden">(review.text_title)</h2>
+            <h2 class="ocr-panel-title">(review.text_title)</h2>
             <div
                 class="ocr-text-viewport"
                 data-ocr-text-viewport=""
@@ -443,7 +443,8 @@ async fn page_controls(locale: Locale, id: JobId, pages: usize) -> Result<impl V
                     />
                 </label>
                 <span class="ocr-page-total" aria-hidden="true">
-                    "/ "
+                    (review.page_of)
+                    " "
                     <bdi dir="ltr">(pages.to_string())</bdi>
                 </span>
             </span>
@@ -478,7 +479,7 @@ async fn zoom_controls(locale: Locale) -> Result<impl View> {
                 class: "menu-start zoom-menu",
                 button: "button ghost compact",
                 label: view! {
-                    <span class="visually-hidden">(review.zoom_label)</span>
+                    <span>(review.zoom_label)</span>
                     <bdi data-ocr-zoom-value="" dir="ltr"></bdi>
                 },
                 <li>
@@ -513,7 +514,7 @@ async fn source_panel(locale: Locale, id: JobId) -> Result<impl View> {
     let review = &locale.text().ocr.review;
     Ok(view! {
         <section class="ocr-source-panel">
-            <h2 class="visually-hidden">(review.source_title)</h2>
+            <h2 class="ocr-panel-title">(review.source_title)</h2>
             <p class="ocr-source-status" data-ocr-source-status="" aria-live="polite">
                 (review.source_missing)
             </p>

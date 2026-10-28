@@ -120,7 +120,7 @@ for (const locale of ['ar', 'en']) {
     await screenshot(page, `${locale}-desktop-ocr-result`);
     // One toolbar over both columns: the page tools (the navigator and one zoom button) and the
     // search share its row, the search is named for what it searches, and the page and its text
-    // start level, the page on no frame. Both copy scopes sit in the header's Copy menu.
+    // start level above the document canvas. Both copy scopes sit in the header's Copy menu.
     const layout = await root.evaluate((node) => {
       const box = (selector) => node.querySelector(selector).getBoundingClientRect();
       return {

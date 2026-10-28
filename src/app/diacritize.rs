@@ -274,7 +274,7 @@ async fn text_input(locale: Locale, source: String) -> Result<impl View> {
     let count = source.chars().count();
     let marked = has_marks(&source);
     // The count runs in the page's direction with each number isolated left to right, so Arabic
-    // reads "65 / 1000" from the right as English does from the left. The script keeps this shape.
+    // reads the current count before the limit. The script keeps this shape.
     let (before, rest) = text
         .character_count
         .split_once("{count}")
@@ -282,7 +282,7 @@ async fn text_input(locale: Locale, source: String) -> Result<impl View> {
     let (between, after) = rest.split_once("{max}").unwrap_or_default();
     Ok(view! {
         <div id="diacritize-text-panel" class="diacritize-panel">
-            <label class="visually-hidden" for="source-text">(text.source_label)</label>
+            <label class="reading-label" for="source-text">(text.source_label)</label>
             <textarea
                 id="source-text"
                 class="diacritize-text"

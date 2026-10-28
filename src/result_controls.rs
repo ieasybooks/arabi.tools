@@ -66,35 +66,25 @@ pub async fn result_header(
                 icon(data: icons::DOCUMENT, size: 20)
                 <span dir="auto">(name)</span>
             </p>
-            result_actions(
-                locale: locale,
-                copy: copy,
-                downloads: downloads,
-                quiet: false
-            )
+            result_actions(locale: locale, copy: copy, downloads: downloads)
         </div>
     })
 }
 
 /// A result's two whole-result actions: Copy all text, a quiet button, when the result has text,
 /// then Download. Several downloads open a small menu that lists each by its full label; a single
-/// download is a plain link named by its full label. Download is the result's one filled button
-/// unless `quiet`, where the page's own action is the only filled one. An OCR result copies all its
+/// download is a plain link named by its full label. Both actions use the same quiet style across
+/// tools, leaving the processing action as the primary one. An OCR result copies all its
 /// text or the page in view, so its Copy opens a menu of the two.
 #[component]
 pub async fn result_actions(
     locale: Locale,
     copy: Option<CopyAll>,
     mut downloads: Vec<DownloadLink>,
-    quiet: bool,
 ) -> Result<impl View> {
     let text = &locale.text().review;
     let ocr = &locale.text().ocr.review;
-    let download_class = if quiet {
-        "button ghost compact"
-    } else {
-        "button primary compact"
-    };
+    let download_class = "button ghost compact";
     let single = (downloads.len() == 1).then(|| downloads.remove(0));
     Ok(view! {
         <div class="result-actions">
