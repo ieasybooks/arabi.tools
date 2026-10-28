@@ -81,15 +81,16 @@ pub(crate) async fn note(text: String, privacy: bool) -> Result<impl View> {
     })
 }
 
-/// Shown beside a job's progress: the job's own page, and a jump to its finished result.
+/// Shown under a job's progress: the job's own page while it runs, and a jump to its finished
+/// result that appears on keyboard focus, like a skip link.
 #[component]
 pub(crate) async fn progress_links(locale: crate::i18n::Locale) -> Result<impl View> {
     let text = &locale.text().workspace;
     Ok(view! {
         <p class="progress-links">
-            <button type="button" class="link-button view-result" hidden=(true)>
+            <a class="view-result" href="#workspace-result" hidden=(true)>
                 (text.view_result)
-            </button>
+            </a>
             <a class="workspace-recovery" hidden=(true)>(text.recovery)</a>
         </p>
     })
@@ -117,7 +118,12 @@ pub(crate) async fn review(
                 </button>
             </div>
             <p class="previous-result" hidden=(true)></p>
-            <div class="workspace-result" tabindex="-1" aria-label=(text.result)></div>
+            <div
+                id="workspace-result"
+                class="workspace-result"
+                tabindex="-1"
+                aria-label=(text.result)
+            ></div>
             if let Some(placeholder) = placeholder {
                 <p class="result-placeholder">(placeholder)</p>
             }

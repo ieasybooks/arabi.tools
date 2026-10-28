@@ -133,7 +133,8 @@
         sync();
       }, 0);
     }, { signal: lifetime.signal });
-    view?.addEventListener('click', () => {
+    view?.addEventListener('click', event => {
+      event.preventDefault(); // Keep the page's URL; the result takes the focus instead.
       output.scrollIntoView({ block: 'nearest', behavior: 'instant' });
       output.focus({ preventScroll: true });
     }, { signal: lifetime.signal });
@@ -146,6 +147,7 @@
       reserve: recover,
       begin() {
         if (jobId !== resultId) release(jobId);
+        if (back) back.hidden = true; // Until the next job has a link of its own.
         jobId = null;
         desired = '';
         ended = false;

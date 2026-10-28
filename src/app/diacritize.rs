@@ -222,6 +222,7 @@ async fn input_form(
             <div class="upload-progress" hidden=(true)>
                 <progress max="100" value="0" aria-label=(text.uploading)></progress>
                 <p id="job-status" class="submission-status" role="status"></p>
+                <p class="submission-percent" dir="ltr"></p>
                 <button type="button" class="button secondary compact cancel-upload">
                     (text.cancel)
                 </button>

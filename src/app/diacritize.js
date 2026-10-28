@@ -17,6 +17,7 @@
     const progress = form.querySelector('.upload-progress');
     const bar = progress.querySelector('progress');
     const status = progress.querySelector('.submission-status');
+    const percentLabel = progress.querySelector('.submission-percent');
     const cancel = progress.querySelector('.cancel-upload');
     const lifetime = new AbortController();
     const attemptKey = 'diacritize:attempt';
@@ -63,6 +64,7 @@
       bar.hidden = !['uploading', 'validating', 'queued', 'processing', 'reserving', 'observing'].includes(phase);
       bar.setAttribute('aria-label', message || form.dataset.observing);
       if (percent === undefined) bar.removeAttribute('value'); else bar.value = percent;
+      percentLabel.textContent = percent === undefined ? '' : new Intl.NumberFormat(document.documentElement.lang, { style: 'percent' }).format(percent / 100);
       const cancelledFocus = document.activeElement === cancel;
       cancel.hidden = !locked() || (!state.job?.cancel && phase !== 'reserving' && phase !== 'cancelling' && phase !== 'cancel-unconfirmed');
       cancel.setAttribute('aria-disabled', String(phase === 'cancelling'));
