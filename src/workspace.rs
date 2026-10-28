@@ -4,6 +4,7 @@ use topcoat::{
     Result,
     asset::{Asset, asset},
     context::Cx,
+    icon::icon,
     router::{
         header::{CACHE_CONTROL, HeaderValue},
         response::response_headers,
@@ -45,6 +46,25 @@ pub(crate) async fn file_actions(locale: crate::i18n::Locale) -> Result<impl Vie
                 (text.remove_file)
             </button>
         </div>
+    })
+}
+
+/// One muted line beside a card: a privacy note, with its lock, or advice about the result.
+#[component]
+pub(crate) async fn note(text: String, privacy: bool) -> Result<impl View> {
+    Ok(view! {
+        <p
+            class=(if privacy {
+                "workspace-note privacy-note"
+            } else {
+                "workspace-note result-note"
+            })
+        >
+            if privacy {
+                icon(data: crate::icons::LOCK, size: 16)
+            }
+            <span>(text)</span>
+        </p>
     })
 }
 

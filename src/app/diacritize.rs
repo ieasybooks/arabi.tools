@@ -61,7 +61,6 @@ pub async fn page(cx: &Cx) -> Result<impl View> {
                         }
                     }
                 </div>
-                before_you_start(locale: locale)
             </div>
         </section>
         <script src=(COPY_SCRIPT) defer=(true)></script>
@@ -154,6 +153,7 @@ pub(super) async fn editor(
                 document_mode: document_mode,
                 source_needed: restore_source || document_mode
             )
+            crate::workspace::note(text: locale.diacritization_privacy(), privacy: true)
             crate::workspace::bridge(job: job.clone())
             <div class="workspace-observer" hidden=(initial.is_none())>
                 jobs::job::observe(job: $(job.get()))
@@ -161,6 +161,10 @@ pub(super) async fn editor(
             crate::workspace::review(
                 locale: locale,
                 placeholder: Some(locale.text().diacritization.result_placeholder)
+            )
+            crate::workspace::note(
+                text: locale.text().diacritization.replaces_marks.to_owned(),
+                privacy: false
             )
         </div>
         <noscript>
@@ -365,30 +369,6 @@ async fn input_choices(cx: &Cx, locale: Locale, model: Model) -> Result<impl Vie
                 </label>
             </div>
         </fieldset>
-    })
-}
-
-#[component]
-async fn before_you_start(locale: Locale) -> Result<impl View> {
-    let text = &locale.text().diacritization;
-    Ok(view! {
-        <aside class="workspace-aside">
-            <h2 class="aside-title">(text.before_you_start)</h2>
-            <ul class="notes" role="list">
-                <li>
-                    icon(data: icons::INFO, size: 20)
-                    <p>(text.replaces_marks)</p>
-                </li>
-                <li>
-                    icon(data: icons::TRANSCRIPT, size: 20)
-                    <p>(text.same_format)</p>
-                </li>
-                <li>
-                    icon(data: icons::LOCK, size: 20)
-                    <p>(locale.diacritization_privacy())</p>
-                </li>
-            </ul>
-        </aside>
     })
 }
 

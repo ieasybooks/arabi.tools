@@ -64,7 +64,6 @@ pub async fn page(cx: &Cx) -> Result<impl View> {
                         }
                     }
                 </div>
-                before_you_start(locale: locale)
             </div>
         </section>
         <script src=(crate::workspace::SCRIPT) defer=(true)></script>
@@ -138,6 +137,7 @@ async fn upload_form(cx: &Cx, locale: Locale) -> Result<impl View> {
                 <p id="upload-error" class="error" role="alert" hidden=(true)></p>
                 <a class="return-to-job" hidden=(true)>(text.back_to_job)</a>
             </form>
+            crate::workspace::note(text: text.privacy.to_owned(), privacy: true)
             crate::workspace::bridge(job: job.clone())
             <div class="workspace-observer" hidden=(true)>
                 jobs::job::observe(job: $(job.get()))
@@ -182,26 +182,6 @@ pub(crate) fn meta(cx: &Cx, locale: Locale, origin: &str) -> Option<PageMeta> {
     } else {
         None
     }
-}
-
-/// Notes under the form: automatic language detection and when files are deleted.
-#[component]
-async fn before_you_start(locale: Locale) -> Result<impl View> {
-    Ok(view! {
-        <aside class="workspace-aside">
-            <h2 class="aside-title">(locale.text().ocr.before_you_start)</h2>
-            <ul class="notes" role="list">
-                <li>
-                    icon(data: icons::INFO, size: 20)
-                    <p>(locale.text().ocr.auto_language)</p>
-                </li>
-                <li>
-                    icon(data: icons::LOCK, size: 20)
-                    <p>(locale.text().ocr.privacy)</p>
-                </li>
-            </ul>
-        </aside>
-    })
 }
 
 /// The tool's title, with a link back to the list of tools and, on the upload page, its

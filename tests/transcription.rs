@@ -454,7 +454,7 @@ async fn refuses_uploads_only_past_the_size_limit() -> anyhow::Result<()> {
         (
             MAX_UPLOAD_BYTES + 1,
             format!(
-                "حجم الملف أكبر من {} ميغابايت.",
+                "حجم الملف أكبر من {} ميغابايت. صدّره بصيغة MP3 بمعدل 64 كيلوبت في الثانية وبقناة واحدة (Mono)، فيبقى الكلام واضحًا ويتسع الحد لتسجيل يصل إلى 3 ساعات.",
                 MAX_UPLOAD_BYTES / 1_000_000
             ),
         ),

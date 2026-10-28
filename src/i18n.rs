@@ -109,7 +109,7 @@ impl Locale {
             AudioProblem::Missing => text.missing.to_owned(),
             AudioProblem::WrongType => text.wrong_type.to_owned(),
             AudioProblem::Unreadable => text.unreadable.to_owned(),
-            AudioProblem::TooLarge => self.too_large(),
+            AudioProblem::TooLarge => self.audio_too_large(),
             AudioProblem::TooLong => match self {
                 Self::Ar => format!("مدة التسجيل أطول من {} ساعات.", max_hours()),
                 Self::En => format!("The recording is longer than {} hours.", max_hours()),
@@ -140,14 +140,17 @@ impl Locale {
         }
     }
 
-    pub fn compression_tip(self) -> String {
+    /// The size-limit message for a recording, with how to make one fit.
+    pub fn audio_too_large(self) -> String {
         match self {
             Self::Ar => format!(
-                "ملفك أكبر من الحد؟ صدّره بصيغة MP3 بمعدل 64 كيلوبت في الثانية وبقناة واحدة (Mono). يبقى الكلام واضحًا، ويتسع التسجيل حتى {} ساعات.",
+                "{} صدّره بصيغة MP3 بمعدل 64 كيلوبت في الثانية وبقناة واحدة (Mono)، فيبقى الكلام واضحًا ويتسع الحد لتسجيل يصل إلى {} ساعات.",
+                self.too_large(),
                 max_hours()
             ),
             Self::En => format!(
-                "File too big? Re-export it as MP3 at 64 kbps, mono. Speech stays clear, and up to {} hours fits.",
+                "{} Re-export it as MP3 at 64 kbps, mono: speech stays clear, and up to {} hours fits.",
+                self.too_large(),
                 max_hours()
             ),
         }
@@ -207,11 +210,11 @@ impl Locale {
     pub fn ocr_limits(self) -> String {
         match self {
             Self::Ar => format!(
-                "ملف PDF أو JPG أو PNG واحد، حتى {} ميغابايت و{MAX_PAGES} صفحة.",
+                "ملف PDF أو JPG أو PNG واحد، حتى {} ميغابايت و{MAX_PAGES} صفحة. نتعرّف على اللغة تلقائيًا.",
                 max_megabytes()
             ),
             Self::En => format!(
-                "One PDF, JPG or PNG, up to {} MB and {MAX_PAGES} pages.",
+                "One PDF, JPG or PNG, up to {} MB and {MAX_PAGES} pages. The language is detected automatically.",
                 max_megabytes()
             ),
         }
@@ -296,10 +299,13 @@ impl Locale {
     pub fn diacritization_limits(self) -> String {
         match self {
             Self::Ar => format!(
-                "ملف TXT بترميز UTF-8 أو DOCX واحد، حتى {} ميغابايت.",
+                "ملف TXT بترميز UTF-8 أو DOCX واحد، حتى {} ميغابايت. يحتفظ الملف المشكول بصيغته الأصلية. ملفات DOC غير مدعومة، وقد تحتاج مستندات Word الكبيرة أو المعقدة إلى التقسيم.",
                 max_megabytes()
             ),
-            Self::En => format!("One UTF-8 TXT or DOCX file, up to {} MB.", max_megabytes()),
+            Self::En => format!(
+                "One UTF-8 TXT or DOCX file, up to {} MB. The diacritized file keeps its format. DOC files are not supported, and large or complex Word documents may need to be split.",
+                max_megabytes()
+            ),
         }
     }
 
@@ -449,7 +455,6 @@ pub struct TranscriptionText {
     pub name: &'static str,
     pub description: &'static str,
     pub all_tools: &'static str,
-    pub before_you_start: &'static str,
     pub transcript_title: &'static str,
     pub file_label: &'static str,
     pub choose_file: &'static str,
@@ -487,7 +492,6 @@ pub struct OcrText {
     pub input_formats: &'static str,
     pub output_formats: &'static str,
     pub all_tools: &'static str,
-    pub before_you_start: &'static str,
     pub preview_title: &'static str,
     pub file_label: &'static str,
     pub choose_file: &'static str,
@@ -518,7 +522,6 @@ pub struct OcrText {
     pub unreadable: &'static str,
     pub unavailable: &'static str,
     pub privacy: &'static str,
-    pub auto_language: &'static str,
     pub kept_for: &'static str,
 }
 
@@ -562,9 +565,7 @@ pub struct DiacritizationText {
     pub input_formats: &'static str,
     pub output_formats: &'static str,
     pub all_tools: &'static str,
-    pub before_you_start: &'static str,
     pub replaces_marks: &'static str,
-    pub same_format: &'static str,
     pub input_mode: &'static str,
     pub text_mode: &'static str,
     pub document_mode: &'static str,
@@ -700,9 +701,7 @@ static AR: Text = Text {
         input_formats: "نص · TXT · DOCX",
         output_formats: "نص مشكول · TXT · DOCX",
         all_tools: "كل الأدوات",
-        before_you_start: "قبل أن تبدأ",
         replaces_marks: "تُستبدل الحركات الشائعة الموجودة في النص بتشكيل جديد. راجع النتيجة قبل استخدامها.",
-        same_format: "نزّل المستند المشكول بنفس صيغة الملف الأصلي: TXT أو DOCX. ملفات DOC غير مدعومة. قد تحتاج مستندات Word الكبيرة أو المعقدة إلى التقسيم قبل معالجتها.",
         input_mode: "طريقة الإدخال",
         text_mode: "نص",
         document_mode: "مستند",
@@ -761,7 +760,6 @@ static AR: Text = Text {
         name: "تفريغ الصوت",
         description: "حوّل تسجيلات MP3 وM4A إلى نص مكتوب وملف ترجمة SRT.",
         all_tools: "كل الأدوات",
-        before_you_start: "قبل أن تبدأ",
         transcript_title: "النص",
         file_label: "الملف الصوتي",
         choose_file: "اختر ملفًا صوتيًا، أو اسحبه وأفلته هنا",
@@ -826,7 +824,6 @@ static AR: Text = Text {
         input_formats: "PDF · JPG · PNG",
         output_formats: "TXT · DOCX · JSON",
         all_tools: "كل الأدوات",
-        before_you_start: "قبل أن تبدأ",
         preview_title: "النص صفحةً صفحة",
         file_label: "ملف PDF أو صورة",
         choose_file: "اختر ملف PDF أو صورة، أو اسحبه وأفلته هنا",
@@ -857,7 +854,6 @@ static AR: Text = Text {
         unreadable: "لم نتمكن من قراءة الملف. تأكد من سلامته وأنه غير محمي بكلمة مرور.",
         unavailable: "أداة استخراج النص غير متاحة مؤقتًا. حاول مرة أخرى لاحقًا.",
         privacy: "نرسل الصفحات إلى Google Drive لاستخراج النص ونحذفها منه فورًا بعد ذلك. نحذف ملفك عند انتهاء المهمة، والنتائج بعد 30 دقيقة.",
-        auto_language: "نتعرّف على لغة النص تلقائيًا. لا تحتاج إلى اختيار لغة.",
         kept_for: "تبقى النتائج متاحة لمدة 30 دقيقة.",
     },
 };
@@ -944,9 +940,7 @@ static EN: Text = Text {
         input_formats: "Text · TXT · DOCX",
         output_formats: "Diacritized text · TXT · DOCX",
         all_tools: "All tools",
-        before_you_start: "Before you start",
         replaces_marks: "Existing common diacritics are replaced with new ones. Review the result before using it.",
-        same_format: "Download the diacritized document in its original format: TXT or DOCX. DOC files are not supported. Large or complex Word documents may need to be split before processing.",
         input_mode: "Input method",
         text_mode: "Text",
         document_mode: "Document",
@@ -1005,7 +999,6 @@ static EN: Text = Text {
         name: "Audio transcription",
         description: "Turn MP3 and M4A recordings into text and SRT subtitles.",
         all_tools: "All tools",
-        before_you_start: "Before you start",
         transcript_title: "Transcript",
         file_label: "Audio file",
         choose_file: "Choose an audio file, or drop it here",
@@ -1070,7 +1063,6 @@ static EN: Text = Text {
         input_formats: "PDF · JPG · PNG",
         output_formats: "TXT · DOCX · JSON",
         all_tools: "All tools",
-        before_you_start: "Before you start",
         preview_title: "Text by page",
         file_label: "PDF or image file",
         choose_file: "Choose a PDF or image, or drop it here",
@@ -1101,7 +1093,6 @@ static EN: Text = Text {
         unreadable: "We could not read this file. Check that it is valid and is not password protected.",
         unavailable: "Text recognition is temporarily unavailable. Please try again later.",
         privacy: "Pages are sent to Google Drive for OCR and deleted right afterward. We delete your upload when the job ends and results after 30 minutes.",
-        auto_language: "The text language is detected automatically. You do not need to choose a language.",
         kept_for: "Results stay available for 30 minutes.",
     },
 };

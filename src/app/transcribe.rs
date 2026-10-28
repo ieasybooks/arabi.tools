@@ -58,7 +58,6 @@ pub async fn page(cx: &Cx) -> Result<impl View> {
                         }
                     }
                 </div>
-                before_you_start(locale: locale)
             </div>
         </section>
         <script src=(crate::workspace::SCRIPT) defer=(true)></script>
@@ -89,7 +88,7 @@ async fn upload_form(cx: &Cx, locale: Locale) -> Result<impl View> {
                 data-max-bytes=(MAX_UPLOAD_BYTES)
                 data-missing=(text.missing)
                 data-wrong-type=(text.wrong_type)
-                data-too-large=(locale.too_large())
+                data-too-large=(locale.audio_too_large())
                 data-failed=(text.upload_failed)
                 data-no-file=(text.no_file)
                 data-uploading=(text.uploading)
@@ -132,6 +131,7 @@ async fn upload_form(cx: &Cx, locale: Locale) -> Result<impl View> {
                 <p id="upload-error" class="error" role="alert" hidden=(true)></p>
                 <a class="return-to-job" hidden=(true)>(text.back_to_job)</a>
             </form>
+            crate::workspace::note(text: locale.privacy_note(), privacy: true)
             crate::workspace::bridge(job: job.clone())
             <div class="workspace-observer" hidden=(true)>
                 jobs::job::observe(job: $(job.get()))
@@ -176,26 +176,6 @@ pub(crate) fn meta(cx: &Cx, locale: Locale, origin: &str) -> Option<PageMeta> {
     } else {
         None
     }
-}
-
-/// Notes under the form: how to fit a large recording, and when files are deleted.
-#[component]
-async fn before_you_start(locale: Locale) -> Result<impl View> {
-    Ok(view! {
-        <aside class="workspace-aside">
-            <h2 class="aside-title">(locale.text().transcription.before_you_start)</h2>
-            <ul class="notes" role="list">
-                <li>
-                    icon(data: icons::INFO, size: 20)
-                    <p>(locale.compression_tip())</p>
-                </li>
-                <li>
-                    icon(data: icons::LOCK, size: 20)
-                    <p>(locale.privacy_note())</p>
-                </li>
-            </ul>
-        </aside>
-    })
 }
 
 /// The tool's title, with a link back to the list of tools and, on the upload page, its
