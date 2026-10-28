@@ -10,7 +10,7 @@
     const models = [...form.querySelectorAll('[name=model]')];
     const modes = [...form.querySelectorAll('[name=input_mode]')];
     const buttons = [...form.querySelectorAll('[type=submit]')];
-    const documentButton = form.querySelector('#diacritize-document-panel [type=submit]');
+    const documentButton = form.querySelector('[type=submit][data-mode=document]');
     const unavailable = new Set(models.filter(input => input.disabled));
     const count = form.querySelector('#text-count');
     const error = form.querySelector('.error');
@@ -66,7 +66,7 @@
       const cancelledFocus = document.activeElement === cancel;
       cancel.hidden = !locked() || (!state.job?.cancel && phase !== 'reserving' && phase !== 'cancelling' && phase !== 'cancel-unconfirmed');
       cancel.setAttribute('aria-disabled', String(phase === 'cancelling'));
-      if (cancelledFocus && cancel.hidden) buttons.find(button => !button.closest('.diacritize-panel').hidden)?.focus({ preventScroll: true });
+      if (cancelledFocus && cancel.hidden) buttons.find(button => !button.hidden)?.focus({ preventScroll: true });
     }
     function updateCount() {
       const length = Array.from(source.value).length;
@@ -85,6 +85,8 @@
       const documentMode = form.elements.input_mode.value === 'document';
       form.querySelector('#diacritize-text-panel').hidden = documentMode;
       form.querySelector('#diacritize-document-panel').hidden = !documentMode;
+      // One run button per mode shares the panel's foot.
+      for (const button of buttons) button.hidden = (button.dataset.mode === 'document') !== documentMode;
       clearError();
       if (!documentMode) updateCount();
     }

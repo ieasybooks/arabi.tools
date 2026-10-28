@@ -107,7 +107,8 @@ pub(crate) fn meta(cx: &Cx, locale: Locale, origin: &str) -> Option<PageMeta> {
     }
 }
 
-/// One model choice serves both modes; a completed text job retains its original input.
+/// One container holds the input and the output side by side, as in a translation tool. One model
+/// choice serves both modes; a completed text job retains its original input.
 #[component]
 pub(super) async fn editor(
     cx: &Cx,
@@ -149,23 +150,25 @@ pub(super) async fn editor(
             data-previous=(locale.text().workspace.previous_result)
             data-previous-model=(locale.text().workspace.previous_model)
         >
-            input_form(
-                locale: locale,
-                source: source,
-                model: model,
-                retry: initial.is_some(),
-                document_mode: document_mode,
-                source_needed: restore_source || document_mode
-            )
+            <div class="diacritize-box">
+                input_form(
+                    locale: locale,
+                    source: source,
+                    model: model,
+                    retry: initial.is_some(),
+                    document_mode: document_mode,
+                    source_needed: restore_source || document_mode
+                )
+                crate::workspace::review(
+                    locale: locale,
+                    placeholder: Some(locale.text().diacritization.result_placeholder)
+                )
+            </div>
             crate::workspace::privacy_note(text: locale.diacritization_privacy())
             crate::workspace::bridge(job: job.clone())
             <div class="workspace-observer" hidden=(initial.is_none())>
                 jobs::job::observe(job: $(job.get()))
             </div>
-            crate::workspace::review(
-                locale: locale,
-                placeholder: Some(locale.text().diacritization.result_placeholder)
-            )
         </div>
         <noscript>
             <p class="notice">(locale.text().diacritization.needs_javascript)</p>
@@ -216,9 +219,39 @@ async fn input_form(
             data-cancelled=(locale.text().cancelled_user)
             data-cancel-failed=(text.cancel_failed)
         >
-            input_choices(locale: locale, model: model)
+            mode_tabs(locale: locale)
             text_input(locale: locale, source: source)
             document_input(locale: locale)
+            <p id="diacritize-error" class="error" role="alert" hidden=(true)></p>
+            <a class="return-to-job" hidden=(true)>(text.back_to_job)</a>
+            if source_needed {
+                <p class="hint source-needed">
+                    (locale.text().workspace.source_needed)
+                </p>
+            }
+            // The panel's foot: the model, then the run button for the chosen mode.
+            <div class="diacritize-foot">
+                model_choice(locale: locale, model: model)
+                <div class="form-actions">
+                    <button
+                        type="submit"
+                        class="button primary"
+                        data-mode="text"
+                        disabled=(true)
+                    >
+                        (text.submit_text)
+                    </button>
+                    <button
+                        type="submit"
+                        class="button primary"
+                        data-mode="document"
+                        disabled=(true)
+                        hidden=(true)
+                    >
+                        (text.submit_document)
+                    </button>
+                </div>
+            </div>
             <div class="upload-progress" hidden=(true)>
                 <progress max="100" value="0" aria-label=(text.uploading)></progress>
                 <p id="job-status" class="submission-status" role="status"></p>
@@ -228,34 +261,18 @@ async fn input_form(
                 </button>
                 crate::workspace::progress_links(locale: locale)
             </div>
-            <p id="diacritize-error" class="error" role="alert" hidden=(true)></p>
-            <a class="return-to-job" hidden=(true)>(text.back_to_job)</a>
-            if source_needed {
-                <p class="hint source-needed">
-                    (locale.text().workspace.source_needed)
-                </p>
-            }
         </form>
     })
 }
 
+/// The text: a borderless field under the tabs, its character count small at its foot.
 #[component]
 async fn text_input(locale: Locale, source: String) -> Result<impl View> {
     let text = &locale.text().diacritization;
     let count = source.chars().count();
     Ok(view! {
         <div id="diacritize-text-panel" class="diacritize-panel">
-            <div class="diacritize-field-heading">
-                <label for="source-text">(text.source_label)</label>
-                <p
-                    id="text-count"
-                    class="diacritize-count"
-                    aria-label=(locale.diacritization_count(count))
-                >
-                    <bdi dir="ltr">(format!("{count} / {MAX_TEXT_CHARACTERS}"))</bdi>
-                    (text.character_count.split("{max}").last().unwrap_or_default())
-                </p>
-            </div>
+            <label class="visually-hidden" for="source-text">(text.source_label)</label>
             <textarea
                 id="source-text"
                 class="diacritize-text"
@@ -268,14 +285,17 @@ async fn text_input(locale: Locale, source: String) -> Result<impl View> {
                 "\n"
                 (source)
             </textarea>
+            <p
+                id="text-count"
+                class="diacritize-count"
+                aria-label=(locale.diacritization_count(count))
+            >
+                <bdi dir="ltr">(format!("{count} / {MAX_TEXT_CHARACTERS}"))</bdi>
+                (text.character_count.split("{max}").last().unwrap_or_default())
+            </p>
             <p id="text-limit" class="visually-hidden">
                 (locale.diacritization_text_limit())
             </p>
-            <div class="form-actions">
-                <button type="submit" class="button primary" disabled=(true)>
-                    (text.submit_text)
-                </button>
-            </div>
         </div>
     })
 }
@@ -299,77 +319,79 @@ async fn document_input(locale: Locale) -> Result<impl View> {
                 <p class="dropzone-hint">(locale.diacritization_limits())</p>
                 crate::workspace::file_row(locale: locale, kinds: KINDS)
             </div>
-            <div class="form-actions">
-                <button type="submit" class="button primary" disabled=(true)>
-                    (text.submit_document)
-                </button>
-            </div>
         </div>
     })
 }
 
+/// What to diacritize: plain underline tabs across the top of the input panel.
 #[component]
-async fn input_choices(cx: &Cx, locale: Locale, model: Model) -> Result<impl View> {
+async fn mode_tabs(locale: Locale) -> Result<impl View> {
+    let text = &locale.text().diacritization;
+    Ok(view! {
+        <fieldset class="diacritize-top diacritize-modes">
+            <legend class="visually-hidden">(text.input_mode)</legend>
+            <div class="diacritize-choices">
+                <label>
+                    <input
+                        type="radio"
+                        name="input_mode"
+                        value="text"
+                        checked=(true)
+                        aria-controls="diacritize-text-panel"
+                    >
+                    <span>(text.text_mode)</span>
+                </label>
+                <label>
+                    <input
+                        type="radio"
+                        name="input_mode"
+                        value="document"
+                        aria-controls="diacritize-document-panel"
+                    >
+                    <span>(text.document_mode)</span>
+                </label>
+            </div>
+        </fieldset>
+    })
+}
+
+/// The model: a quiet group of native radios after a small label, under a note when one of the two
+/// is unavailable.
+#[component]
+async fn model_choice(cx: &Cx, locale: Locale, model: Model) -> Result<impl View> {
     let text = &locale.text().diacritization;
     let tool = app_context::<Diacritization>(cx);
     let shakkelha = tool.model_available(Model::Shakkelha);
     let catt = tool.model_available(Model::Catt);
     Ok(view! {
-        // One row: what to diacritize at the start, the model at the end.
-        <div class="diacritize-top">
-            <fieldset class="diacritize-modes">
-                <legend class="visually-hidden">(text.input_mode)</legend>
-                <div class="diacritize-choices">
-                    <label>
-                        <input
-                            type="radio"
-                            name="input_mode"
-                            value="text"
-                            checked=(true)
-                            aria-controls="diacritize-text-panel"
-                        >
-                        <span>(text.text_mode)</span>
-                    </label>
-                    <label>
-                        <input
-                            type="radio"
-                            name="input_mode"
-                            value="document"
-                            aria-controls="diacritize-document-panel"
-                        >
-                        <span>(text.document_mode)</span>
-                    </label>
-                </div>
-            </fieldset>
-            <fieldset class="diacritize-models">
-                <legend class="visually-hidden">(text.model)</legend>
-                <div class="diacritize-choices segmented">
-                    <label>
-                        <input
-                            type="radio"
-                            name="model"
-                            value="shakkelha"
-                            checked=(model == Model::Shakkelha)
-                            disabled=(!shakkelha)
-                        >
-                        <bdi lang="ar" dir="rtl">(text.shakkelha)</bdi>
-                    </label>
-                    <label>
-                        <input
-                            type="radio"
-                            name="model"
-                            value="catt"
-                            checked=(model == Model::Catt)
-                            disabled=(!catt)
-                        >
-                        <bdi lang="en" dir="ltr">(text.catt)</bdi>
-                    </label>
-                </div>
-            </fieldset>
-        </div>
         if !shakkelha || !catt {
             <p class="hint model-unavailable">(text.model_unavailable)</p>
         }
+        <fieldset class="diacritize-models">
+            <legend class="visually-hidden">(text.model)</legend>
+            // The legend names the group; this shows the same word in the row in every engine.
+            <span class="diacritize-models-label" aria-hidden="true">(text.model)</span>
+            <label>
+                <input
+                    type="radio"
+                    name="model"
+                    value="shakkelha"
+                    checked=(model == Model::Shakkelha)
+                    disabled=(!shakkelha)
+                >
+                <bdi lang="ar" dir="rtl">(text.shakkelha)</bdi>
+            </label>
+            <label>
+                <input
+                    type="radio"
+                    name="model"
+                    value="catt"
+                    checked=(model == Model::Catt)
+                    disabled=(!catt)
+                >
+                <bdi lang="en" dir="ltr">(text.catt)</bdi>
+            </label>
+        </fieldset>
     })
 }
 

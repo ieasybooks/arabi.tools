@@ -133,6 +133,29 @@ for (const locale of [
       expect(output).toMatch(/[\u064b-\u0652]/u);
       await expect(page.getByLabel(locale.original, { exact: true })).toHaveValue(source);
       await expect(page.getByRole("radio", { name: model, exact: true })).toBeChecked();
+      if (model === "شكِّلها") {
+        // One container: input and output side by side, the same height, split by one line; the
+        // output has no grip, its text starts level with the input's, and its foot holds the
+        // model and the two actions on one line.
+        const layout = await page.evaluate(() => {
+          const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+          const foot = [...document.querySelectorAll(".diacritize-output-foot > :not(.copy-status), .diacritize-output-foot .result-actions > *")]
+            .map((element) => Math.round(element.getBoundingClientRect().top + element.getBoundingClientRect().height / 2));
+          return {
+            input: box("#diacritize-form"), output: box(".workspace-review"), box: box(".diacritize-box"),
+            source: box("#source-text"), result: box("#diacritized-text"), foot,
+            resize: getComputedStyle(document.querySelector("#diacritized-text")).resize,
+            border: getComputedStyle(document.querySelector("#diacritized-text")).borderTopStyle,
+          };
+        });
+        expect(Math.round(layout.input.top)).toBe(Math.round(layout.output.top));
+        expect(Math.round(layout.input.height)).toBe(Math.round(layout.output.height));
+        expect(Math.round(layout.input.width + layout.output.width)).toBeGreaterThanOrEqual(Math.round(layout.box.width) - 2);
+        expect(Math.abs(layout.source.top - layout.result.top)).toBeLessThanOrEqual(1);
+        expect(layout.resize).toBe("none");
+        expect(layout.border).toBe("none");
+        expect(Math.max(...layout.foot) - Math.min(...layout.foot)).toBeLessThanOrEqual(4);
+      }
       await page.getByRole("button", { name: locale.copy, exact: true }).click();
       await expect(page.locator(".copy-status")).toHaveText(locale.copied);
       expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(output);
@@ -217,7 +240,8 @@ for (const locale of [
       await page.getByRole("button", { name: locale.upload, exact: true }).click();
       await expect(page.locator(".workspace-recovery")).toHaveAttribute("href", /\/diacritize\/jobs\/[a-f0-9]{32}$/);
       await expect(page.locator("#job-status")).toHaveText(locale.done, { timeout: 60_000 });
-      await expect(page.locator(".result-heading bdi")).toHaveText(model);
+      // The result is labelled with the model that produced it, at the output's foot.
+      await expect(page.locator(".diacritize-output-foot .diacritize-model bdi")).toHaveText(model);
       const result = await download(page, locale[extension], true);
       expect(result.name).toBe(`مستند.${extension}`);
       if (extension === "txt") {

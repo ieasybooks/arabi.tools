@@ -203,14 +203,11 @@ async fn job_status(
     })
 }
 
+/// The output panel's content: the diacritized text (or the document's name) where the text
+/// appears, then a foot with the model that produced it and the result's two actions.
 #[component]
 async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> Result<impl View> {
     let text = &locale.text().diacritization;
-    let name = if document.kind == DocumentKind::Text {
-        text.result_label.to_owned()
-    } else {
-        document.name.clone()
-    };
     let mut downloads = vec![DownloadLink {
         label: if document.kind == DocumentKind::Docx {
             text.download_docx
@@ -229,27 +226,17 @@ async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> 
         .text
         .is_some()
         .then_some(CopyAll::Field("diacritized-text"));
+    let model = locale.diacritization_model(document.model);
     Ok(view! {
         <div
             class="result diacritize-result"
             data-result="diacritization"
             data-job-id=(id.to_string())
-            data-model=(locale.diacritization_model(document.model))
+            data-model=(model)
             data-model-value=(document.model.as_str())
             data-source=(document.text.as_ref().map(|text| text.source.as_str()))
             data-mode=(if document.text.is_some() { "text" } else { "document" })
         >
-            result_controls::result_header(
-                locale: locale,
-                name: name,
-                copy: copy,
-                downloads: downloads,
-                <span class="visually-hidden">
-                    (text.model)
-                    ": "
-                </span>
-                <bdi dir="auto">(locale.diacritization_model(document.model))</bdi>
-            )
             if let Some(text_result) = document.text.as_ref() {
                 <label class="visually-hidden" for="diacritized-text">
                     (text.result_label)
@@ -265,9 +252,27 @@ async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> 
                     "\n"
                     (text_result.output.as_str())
                 </textarea>
+            } else {
+                <p class="diacritize-document">
+                    icon(data: icons::DOCUMENT, size: 20)
+                    <span dir="auto">(document.name.as_str())</span>
+                </p>
             }
-            result_controls::copy_feedback(locale: locale)
-            crate::workspace::privacy_note(text: locale.diacritization_privacy())
+            <div class="diacritize-output-foot">
+                <p class="diacritize-model">
+                    (text.model)
+                    ": "
+                    <bdi dir="auto">(model)</bdi>
+                </p>
+                if copy.is_some() {
+                    result_controls::copy_status(locale: locale)
+                }
+                result_controls::result_actions(
+                    locale: locale,
+                    copy: copy,
+                    downloads: downloads
+                )
+            </div>
         </div>
     })
 }

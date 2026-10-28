@@ -122,7 +122,7 @@ for (const tool of ['transcribe', 'ocr']) {
     // The privacy line moves to the foot of the result; the header has no retention line.
     await expect(inputNote).toBeHidden();
     await expect(resultNote).toBeVisible();
-    await expect(page.locator('.workspace-result .result-meta')).toBeHidden();
+    await expect(page.locator('.workspace-result .result-heading')).not.toContainText('30');
     // Another file unfolds the input with the filled run button.
     await input.setInputFiles({ ...file, name: `other-${file.name}` });
     await expect(form).not.toHaveAttribute('data-collapsed');
@@ -164,15 +164,19 @@ test('diacritization says what it replaces in the empty output and keeps one pri
   await page.setViewportSize({ width: 1280, height: 900 });
   await locale(page, 'diacritize', 'en');
   await expect(page.locator('.result-placeholder')).toHaveText('The diacritized text appears here, with new diacritics replacing any common ones in your text; review it before use.');
+  // The placeholder sits where the text will appear, level with the input's text.
+  expect(Math.abs(await page.locator('.result-placeholder').evaluate(node => node.getBoundingClientRect().top)
+    - await page.locator('#source-text').evaluate(node => node.getBoundingClientRect().top))).toBeLessThanOrEqual(1);
   await expect(page.locator('.privacy-note')).toHaveCount(1);
   await expect(page.locator('[data-workspace] > .privacy-note')).toBeVisible();
   await page.locator('#source-text').fill('اللغة العربية جميلة');
   await page.getByRole('button', { name: 'Diacritize text', exact: true }).click();
   await expect(page.locator('.workspace-result .result')).toBeVisible();
   await expect(page.locator('.result-placeholder')).toBeHidden();
-  await expect(page.locator('[data-workspace] > .privacy-note')).toBeHidden();
-  await expect(page.locator('.workspace-result .privacy-note')).toBeVisible();
-  await expect(page.locator('.workspace-result .result-meta')).not.toContainText('30');
+  // Input and output share one container, so its one privacy line stays under it.
+  await expect(page.locator('.privacy-note')).toHaveCount(1);
+  await expect(page.locator('[data-workspace] > .privacy-note')).toBeVisible();
+  await expect(page.locator('.workspace-result .result')).not.toContainText('30');
 });
 
 test('upload stages distinguish reservation, transfer and validation and prevent double submit', async ({ page }) => {

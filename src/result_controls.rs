@@ -4,7 +4,7 @@ use topcoat::{
     Result,
     asset::{Asset, asset},
     icon::icon,
-    view::{Child, View, component, view},
+    view::{View, component, view},
 };
 
 use crate::i18n::Locale;
@@ -31,95 +31,103 @@ pub enum CopyAll {
     Field(&'static str),
 }
 
-/// A result's header, the same on every tool: its name with one muted line under it (`child`),
-/// then Copy all text and Download. Several downloads open a small menu that lists each by its
-/// full label; a single download is a plain link named by its full label.
+/// A result's header on the transcript and OCR pages: its name, then its actions.
 #[component]
 pub async fn result_header(
     locale: Locale,
     name: String,
     copy: Option<CopyAll>,
+    downloads: Vec<DownloadLink>,
+) -> Result<impl View> {
+    Ok(view! {
+        <div class="result-heading">
+            <p class="result-name">
+                icon(data: icons::DOCUMENT, size: 20)
+                <span dir="auto">(name)</span>
+            </p>
+            result_actions(locale: locale, copy: copy, downloads: downloads)
+        </div>
+    })
+}
+
+/// A result's two whole-result actions: Copy all text, when the result has text, then Download.
+/// Several downloads open a small menu that lists each by its full label; a single download is a
+/// plain link named by its full label.
+#[component]
+pub async fn result_actions(
+    locale: Locale,
+    copy: Option<CopyAll>,
     mut downloads: Vec<DownloadLink>,
-    #[default] child: Child<'_>,
 ) -> Result<impl View> {
     let text = &locale.text().review;
     let single = (downloads.len() == 1).then(|| downloads.remove(0));
     Ok(view! {
-        <div class="result-heading">
-            <div class="result-title">
-                <p class="result-name">
-                    icon(data: icons::DOCUMENT, size: 20)
-                    <span dir="auto">(name)</span>
-                </p>
-                <p class="result-meta">(child)</p>
-            </div>
-            <div class="result-actions">
-                if let Some(copy) = copy {
-                    match copy {
-                        CopyAll::Transcript => {
-                            <button
-                                type="button"
-                                class="button secondary compact"
-                                data-copy-all=(true)
-                            >
-                                icon(data: icons::COPY, size: 16)
-                                <span>(text.copy_all)</span>
-                            </button>
-                        }
-                        CopyAll::Ocr => {
-                            <button
-                                type="button"
-                                class="button secondary compact"
-                                data-ocr-copy-all=""
-                            >
-                                icon(data: icons::COPY, size: 16)
-                                <span>(text.copy_all)</span>
-                            </button>
-                        }
-                        CopyAll::Field(field) => {
-                            <button
-                                type="button"
-                                class="button secondary compact"
-                                data-copy=(field)
-                            >
-                                icon(data: icons::COPY, size: 16)
-                                <span>(text.copy_all)</span>
-                            </button>
-                        }
+        <div class="result-actions">
+            if let Some(copy) = copy {
+                match copy {
+                    CopyAll::Transcript => {
+                        <button
+                            type="button"
+                            class="button secondary compact"
+                            data-copy-all=(true)
+                        >
+                            icon(data: icons::COPY, size: 16)
+                            <span>(text.copy_all)</span>
+                        </button>
+                    }
+                    CopyAll::Ocr => {
+                        <button
+                            type="button"
+                            class="button secondary compact"
+                            data-ocr-copy-all=""
+                        >
+                            icon(data: icons::COPY, size: 16)
+                            <span>(text.copy_all)</span>
+                        </button>
+                    }
+                    CopyAll::Field(field) => {
+                        <button
+                            type="button"
+                            class="button secondary compact"
+                            data-copy=(field)
+                        >
+                            icon(data: icons::COPY, size: 16)
+                            <span>(text.copy_all)</span>
+                        </button>
                     }
                 }
-                if let Some(link) = single {
-                    <a
-                        class="button primary compact"
-                        href=(link.href.as_str())
-                        download=(true)
-                        aria-label=(link.label)
-                        title=(link.label)
-                    >
+            }
+            if let Some(link) = single {
+                <a
+                    class="button primary compact"
+                    href=(link.href.as_str())
+                    download=(true)
+                    aria-label=(link.label)
+                    title=(link.label)
+                >
+                    icon(data: icons::DOWNLOAD, size: 16)
+                    <span>(text.download)</span>
+                </a>
+            } else {
+                <details class="download-menu" data-download-menu="">
+                    <summary class="button primary compact">
                         icon(data: icons::DOWNLOAD, size: 16)
                         <span>(text.download)</span>
-                    </a>
-                } else {
-                    <details class="download-menu" data-download-menu="">
-                        <summary class="button primary compact">
-                            icon(data: icons::DOWNLOAD, size: 16)
-                            <span>(text.download)</span>
-                            <span class="download-chevron">
-                                icon(data: icons::DOWN, size: 16)
-                            </span>
-                        </summary>
-                        <ul class="download-list" role="list">
-                            for link in &downloads {
-                                <li>
-                                    <a href=(link.href.as_str()) download=(true)>
-                                        (link.label)
-                                    </a>
-                                </li>
-                            }
-                        </ul>
-                    </details>
-                }
-            </div>
+                        <span class="download-chevron">
+                            icon(data: icons::DOWN, size: 16)
+                        </span>
+                    </summary>
+                    <ul class="download-list" role="list">
+                        for link in &downloads {
+                            <li>
+                                <a href=(link.href.as_str()) download=(true)>
+                                    (link.label)
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </details>
+            }
         </div>
     })
 }
@@ -207,8 +215,9 @@ pub async fn search_toolbar(locale: Locale) -> Result<impl View> {
     })
 }
 
+/// Says whether a copy worked. Results whose script offers its own fallback need only this.
 #[component]
-pub async fn copy_feedback(locale: Locale) -> Result<impl View> {
+pub async fn copy_status(locale: Locale) -> Result<impl View> {
     let text = &locale.text().review;
     Ok(view! {
         <p
@@ -219,6 +228,15 @@ pub async fn copy_feedback(locale: Locale) -> Result<impl View> {
             role="status"
             aria-atomic="true"
         ></p>
+    })
+}
+
+/// The copy status, then the place for the selectable panel offered when copying fails.
+#[component]
+pub async fn copy_feedback(locale: Locale) -> Result<impl View> {
+    let text = &locale.text().review;
+    Ok(view! {
+        copy_status(locale: locale)
         <div
             data-copy-fallback=(true)
             data-copy-label=(text.copy_label)

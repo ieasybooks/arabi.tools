@@ -823,15 +823,13 @@ progress::-moz-progress-bar {
   gap: 1rem;
 }
 
-/* The name and the two actions share the first row; the muted line runs under both. */
+/* The name and the two actions share one row. */
 .result-heading {
   display: grid;
-  grid-template-areas:
-    "name actions"
-    "meta meta";
+  grid-template-areas: "name actions";
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.125rem 1rem;
+  gap: 0.5rem 1rem;
   padding-block-end: 1rem;
   border-block-end: 1px solid var(--line-soft);
 }
@@ -980,38 +978,31 @@ progress::-moz-progress-bar {
   border: 0;
 }
 
-/* Diacritization: a top row (Text or Document, then the model), the field and its button;
-   the result pane beside it matches the field. */
+/* Diacritization: one container, as in a translation tool. The input panel (tabs across its top,
+   a borderless field with its count, then the model and the run button) and the output panel
+   (faintly tinted, the result where its text appears and the result's actions at its foot) sit
+   side by side, split by one line; narrow screens stack them with a line between. */
+
+.diacritize-box {
+  --dz-pad: 1.5rem;
+  --dz-band: 3rem;
+  --dz-field: 19rem;
+  --dz-tint: rgb(74 52 30 / 0.035);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
 
 .diacritize-form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
   min-width: 0;
-}
-
-/* Each mode's fields join the form's column, so a message sits between the field and its
-   button, as in the upload forms, and progress follows the button. */
-.diacritize-panel {
-  display: contents;
-}
-
-.diacritize-form > :is(.error, .return-to-job) {
-  order: 1;
-}
-
-.diacritize-panel > .form-actions {
-  order: 2;
-}
-
-.diacritize-form > :is(.upload-progress, .hint) {
-  order: 3;
-}
-
-.diacritize-form > .model-unavailable {
-  order: 0;
-  margin-block-start: -0.5rem;
-  font-size: 0.875rem;
+  padding: 0 var(--dz-pad) 1.25rem;
 }
 
 .diacritize-form fieldset {
@@ -1021,13 +1012,13 @@ progress::-moz-progress-bar {
   border: 0;
 }
 
-/* If the two cannot share a line, the model moves above, so the tabs stay on the line. */
+/* Text or Document: plain underline tabs on a line across the panel. */
 .diacritize-top {
   display: flex;
-  flex-wrap: wrap-reverse;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 1rem;
+  align-items: flex-end;
+  min-block-size: var(--dz-band);
+  margin-inline: calc(-1 * var(--dz-pad));
+  padding-inline: calc(var(--dz-pad) - 1rem);
   border-block-end: 1px solid var(--line);
 }
 
@@ -1036,43 +1027,37 @@ progress::-moz-progress-bar {
   flex-wrap: wrap;
 }
 
-.diacritize-choices label {
+.diacritize-modes label {
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: center;
-  min-width: 0;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-/* The radios stay real; their labels draw the choice. */
-.diacritize-choices input {
-  position: absolute;
-  opacity: 0;
-}
-
-.diacritize-choices label:has(input:focus-visible) {
-  outline: 2px solid var(--green);
-  outline-offset: 2px;
-}
-
-.diacritize-choices label:has(input:disabled) {
-  opacity: 0.5;
-  cursor: default;
-}
-
-/* Text or Document: tabs on the row's line. */
-.diacritize-modes label {
   min-block-size: 2.75rem;
   margin-block-end: -1px;
   padding: 0.375rem 1rem;
   border-block-end: 2px solid transparent;
   color: var(--muted);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* The radios stay real; their labels draw the tabs. */
+.diacritize-modes input {
+  position: absolute;
+  opacity: 0;
+}
+
+.diacritize-modes label:has(input:focus-visible) {
+  outline: 2px solid var(--green);
+  outline-offset: -2px;
 }
 
 .diacritize-modes label:hover {
   color: var(--text);
+}
+
+.diacritize-modes label:has(input:disabled) {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .diacritize-modes label:has(input:checked) {
@@ -1080,78 +1065,57 @@ progress::-moz-progress-bar {
   color: var(--green-strong);
 }
 
-/* The model: a compact two-option segmented control. */
-.diacritize-models {
-  margin-inline-start: auto;
-}
-
-.diacritize-models .diacritize-choices {
-  gap: 0.125rem;
-}
-
-.diacritize-models label {
-  min-block-size: 2rem;
-  padding: 0.125rem 0.875rem;
-  border-radius: 999px;
-  color: var(--muted);
-  font-size: 0.9375rem;
-}
-
-.diacritize-models label:hover {
-  color: var(--text);
-}
-
-.diacritize-models label:has(input:checked) {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: 0 1px 3px rgb(74 52 30 / 0.16);
-}
-
-.diacritize-field-heading {
+/* The field, or the drop zone, fills the panel above its foot; both modes keep one height, so
+   switching tabs moves nothing. */
+.diacritize-panel {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.375rem 1rem;
-}
-
-.diacritize-field-heading label {
-  font-weight: 500;
-}
-
-.diacritize-count {
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.diacritize-count[data-invalid="true"] {
-  color: var(--danger);
-}
-
-/* The source and the result: one size, large enough for the diacritics to read clearly. */
-.diacritize-text {
-  width: 100%;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.25rem;
   min-width: 0;
-  block-size: 17rem;
-  min-block-size: 10rem;
-  padding: 0.75rem 1.25rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  background: var(--paper);
+  min-block-size: calc(var(--dz-field) + 1.5rem);
+}
+
+.diacritize-panel > .dropzone {
+  flex: 1 1 auto;
+  justify-content: center;
+  margin-block-start: 0.75rem;
+}
+
+/* The chosen document is a plain row at the top of the panel, with no box of its own. */
+.diacritize-panel > .dropzone[data-selected="true"] {
+  flex: none;
+  padding-inline: 0 0.25rem;
+  border-color: transparent;
+  background: transparent;
+}
+
+/* The source and the result: one size, large enough for the diacritics to read clearly, with no
+   box of their own. */
+.diacritize-text {
+  inline-size: calc(100% + 1rem);
+  min-width: 0;
+  block-size: var(--dz-field);
+  margin-inline: -0.5rem;
+  padding: 0.75rem 0.5rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
   color: var(--text);
   font-family: var(--font-transcript);
   font-size: 1.5rem;
   line-height: 2.1;
-  resize: vertical;
+  resize: none;
   text-align: start;
 }
 
 .diacritize-text:focus-visible {
-  outline-offset: -1px;
+  outline-offset: -2px;
 }
 
 .diacritize-text[aria-invalid="true"] {
-  border-color: var(--danger);
+  outline: 2px solid var(--danger);
+  outline-offset: -2px;
 }
 
 .diacritize-text::placeholder {
@@ -1159,24 +1123,209 @@ progress::-moz-progress-bar {
   opacity: 1;
 }
 
-.diacritize-result .result-name span {
+.diacritize-count {
+  align-self: flex-end;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.diacritize-count[data-invalid="true"] {
+  color: var(--danger);
+}
+
+/* The panel's foot: the model at the start, the run button at the end. */
+.diacritize-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+.diacritize-foot > .model-unavailable {
+  flex-basis: 100%;
+  font-size: 0.875rem;
+}
+
+.diacritize-foot > .form-actions {
+  margin-inline-start: auto;
+}
+
+/* A small label, then the two names as native radios. */
+.diacritize-models {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 1rem;
+}
+
+.diacritize-models-label {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.diacritize-models label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-block-size: 2.25rem;
+  font-size: 0.9375rem;
+  cursor: pointer;
+}
+
+.diacritize-models input {
+  flex: none;
+  inline-size: 1rem;
+  block-size: 1rem;
+  margin: 0;
+  accent-color: var(--green);
+}
+
+.diacritize-models label:has(input:disabled) {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* The output panel: tinted, its text starting level with the input's under the tabs. While another
+   job runs, the space beside the tabs names the result below as the previous one. */
+[data-workspace="diacritization"] .workspace-review {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
   min-width: 0;
+  padding: 0 var(--dz-pad) 1.25rem;
+  border-block-start: 1px solid var(--line);
+  border-end-start-radius: calc(var(--radius) - 1px);
+  border-end-end-radius: calc(var(--radius) - 1px);
+  background: var(--dz-tint);
+}
+
+[data-workspace="diacritization"] .workspace-review > .observation-notice,
+[data-workspace="diacritization"] .workspace-review > .previous-result {
+  margin-block-start: 0.75rem;
+}
+
+[data-workspace="diacritization"] .workspace-result {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
+/* Until the first result, the placeholder takes its place. */
+[data-workspace="diacritization"] .workspace-result:not(:has(.result)) {
+  display: none;
+}
+
+.workspace-review:has(.workspace-result .result) .result-placeholder {
+  display: none;
+}
+
+[data-workspace="diacritization"] .result-placeholder {
+  padding-block: 0.75rem;
+  color: var(--faint);
+  font-family: var(--font-transcript);
+  font-size: 1.5rem;
+  line-height: 2.1;
+}
+
+.diacritize-result {
+  flex: 1 1 auto;
+  gap: 0.75rem;
+}
+
+.diacritize-result .diacritize-text {
+  flex: 1 1 0;
+  block-size: auto;
+  min-block-size: 12rem;
+}
+
+/* A document result names its file where the text would appear. */
+.diacritize-document {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding-block: 0.75rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.diacritize-document svg {
+  margin-block-start: 0.2em;
+  color: var(--gold);
+}
+
+/* The output's foot: the model that produced it, then Copy all text and Download. A copy message
+   takes its own line above them. */
+.diacritize-output-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+.diacritize-model {
+  color: var(--faint);
+  font-size: 0.875rem;
+}
+
+.diacritize-output-foot > .copy-status {
+  flex-basis: 100%;
+  order: -1;
+  font-size: 0.875rem;
+}
+
+.diacritize-output-foot > .result-actions {
+  margin-inline-start: auto;
+}
+
+@media (min-width: 60rem) {
+  .diacritize-box {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  [data-workspace="diacritization"] .workspace-review {
+    padding-block-start: calc(var(--dz-band) + 0.75rem);
+    border-block-start: 0;
+    border-inline-start: 1px solid var(--line);
+    border-end-start-radius: 0;
+    border-start-end-radius: calc(var(--radius) - 1px);
+  }
+
+  /* Level with the tabs, so showing or hiding it moves nothing. */
+  [data-workspace="diacritization"] .workspace-review > .previous-result {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline: var(--dz-pad);
+    display: flex;
+    align-items: center;
+    block-size: var(--dz-band);
+    margin: 0;
+  }
 }
 
 @media (max-width: 39.99rem) {
-  .diacritize-top {
-    column-gap: 0.5rem;
-  }
-
-  .diacritize-modes label,
-  .diacritize-models label {
-    padding-inline: 0.625rem;
+  .diacritize-box {
+    --dz-pad: 1.25rem;
+    --dz-field: 14rem;
   }
 
   .diacritize-text {
-    block-size: 14rem;
-    padding: 0.625rem 0.875rem;
     font-size: 1.375rem;
+  }
+
+  [data-workspace="diacritization"] .result-placeholder {
+    font-size: 1.375rem;
+  }
+
+  .diacritize-result .diacritize-text {
+    min-block-size: 10rem;
+  }
+
+  .diacritize-foot > .form-actions {
+    flex: 1 1 100%;
   }
 }
 
@@ -1243,9 +1392,7 @@ progress::-moz-progress-bar {
 
 .workspace-card,
 .workspace-input,
-.diacritize-form,
-.workspace-review:has(.result),
-[data-workspace="diacritization"] .workspace-review {
+[data-workspace]:not([data-workspace="diacritization"]) .workspace-review:has(.result) {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
@@ -1266,67 +1413,6 @@ progress::-moz-progress-bar {
 
 .workspace-result {
   min-width: 0;
-}
-
-@media (min-width: 60rem) {
-  [data-workspace="diacritization"] {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    align-items: stretch;
-  }
-
-  /* The input and its note on the start side; the result beside them. */
-  [data-workspace="diacritization"] > .diacritize-form {
-    grid-area: 1 / 1;
-  }
-
-  [data-workspace="diacritization"] > .privacy-note {
-    grid-area: 2 / 1;
-  }
-
-  [data-workspace="diacritization"] > .workspace-review {
-    grid-area: 1 / 2;
-  }
-}
-
-/* Before the first result, an empty pane like the result's says where the text will appear. */
-.result-placeholder {
-  block-size: 17rem;
-  padding: 0.75rem 1.25rem;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-control);
-  background: var(--paper);
-  color: var(--faint);
-  font-family: var(--font-transcript);
-  font-size: 1.5rem;
-  line-height: 2.1;
-}
-
-/* Side by side, the result's header takes the height of the input's top row and label, so the
-   two panes line up and the result fills its pane in place. */
-@media (min-width: 60rem) {
-  [data-workspace="diacritization"] {
-    --diacritize-band: calc(4rem + 1rlh);
-  }
-
-  [data-workspace="diacritization"] .diacritize-result .result-heading {
-    min-block-size: var(--diacritize-band);
-  }
-
-  [data-workspace="diacritization"] .result-placeholder {
-    margin-block-start: var(--diacritize-band);
-  }
-}
-
-.workspace-review:has(.workspace-result .result) .result-placeholder {
-  display: none;
-}
-
-/* On one column an empty result card is noise; it appears with the result. */
-@media (max-width: 59.99rem) {
-  [data-workspace="diacritization"] .workspace-review:not(:has(.result, .observation-status:not([hidden]))) {
-    display: none;
-  }
 }
 
 /* Progress: one line under the button while a job runs, readable at a glance: a small spinner,
@@ -1504,22 +1590,8 @@ progress::-moz-progress-bar {
   min-inline-size: 0;
 }
 
-.result-title {
-  display: contents;
-}
-
 .result-name {
   grid-area: name;
-}
-
-.result-meta {
-  grid-area: meta;
-  color: var(--faint);
-  font-size: 0.875rem;
-}
-
-.result-meta:empty {
-  display: none;
 }
 
 /* Copy all text, then Download. */
@@ -2254,23 +2326,20 @@ progress::-moz-progress-bar {
 @media (max-width: 39.99rem) {
   .workspace-card,
   .workspace-input,
-  .diacritize-form,
-  .workspace-review:has(.result),
-  [data-workspace="diacritization"] .workspace-review {
+  [data-workspace]:not([data-workspace="diacritization"]) .workspace-review:has(.result) {
     padding: 1.25rem;
   }
 
   .result-heading {
     grid-template-areas:
       "name"
-      "meta"
       "actions";
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .result-actions {
+  .result-heading .result-actions {
     justify-content: stretch;
-    margin-block-start: 0.75rem;
+    margin-block-start: 0.25rem;
   }
 
   /* Copy all and Download share the row when they fit. */
