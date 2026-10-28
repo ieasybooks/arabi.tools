@@ -51,7 +51,7 @@ pub(in crate::app::diacritize) async fn page(cx: &Cx) -> Result<impl View> {
     Ok(view! {
         diacritize::tool_hero(locale: locale, lead: false)
         <section class="workspace">
-            <div class="container container-wide workspace-layout">
+            <div class="container workspace-layout">
                 if exists {
                     diacritize::editor(locale: locale, initial: Some(id))
                 } else {

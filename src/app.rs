@@ -496,7 +496,7 @@ async fn home(cx: &Cx) -> Result<impl View> {
     let text = Locale::of(cx).text();
     Ok(view! {
         <section class="hero">
-            <div class="container">
+            <div class="container container-narrow">
                 <h1>(text.tagline)</h1>
                 <p class="lead">(text.lead)</p>
                 <ul class="highlights" role="list">
@@ -516,7 +516,7 @@ async fn home(cx: &Cx) -> Result<impl View> {
             </div>
         </section>
         <section class="section">
-            <div class="container">
+            <div class="container container-narrow">
                 <h2 class="section-title">(text.tools_title)</h2>
                 <ul class="tools" role="list">
                     tool_card(
@@ -583,7 +583,7 @@ async fn missing_page(locale: Locale) -> Result<impl View> {
     let text = locale.text();
     Ok(view! {
         <section class="hero not-found">
-            <div class="container">
+            <div class="container container-narrow">
                 <p class="error-code" dir="ltr">"404"</p>
                 <h1>(text.not_found_title)</h1>
                 <p class="lead">(text.not_found)</p>

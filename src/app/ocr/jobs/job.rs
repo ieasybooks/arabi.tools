@@ -62,7 +62,7 @@ pub(super) async fn page(cx: &Cx) -> Result<impl View> {
         <script src=(ocr::REVIEW_SCRIPT) defer=(true)></script>
         ocr::tool_hero(locale: locale, lead: false)
         <section class="workspace">
-            <div class="container container-wide workspace-layout">
+            <div class="container workspace-layout">
                 if exists {
                     (live! {
                         let mut watch = app_context::<Ocr>(cx)

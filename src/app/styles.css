@@ -26,8 +26,15 @@
   --shadow: 0 2px 16px rgb(74 52 30 / 0.07);
   --radius: 1.25rem;
   --radius-control: 0.75rem;
-  --container: 48rem;
-  --wide: 72rem;
+  /* One width for the header, the tool pages and the footer, wide enough for two panes side by
+     side; the home page keeps a narrower column. */
+  --page: 64rem;
+  --narrow: 48rem;
+  /* The longest comfortable line of running text, such as a transcript's. */
+  --measure: 44rem;
+  /* The root size relative to the browser's; Arabic is set larger. Page widths divide by it,
+     so a page is equally wide in both languages. */
+  --rem-scale: 1;
 
   color-scheme: light;
   color: var(--text);
@@ -43,7 +50,8 @@
 
 /* Arabic letters read best a touch larger and with more room between lines. */
 :root:lang(ar) {
-  font-size: 106.25%;
+  --rem-scale: 1.0625;
+  font-size: calc(var(--rem-scale) * 100%);
   line-height: 1.75;
 }
 
@@ -159,14 +167,18 @@ svg {
 
 .container {
   width: 100%;
-  max-width: var(--container);
+  max-width: calc((var(--page) + 4rem) / var(--rem-scale));
   margin-inline: auto;
   padding-inline: 1.25rem;
 }
 
+.container-narrow {
+  max-width: var(--narrow);
+}
+
 @media (min-width: 40rem) {
   .container {
-    padding-inline: 2rem;
+    padding-inline: calc(2rem / var(--rem-scale));
   }
 }
 
@@ -1180,14 +1192,8 @@ progress::-moz-progress-bar {
   outline: none;
 }
 
-/* Workspace: one width per page, centred on the page axis. Transcription keeps the reading
-   column; OCR and diacritization use the wide one for the title, input, notes and result. */
-
-/* The site header lines up with a wide page below it. */
-.container-wide,
-body:has(main .container-wide) .header-inner {
-  max-width: calc(var(--wide) + 4rem);
-}
+/* Workspace: the page's one width, centred on the page axis, for the title, input, notes and
+   result of every tool. */
 
 .workspace-entry,
 [data-workspace] {
@@ -1783,10 +1789,12 @@ body:has(main .container-wide) .header-inner {
   font-variant-numeric: tabular-nums;
 }
 
-/* Each line keeps its own direction but starts on the list's start edge, beside the time. */
+/* Each line keeps its own direction but starts on the list's start edge, beside the time. Lines
+   stop at a reading measure on wide pages. */
 .cue-text {
   flex: 1 1 6em;
   min-inline-size: 0;
+  max-inline-size: var(--measure);
   font-family: var(--font-transcript);
   font-size: 1.3125rem;
   line-height: 1.9;
@@ -1798,6 +1806,7 @@ body:has(main .container-wide) .header-inner {
 
 .copy-cue {
   align-self: flex-start;
+  margin-inline-start: auto;
   margin-block-start: 0.25rem;
   inline-size: 2rem;
   block-size: 2rem;
