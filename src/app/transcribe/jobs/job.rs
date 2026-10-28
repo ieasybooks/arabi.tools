@@ -222,6 +222,9 @@ async fn job_status(
             }
             if let Some(transcript) = transcript {
                 result(locale: locale, id: id, transcript: transcript)
+            } else if !embedded {
+                // The job's own page has no input to carry the line before a result.
+                crate::workspace::privacy_note(text: locale.privacy_note())
             }
         </div>
         if finished {
@@ -241,7 +244,7 @@ async fn job_status(
     })
 }
 
-/// A finished job's header, search and transcript.
+/// A finished job's header, search and transcript, with the page's privacy line at its foot.
 #[component]
 async fn result(
     cx: &Cx,
@@ -283,8 +286,7 @@ async fn result(
                 locale: locale,
                 name: transcript.name.clone(),
                 copy: Some(CopyAll::Transcript),
-                downloads: downloads,
-                (locale.kept_for())
+                downloads: downloads
             )
             result_controls::search_toolbar(locale: locale)
             result_controls::copy_feedback(locale: locale)
@@ -337,6 +339,7 @@ async fn result(
                     }
                 </ol>
             }
+            crate::workspace::privacy_note(text: locale.privacy_note())
         </div>
     })
 }

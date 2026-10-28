@@ -157,7 +157,7 @@ pub(super) async fn editor(
                 document_mode: document_mode,
                 source_needed: restore_source || document_mode
             )
-            crate::workspace::note(text: locale.diacritization_privacy(), privacy: true)
+            crate::workspace::privacy_note(text: locale.diacritization_privacy())
             crate::workspace::bridge(job: job.clone())
             <div class="workspace-observer" hidden=(initial.is_none())>
                 jobs::job::observe(job: $(job.get()))
@@ -165,10 +165,6 @@ pub(super) async fn editor(
             crate::workspace::review(
                 locale: locale,
                 placeholder: Some(locale.text().diacritization.result_placeholder)
-            )
-            crate::workspace::note(
-                text: locale.text().diacritization.replaces_marks.to_owned(),
-                privacy: false
             )
         </div>
         <noscript>

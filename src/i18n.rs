@@ -227,16 +227,6 @@ impl Locale {
         }
     }
 
-    pub fn kept_for(self) -> String {
-        match self {
-            Self::Ar => format!("يبقى النص متاحًا لمدة {} دقيقة.", keep_minutes()),
-            Self::En => format!(
-                "The transcript stays available for {} minutes.",
-                keep_minutes()
-            ),
-        }
-    }
-
     pub fn diacritization_rejection(self, rejection: Rejection) -> &'static str {
         let text = &self.text().diacritization;
         match rejection {
@@ -317,16 +307,6 @@ impl Locale {
             ),
             Self::En => format!(
                 "Text and documents are processed on our server. We delete the original and result {} minutes after the job ends.",
-                keep_minutes()
-            ),
-        }
-    }
-
-    pub fn diacritization_kept_for(self) -> String {
-        match self {
-            Self::Ar => format!("يبقى الأصل والنتيجة متاحين لمدة {} دقيقة.", keep_minutes()),
-            Self::En => format!(
-                "The original and result stay available for {} minutes.",
                 keep_minutes()
             ),
         }
@@ -519,7 +499,6 @@ pub struct OcrText {
     pub unreadable: &'static str,
     pub unavailable: &'static str,
     pub privacy: &'static str,
-    pub kept_for: &'static str,
 }
 
 /// OCR review controls and local preview messages.
@@ -562,7 +541,6 @@ pub struct DiacritizationText {
     pub input_formats: &'static str,
     pub output_formats: &'static str,
     pub all_tools: &'static str,
-    pub replaces_marks: &'static str,
     pub input_mode: &'static str,
     pub text_mode: &'static str,
     pub document_mode: &'static str,
@@ -713,7 +691,6 @@ static AR: Text = Text {
         input_formats: "نص · TXT · DOCX",
         output_formats: "نص مشكول · TXT · DOCX",
         all_tools: "كل الأدوات",
-        replaces_marks: "تُستبدل الحركات الشائعة الموجودة في النص بتشكيل جديد. راجع النتيجة قبل استخدامها.",
         input_mode: "طريقة الإدخال",
         text_mode: "نص",
         document_mode: "مستند",
@@ -749,7 +726,7 @@ static AR: Text = Text {
         download_docx: "تنزيل مستند Word (DOCX)",
         download_original: "تنزيل الملف الأصلي",
         another: "تشكيل نص أو مستند آخر",
-        result_placeholder: "ستظهر النتيجة هنا.",
+        result_placeholder: "يظهر النص المشكول هنا بعد استبدال ما فيه من حركات شائعة، فراجعه قبل استخدامه.",
         closed: "نحدّث الموقع الآن. حاول مرة أخرى بعد بضع دقائق.",
         full: "الطابور ممتلئ الآن. حاول مرة أخرى بعد بضع دقائق.",
         active_job: "يوجد تشكيل قيد التنفيذ من اتصالك بالإنترنت. انتظر حتى ينتهي أو ألغِه قبل بدء طلب آخر.",
@@ -862,7 +839,6 @@ static AR: Text = Text {
         unreadable: "لم نتمكن من قراءة الملف. تأكد من سلامته وأنه غير محمي بكلمة مرور.",
         unavailable: "أداة استخراج النص غير متاحة مؤقتًا. حاول مرة أخرى لاحقًا.",
         privacy: "نرسل الصفحات إلى Google Drive لاستخراج النص ونحذفها منه فورًا بعد ذلك. نحذف ملفك عند انتهاء المهمة، والنتائج بعد 30 دقيقة.",
-        kept_for: "تبقى النتائج متاحة لمدة 30 دقيقة.",
     },
 };
 
@@ -965,7 +941,6 @@ static EN: Text = Text {
         input_formats: "Text · TXT · DOCX",
         output_formats: "Diacritized text · TXT · DOCX",
         all_tools: "All tools",
-        replaces_marks: "Existing common diacritics are replaced with new ones. Review the result before using it.",
         input_mode: "Input method",
         text_mode: "Text",
         document_mode: "Document",
@@ -1001,7 +976,7 @@ static EN: Text = Text {
         download_docx: "Download Word document (.docx)",
         download_original: "Download original file",
         another: "Diacritize another text or document",
-        result_placeholder: "The result will appear here.",
+        result_placeholder: "The diacritized text appears here, with new diacritics replacing any common ones in your text; review it before use.",
         closed: "We are updating the site. Please try again in a few minutes.",
         full: "The queue is full right now. Please try again in a few minutes.",
         active_job: "Diacritization from your connection is already in progress. Wait for it to finish or cancel it before starting another request.",
@@ -1114,6 +1089,5 @@ static EN: Text = Text {
         unreadable: "We could not read this file. Check that it is valid and is not password protected.",
         unavailable: "Text recognition is temporarily unavailable. Please try again later.",
         privacy: "Pages are sent to Google Drive for OCR and deleted right afterward. We delete your upload when the job ends and results after 30 minutes.",
-        kept_for: "Results stay available for 30 minutes.",
     },
 };

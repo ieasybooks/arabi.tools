@@ -249,8 +249,6 @@ async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> 
                     ": "
                 </span>
                 <bdi dir="auto">(locale.diacritization_model(document.model))</bdi>
-                " · "
-                (locale.diacritization_kept_for())
             )
             if let Some(text_result) = document.text.as_ref() {
                 <label class="visually-hidden" for="diacritized-text">
@@ -269,6 +267,7 @@ async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> 
                 </textarea>
             }
             result_controls::copy_feedback(locale: locale)
+            crate::workspace::privacy_note(text: locale.diacritization_privacy())
         </div>
     })
 }

@@ -442,8 +442,9 @@ svg {
   box-shadow: var(--shadow);
 }
 
-/* A muted line close under its card: a privacy note, or advice about the result. */
-.workspace-note {
+/* The page's one privacy line: close under the input card until there is a result, then at the
+   foot of the result (or of a job page's card) instead. */
+.privacy-note {
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
@@ -453,9 +454,18 @@ svg {
   font-size: 0.875rem;
 }
 
-.workspace-note svg {
+.privacy-note svg {
   margin-block-start: 0.25em;
   color: var(--gold);
+}
+
+:is(.result, .job) > .privacy-note {
+  margin-block-start: 0;
+  padding-inline: 0;
+}
+
+[data-workspace]:has(> .workspace-review .result) > .privacy-note {
+  display: none;
 }
 
 /* Upload form */
@@ -1225,7 +1235,7 @@ progress::-moz-progress-bar {
     align-items: stretch;
   }
 
-  /* The input and its note on the start side; the result and its note beside them. */
+  /* The input and its note on the start side; the result beside them. */
   [data-workspace="diacritization"] > .diacritize-form {
     grid-area: 1 / 1;
   }
@@ -1236,10 +1246,6 @@ progress::-moz-progress-bar {
 
   [data-workspace="diacritization"] > .workspace-review {
     grid-area: 1 / 2;
-  }
-
-  [data-workspace="diacritization"] > .result-note {
-    grid-area: 2 / 2;
   }
 }
 
@@ -1413,6 +1419,10 @@ progress::-moz-progress-bar {
   grid-area: meta;
   color: var(--faint);
   font-size: 0.875rem;
+}
+
+.result-meta:empty {
+  display: none;
 }
 
 /* Copy all text, then Download. */

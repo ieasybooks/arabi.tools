@@ -139,7 +139,7 @@ async fn upload_form(cx: &Cx, locale: Locale) -> Result<impl View> {
                     crate::workspace::progress_links(locale: locale)
                 </div>
             </form>
-            crate::workspace::note(text: text.privacy.to_owned(), privacy: true)
+            crate::workspace::privacy_note(text: text.privacy.to_owned())
             crate::workspace::bridge(job: job.clone())
             <div class="workspace-observer" hidden=(true)>
                 jobs::job::observe(job: $(job.get()))

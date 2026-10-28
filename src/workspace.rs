@@ -94,20 +94,13 @@ pub(crate) async fn file_row(
     })
 }
 
-/// One muted line beside a card: a privacy note, with its lock, or advice about the result.
+/// The page's one muted line, with its lock, on what happens to the visitor's files and results:
+/// under the input until there is a result, then at the foot of the result.
 #[component]
-pub(crate) async fn note(text: String, privacy: bool) -> Result<impl View> {
+pub(crate) async fn privacy_note(text: String) -> Result<impl View> {
     Ok(view! {
-        <p
-            class=(if privacy {
-                "workspace-note privacy-note"
-            } else {
-                "workspace-note result-note"
-            })
-        >
-            if privacy {
-                icon(data: icons::LOCK, size: 16)
-            }
+        <p class="privacy-note">
+            icon(data: icons::LOCK, size: 16)
             <span>(text)</span>
         </p>
     })

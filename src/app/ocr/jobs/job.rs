@@ -244,6 +244,9 @@ async fn job_status(
             }
             if let Some(document) = document {
                 result(locale: locale, id: id, document: document)
+            } else if !embedded {
+                // The job's own page has no input to carry the line before a result.
+                crate::workspace::privacy_note(text: text.privacy.to_owned())
             }
         </div>
         if finished {
@@ -263,7 +266,8 @@ async fn job_status(
     })
 }
 
-/// A finished job's downloads and locally enhanced document review.
+/// A finished job's downloads and locally enhanced document review, with the page's privacy line
+/// at its foot.
 #[component]
 async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> Result<impl View> {
     let text = &locale.text().ocr;
@@ -308,8 +312,7 @@ async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> 
                 locale: locale,
                 name: document.name.clone(),
                 copy: Some(CopyAll::Ocr),
-                downloads: downloads,
-                (text.kept_for)
+                downloads: downloads
             )
             if all_blank {
                 <p class="ocr-empty-document">(review.all_blank)</p>
@@ -322,6 +325,7 @@ async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> 
                 source_panel(locale: locale, id: id.clone())
                 text_panel(locale: locale, document: document.clone())
             </div>
+            crate::workspace::privacy_note(text: text.privacy.to_owned())
         </div>
     })
 }
