@@ -31,9 +31,23 @@
       || document.querySelector('[data-result="ocr"][data-source-attached]');
     if (localInput && !window.confirm(form.dataset.reloadMessage)) event.preventDefault();
   });
-  app.fileSelection = (form, locked, changed, signal) => {
+  const extensionOf = name => {
+    const dot = name.lastIndexOf('.');
+    return dot > 0 ? name.slice(dot + 1).toLowerCase() : '';
+  };
+  // Why the chosen file cannot be sent, in the form's own words, or null. The server checks again.
+  app.fileProblem = form => {
     const input = form.elements.file;
-    const replace = form.querySelector('.replace-file');
+    const file = input.files[0];
+    if (!file) return form.dataset.missing;
+    if (input.files.length !== 1 || !form.dataset.extensions.split(',').includes(extensionOf(file.name))) return form.dataset.wrongType;
+    if (file.size > Number(form.dataset.maxBytes)) return form.dataset.tooLarge;
+    return null;
+  };
+  // A file the tool cannot take is refused as it is chosen: it never becomes the file row, the
+  // drop zone stays with the message, and the run button waits for a file it can send.
+  app.fileSelection = (form, button, locked, changed, signal) => {
+    const input = form.elements.file;
     const remove = form.querySelector('.remove-file');
     const update = () => {
       const file = input.files[0];
@@ -44,17 +58,24 @@
         const unit = divisor === 1 ? form.dataset.bytes : divisor === 1000 ? form.dataset.kilobytes : form.dataset.megabytes;
         size.textContent = file ? `${new Intl.NumberFormat(document.documentElement.lang, { maximumFractionDigits: 1 }).format(file.size / divisor)} ${unit} · ${file.name.split('.').pop().toUpperCase()}` : '';
       }
-      if (replace) replace.disabled = locked();
+      const extension = file ? extensionOf(file.name) : '';
+      for (const icon of form.querySelectorAll('.file-icon')) icon.hidden = !icon.dataset.extensions.split(',').includes(extension);
       if (remove) remove.disabled = locked() || !file;
+      button.disabled = !file;
       form.querySelector('.dropzone').dataset.selected = String(Boolean(file));
     };
-    input.addEventListener('change', () => { if (!locked()) { update(); changed(); } }, { signal });
-    replace?.addEventListener('click', () => { if (!locked()) input.click(); }, { signal });
+    input.addEventListener('change', () => {
+      if (locked()) return;
+      const problem = input.files.length ? app.fileProblem(form) : null;
+      if (problem) input.value = '';
+      update();
+      changed(problem);
+    }, { signal });
     remove?.addEventListener('click', () => {
       if (locked()) return;
       input.value = '';
       update();
-      changed();
+      changed(null);
       // The file row is gone; the drop zone takes its place and the focus.
       input.focus({ preventScroll: true });
     }, { signal });

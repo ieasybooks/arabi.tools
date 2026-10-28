@@ -48,7 +48,7 @@ pub async fn result_header(
         <div class="result-heading">
             <div class="result-title">
                 <p class="result-name">
-                    icon(data: icons::TRANSCRIPT, size: 20)
+                    icon(data: icons::DOCUMENT, size: 20)
                     <span dir="auto">(name)</span>
                 </p>
                 <p class="result-meta">(child)</p>

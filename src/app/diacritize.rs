@@ -20,9 +20,13 @@ use crate::result_controls::COPY_SCRIPT;
 use crate::tools::diacritization::{
     Diacritization, EXTENSIONS, MAX_TEXT_CHARACTERS, MAX_UPLOAD_BYTES, Model,
 };
+use crate::workspace::FileKind;
 use crate::{i18n::Locale, icons, meta::PageMeta, queue::Rejection};
 
 pub(super) const SCRIPT: Asset = asset!("./diacritize.js");
+
+/// The kinds of document this tool accepts, for the chosen file's icon.
+const KINDS: &[FileKind] = &[FileKind::Document];
 
 #[page]
 pub async fn page(cx: &Cx) -> Result<impl View> {
@@ -297,7 +301,7 @@ async fn document_input(locale: Locale) -> Result<impl View> {
                 <span class="dropzone-icon">icon(data: icons::UPLOAD, size: 24)</span>
                 <p class="dropzone-title">(text.choose_file)</p>
                 <p class="dropzone-hint">(locale.diacritization_limits())</p>
-                crate::workspace::file_row(locale: locale)
+                crate::workspace::file_row(locale: locale, kinds: KINDS)
             </div>
             <div class="form-actions">
                 <button type="submit" class="button primary" disabled=(true)>

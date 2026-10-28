@@ -316,9 +316,10 @@ test("silent audio stays successful and has no phantom search or copied explanat
   const root = page.locator('[data-result="transcript"]');
   await expect(root).toHaveAttribute("data-transcript-ready", "true", { timeout: 60_000 });
   await expect(page.getByText("لم نجد كلامًا في هذا التسجيل.")).toBeVisible();
-  // The mounted workspace chooses another file without leaving the empty result.
+  // The mounted workspace chooses another file without leaving the empty result: the whole
+  // file row is the file input.
   const choosing = page.waitForEvent("filechooser");
-  await page.locator(".replace-file").click();
+  await page.locator(".dropzone").click();
   await (await choosing).setFiles(speech);
   await expect(page.locator("#upload-form [type=submit]")).toBeEnabled();
   await page.getByRole("searchbox").fill("كلام");

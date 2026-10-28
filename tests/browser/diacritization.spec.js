@@ -248,9 +248,11 @@ for (const locale of [
     const oversized = testInfo.outputPath("large.txt");
     await writeFile(oversized, "");
     await truncate(oversized, 99_000_001);
+    // An oversized file is refused as it is chosen and never becomes the chosen file.
     await input.setInputFiles(oversized);
-    await page.getByRole("button", { name: locale.upload, exact: true }).click();
     await expect(page.getByRole("alert")).toHaveText(locale.tooLarge);
+    await expect(page.locator(".file-row")).toBeHidden();
+    await expect(page.getByRole("button", { name: locale.upload, exact: true })).toBeDisabled();
     for (const [name, bytes, message] of [
       ["invalid.txt", Buffer.from([0xff]), locale.invalidUtf8],
       ["invalid.docx", Buffer.from("broken"), locale.invalidDocx],

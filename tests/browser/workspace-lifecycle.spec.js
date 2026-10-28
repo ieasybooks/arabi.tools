@@ -137,7 +137,8 @@ test('upload stages distinguish reservation, transfer and validation and prevent
     await expect(page.locator('[data-workspace]')).toHaveAttribute('data-phase', 'reserving');
     await expect(page.locator('.submission-status')).toHaveText('جارٍ طلب مكان في الطابور…');
     await expect(page.locator('.upload-progress progress')).not.toHaveAttribute('value');
-    await expect(page.locator('.replace-file')).toBeDisabled();
+    // The file row offers no way to change the file while a job runs.
+    await expect(page.locator('[name=file]')).toBeDisabled();
     await expect(page.locator('.remove-file')).toBeDisabled();
     await page.locator('#upload-form').evaluate(form => form.requestSubmit());
     expect(reserved).toBe(1);

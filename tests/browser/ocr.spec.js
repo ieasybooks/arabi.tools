@@ -70,7 +70,10 @@ for (const locale of [
     await open(page);
     const file = page.getByLabel(locale.file, { exact: true });
     await file.setInputFiles({ name: "bad.gif", mimeType: "image/gif", buffer: Buffer.from("bad") });
+    // An unsupported file is refused as it is chosen: the drop zone stays and nothing can be sent.
     await expect(page.getByRole("alert")).toHaveText(locale.invalid);
+    await expect(page.locator(".file-row")).toBeHidden();
+    await expect(page.getByRole("button", { name: locale.submit, exact: true })).toBeDisabled();
     await file.setInputFiles({ name: "broken.pdf", mimeType: "application/pdf", buffer: Buffer.from("broken") });
     await page.getByRole("button", { name: locale.submit, exact: true }).click();
     await expect(page.getByRole("alert")).toContainText(locale.unreadable);

@@ -4,7 +4,7 @@ use topcoat::{
     Result,
     asset::{Asset, asset},
     context::Cx,
-    icon::icon,
+    icon::{IconData, icon},
     router::{
         header::{CACHE_CONTROL, HeaderValue},
         response::response_headers,
@@ -12,6 +12,8 @@ use topcoat::{
     runtime::{Event, Signal},
     view::{View, component, view},
 };
+
+use crate::icons;
 
 pub(crate) const SCRIPT: Asset = asset!("./app/workspace.js");
 
@@ -33,30 +35,60 @@ pub(crate) async fn bridge(job: Signal<String>) -> Result<impl View> {
     })
 }
 
-/// The chosen file, which takes the drop zone's place: its name, size and type, then Replace
-/// and Remove. The script fills it in; it stays hidden until a file is chosen.
+/// A kind of file a tool accepts, which picks the chosen file's icon by its extension.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FileKind {
+    Audio,
+    Document,
+    Image,
+}
+
+impl FileKind {
+    fn icon(self) -> IconData {
+        match self {
+            Self::Audio => icons::AUDIO,
+            Self::Document => icons::DOCUMENT,
+            Self::Image => icons::IMAGE,
+        }
+    }
+
+    fn extensions(self) -> &'static str {
+        match self {
+            Self::Audio => "mp3,m4a",
+            Self::Document => "pdf,docx,txt",
+            Self::Image => "jpg,jpeg,png",
+        }
+    }
+}
+
+/// The chosen file, which takes the drop zone's place like an attachment: an icon for its
+/// kind, its name with its size and type under it, then Remove. The invisible file input still
+/// covers the row, so clicking it chooses another file. The script fills it in and shows only
+/// the icon for the file's kind; it stays hidden until a file is chosen.
 #[component]
-pub(crate) async fn file_row(locale: crate::i18n::Locale) -> Result<impl View> {
+pub(crate) async fn file_row(
+    locale: crate::i18n::Locale,
+    kinds: &'static [FileKind],
+) -> Result<impl View> {
     let text = &locale.text().workspace;
     Ok(view! {
         <div class="file-row">
-            <span class="file-icon">
-                icon(data: crate::icons::TRANSCRIPT, size: 20)
-            </span>
+            for kind in kinds {
+                <span class="file-icon" data-extensions=(kind.extensions())>
+                    icon(data: kind.icon(), size: 20)
+                </span>
+            }
             <span class="file-details">
                 <span class="file-name" dir="auto"></span>
                 <span class="file-size" dir="auto"></span>
             </span>
-            <button type="button" class="button ghost compact replace-file">
-                (text.replace_file)
-            </button>
             <button
                 type="button"
                 class="icon-button remove-file"
                 aria-label=(text.remove_file)
                 title=(text.remove_file)
             >
-                icon(data: crate::icons::CLEAR, size: 16)
+                icon(data: icons::CLEAR, size: 16)
             </button>
         </div>
     })
@@ -74,7 +106,7 @@ pub(crate) async fn note(text: String, privacy: bool) -> Result<impl View> {
             })
         >
             if privacy {
-                icon(data: crate::icons::LOCK, size: 16)
+                icon(data: icons::LOCK, size: 16)
             }
             <span>(text)</span>
         </p>

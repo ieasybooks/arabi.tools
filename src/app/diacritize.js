@@ -10,6 +10,7 @@
     const models = [...form.querySelectorAll('[name=model]')];
     const modes = [...form.querySelectorAll('[name=input_mode]')];
     const buttons = [...form.querySelectorAll('[type=submit]')];
+    const documentButton = form.querySelector('#diacritize-document-panel [type=submit]');
     const unavailable = new Set(models.filter(input => input.disabled));
     const count = form.querySelector('#text-count');
     const error = form.querySelector('.error');
@@ -32,12 +33,9 @@
     const locked = () => active.has(state.phase);
     const cancellationPending = () => state.phase === 'cancelling' || state.phase === 'cancel-unconfirmed';
     const current = run => !disposed && run === generation;
-    const updateFile = app.fileSelection(form, locked, () => {
+    const updateFile = app.fileSelection(form, documentButton, locked, problem => {
       clearError();
-      if (file.files.length) {
-        const problem = fileProblem();
-        if (problem) { file.setAttribute('aria-invalid', 'true'); showError(problem); }
-      }
+      if (problem) { file.setAttribute('aria-invalid', 'true'); showError(problem); }
     }, lifetime.signal);
 
     function clearError() {
@@ -103,15 +101,6 @@
         if (model) model.checked = true;
         if (mode) mode.checked = true;
       } catch { /* Old or unavailable preferences use the page defaults. */ }
-    }
-    function fileProblem() {
-      const selected = file.files[0];
-      if (!selected) return form.dataset.missing;
-      const dot = selected.name.lastIndexOf('.');
-      const extension = dot > 0 ? selected.name.slice(dot + 1).toLowerCase() : '';
-      if (file.files.length !== 1 || !form.dataset.extensions.split(',').includes(extension)) return form.dataset.wrongType;
-      if (selected.size > Number(form.dataset.maxBytes)) return form.dataset.tooLarge;
-      return null;
     }
     function post(url, body, upload = false) {
       return new Promise((resolve, reject) => {
@@ -220,7 +209,7 @@
       const model = models.find(input => input.checked && !unavailable.has(input));
       const documentMode = form.elements.input_mode.value === 'document';
       const text = source.value;
-      const problem = !model ? form.dataset.modelUnavailable : documentMode ? fileProblem()
+      const problem = !model ? form.dataset.modelUnavailable : documentMode ? app.fileProblem(form)
         : !text.trim() ? form.dataset.textMissing : Array.from(text).length > Number(form.dataset.maxCharacters) ? form.dataset.textLimit : null;
       if (problem) {
         transition('invalid');
@@ -275,6 +264,7 @@
     updateCount();
     transition('idle');
     for (const button of buttons) button.disabled = false;
+    updateFile(); // The document's button waits for a file it can send.
     if (root.dataset.initialJob) {
       state.job = { job_id: root.dataset.initialJob, next: root.dataset.initialUrl, cancel: root.dataset.cancelUrl };
       transition('observing', form.dataset.observing);

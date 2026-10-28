@@ -22,10 +22,14 @@ use crate::meta::PageMeta;
 use crate::queue::Rejection;
 use crate::result_controls::{COPY_SCRIPT, SEARCH_SCRIPT};
 use crate::tools::ocr::{EXTENSIONS, MAX_UPLOAD_BYTES, Ocr};
+use crate::workspace::FileKind;
 
 pub(super) const REVIEW_SCRIPT: Asset = asset!("./ocr-review.js");
 
 pub(super) const UPLOAD_SCRIPT: Asset = asset!("./upload.js");
+
+/// The kinds of file this tool accepts, for the chosen file's icon.
+const KINDS: &[FileKind] = &[FileKind::Document, FileKind::Image];
 
 #[page]
 pub async fn page(cx: &Cx) -> Result<impl View> {
@@ -118,7 +122,7 @@ async fn upload_form(cx: &Cx, locale: Locale) -> Result<impl View> {
                     </span>
                     <p class="dropzone-title">(text.choose_file)</p>
                     <p class="dropzone-hint">(locale.ocr_limits())</p>
-                    crate::workspace::file_row(locale: locale)
+                    crate::workspace::file_row(locale: locale, kinds: KINDS)
                 </div>
                 <p id="upload-error" class="error" role="alert" hidden=(true)></p>
                 <a class="return-to-job" hidden=(true)>(text.back_to_job)</a>

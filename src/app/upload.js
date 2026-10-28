@@ -38,21 +38,9 @@
       if (job) back.href = job;
       input.setAttribute('aria-invalid', String(invalid));
     };
-    const problemWithFile = () => {
-      const file = input.files[0];
-      if (!file) return form.dataset.missing;
-      const dot = file.name.lastIndexOf('.');
-      const extension = dot > 0 ? file.name.slice(dot + 1).toLowerCase() : '';
-      if (input.files.length !== 1 || !form.dataset.extensions.split(',').includes(extension)) return form.dataset.wrongType;
-      if (file.size > Number(form.dataset.maxBytes)) return form.dataset.tooLarge;
-      return null;
-    };
-    const updateFile = app.fileSelection(form, locked, () => {
+    const updateFile = app.fileSelection(form, button, locked, problem => {
       clearError();
-      if (input.files.length) {
-        const problem = problemWithFile();
-        if (problem) showError(problem, null, true);
-      }
+      if (problem) showError(problem, null, true);
     }, lifetime.signal);
     const transition = (phase, message = '', percent) => {
       state = { ...state, phase };
@@ -109,7 +97,7 @@
     form.addEventListener('submit', async event => {
       event.preventDefault();
       if (locked()) return;
-      const problem = problemWithFile();
+      const problem = app.fileProblem(form);
       if (problem) { transition('invalid'); showError(problem, null, true); return; }
       const file = input.files[0];
       const run = ++generation;
@@ -150,7 +138,6 @@
     window.addEventListener('pagehide', () => { if (attempt) app.store(attemptKey, attempt); }, { signal: lifetime.signal });
     window.addEventListener('pageshow', event => { if (event.persisted) app.store(attemptKey, null); }, { signal: lifetime.signal });
     transition('idle');
-    button.disabled = false;
     return () => {
       disposed = true;
       generation++;
