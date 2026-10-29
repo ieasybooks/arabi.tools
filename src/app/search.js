@@ -319,6 +319,7 @@
       on(previous, "click", () => move(-1));
       on(next, "click", () => move(1));
       on(clear, "click", () => {
+        field.focus({ preventScroll: true });
         field.value = "";
         void search();
       });

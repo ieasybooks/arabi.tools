@@ -29,6 +29,56 @@ fn pdfium() -> Option<PathBuf> {
     std::env::var_os("TAHWEEL_TEST_PDFIUM").map(PathBuf::from)
 }
 
+#[tokio::test]
+async fn upload_recovery_routes_release_unused_but_preserve_receiving_reservations()
+-> anyhow::Result<()> {
+    let drive = drive::Drive::start(Duration::ZERO).await;
+    let app =
+        support::TestApp::start_with_ocr(support::Setup::default(), ocr(&drive).await?).await?;
+    for tool in ["transcribe", "ocr"] {
+        let reserve = || app.client.post(app.url(&format!("/{tool}/jobs")));
+        let unused: Value = reserve().send().await?.error_for_status()?.json().await?;
+        let recover = app.url(unused["recover"].as_str().context("recovery URL")?);
+        for _ in 0..2 {
+            let response = app.client.post(&recover).send().await?.error_for_status()?;
+            assert!(
+                response.headers()["cache-control"]
+                    .to_str()?
+                    .contains("no-store")
+            );
+            assert_eq!(response.json::<Value>().await?, json!({"retry": true}));
+        }
+        // The old URL is irrevocably invalid before the next upload is attempted.
+        let late = app
+            .client
+            .post(app.url(unused["upload"].as_str().unwrap()))
+            .multipart(multipart::Form::new().part(
+                "file",
+                multipart::Part::bytes(drive::png()).file_name("late.png"),
+            ))
+            .send()
+            .await?;
+        assert_eq!(late.status(), StatusCode::CONFLICT);
+
+        let receiving: Value = reserve().send().await?.error_for_status()?.json().await?;
+        let id: JobId = receiving["job_id"].as_str().unwrap().parse()?;
+        let transcription =
+            (tool == "transcribe").then(|| app.transcription.queue.begin_upload(&id).unwrap());
+        let document = (tool == "ocr").then(|| app.ocr.queue.begin_upload(&id).unwrap());
+        let response = app
+            .client
+            .post(app.url(receiving["recover"].as_str().unwrap()))
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<Value>()
+            .await?;
+        assert_eq!(response, json!({"retry": false}));
+        drop((transcription, document));
+    }
+    app.stop().await
+}
+
 async fn ocr(drive: &drive::Drive) -> anyhow::Result<Ocr> {
     Ocr::new(drive.config(), pdfium(), &slots()).await
 }

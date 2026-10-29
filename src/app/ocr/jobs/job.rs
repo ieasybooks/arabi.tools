@@ -571,6 +571,16 @@ async fn source_picker(locale: Locale, id: JobId) -> Result<impl View> {
     })
 }
 
+/// Resolves an uncertain upload without releasing receiving or accepted work.
+#[route(POST "./recover")]
+pub(super) async fn recover(cx: &Cx) -> Result<Json<Reply>> {
+    crate::workspace::private_response(cx);
+    let retry = app_context::<Ocr>(cx)
+        .queue
+        .recover_upload(path_param::<Id>(cx)?);
+    Ok(Json(Reply::Recovery { retry }))
+}
+
 /// Receives one file, validates its contents and page count, then queues the job.
 #[route(POST "./document")]
 pub(super) async fn upload(cx: &Cx, mut form: Multipart) -> Result<(StatusCode, Json<Reply>)> {

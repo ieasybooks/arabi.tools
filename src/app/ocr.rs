@@ -137,7 +137,10 @@ async fn upload_form(cx: &Cx, locale: Locale) -> Result<impl View> {
                     <p id="job-status" class="submission-status" role="status"></p>
                     <p class="submission-percent" dir="ltr"></p>
                     <p class="server-detail hint"></p>
-                    crate::workspace::progress_links(locale: locale)
+                    crate::workspace::progress_links(
+                        locale: locale,
+                        keep_open: text.keep_open
+                    )
                 </div>
             </form>
             crate::workspace::privacy_note(text: text.privacy.to_owned())

@@ -24,6 +24,9 @@
     let generation = 0;
     let request;
     let disposed = false;
+    let uncertainUpload = false;
+    let recovering = false;
+    let recoveryTimer;
     const locked = () => active.has(state.phase);
     const current = run => !disposed && run === generation;
     const clearError = () => {
@@ -82,6 +85,8 @@
         foldInView();
       }
       if (['completed', 'failed', 'missing'].includes(phase)) {
+        uncertainUpload = false;
+        clearTimeout(recoveryTimer);
         attempt = null;
         app.store(attemptKey, null);
         clearError();
@@ -90,12 +95,14 @@
       transition(phase, message, serverBar ? serverBar.value : undefined);
       detail.textContent = update.querySelector('.page-progress')?.textContent || '';
       if (phase === 'failed') showError(message);
+      if (phase === 'reserved' && uncertainUpload) void recoverUpload();
     });
-    const post = (url, body, upload, run) => new Promise((resolve, reject) => {
+    const post = (url, body, upload, run, timeout = 0) => new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       request = xhr;
       xhr.open('POST', url);
       xhr.responseType = 'json';
+      xhr.timeout = timeout;
       if (upload) {
         xhr.upload.onprogress = event => {
           if (current(run) && state.phase === 'uploading' && event.lengthComputable) {
@@ -114,9 +121,43 @@
         else if (xhr.status >= 200 && xhr.status < 300 && xhr.response) resolve(xhr.response);
         else reject({ error: form.dataset.failed, uncertain: true });
       };
-      xhr.onerror = xhr.onabort = () => { finish(); reject({ error: form.dataset.failed, uncertain: true }); };
+      xhr.onerror = xhr.onabort = xhr.ontimeout = () => { finish(); reject({ error: form.dataset.failed, uncertain: true }); };
       xhr.send(body);
     });
+    async function recoverUpload() {
+      if (recovering || !uncertainUpload || !state.job?.recover) return;
+      clearTimeout(recoveryTimer);
+      const run = generation;
+      const job = state.job;
+      recovering = true;
+      try {
+        const reply = await post(job.recover, new URLSearchParams(), false, run, 15_000);
+        if (!current(run) || state.job !== job || !uncertainUpload || reply.retry !== true) return;
+        // The server revoked the unused reservation under the same lock as
+        // begin_upload. A late upload can no longer be accepted after we unlock.
+        uncertainUpload = false;
+        // Recovery can finish while the visitor is on a link that folds away.
+        // Keep unrelated focus in place; the selected file's button stays mounted.
+        const focused = document.activeElement;
+        if (progress.contains(focused) || focused === back || focused === root.querySelector('.retry-observation')) {
+          button.focus({ preventScroll: true });
+        }
+        observer.begin();
+        state.job = null;
+        const language = document.querySelector('.language-switch input[name=back]');
+        if (language) language.value = location.pathname;
+        transition('failed');
+        showError(form.dataset.failed);
+      } catch {
+        // The release response can be lost too. A removed reservation stops its
+        // observer's heartbeats, so repeat the idempotent check independently.
+        if (current(run) && uncertainUpload && state.job === job) {
+          recoveryTimer = setTimeout(() => { void recoverUpload(); }, 2_000);
+        }
+      } finally {
+        if (current(run)) recovering = false;
+      }
+    }
     form.addEventListener('submit', async event => {
       event.preventDefault();
       if (locked()) return;
@@ -124,6 +165,9 @@
       if (problem) { transition('invalid'); showError(problem, null, true); return; }
       const file = input.files[0];
       const run = ++generation;
+      uncertainUpload = false;
+      recovering = false;
+      clearTimeout(recoveryTimer);
       observer.begin();
       state = { phase: 'idle', job: null };
       clearError();
@@ -151,7 +195,9 @@
           // An upload can have arrived even if its response was lost. Observe
           // its existing identity and keep duplicate submission locked.
           transition('observing', form.dataset.observing);
+          uncertainUpload = true;
           observer.watch(state.job, file);
+          void recoverUpload();
         } else {
           transition('failed');
         }
@@ -165,6 +211,7 @@
       disposed = true;
       generation++;
       lifetime.abort();
+      clearTimeout(recoveryTimer);
       request?.abort();
       observer.dispose();
     };

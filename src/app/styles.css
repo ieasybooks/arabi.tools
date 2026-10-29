@@ -1622,6 +1622,7 @@ progress::-moz-progress-bar {
 }
 
 .upload-progress .server-detail,
+.upload-progress .keep-open,
 .upload-progress .progress-links {
   order: 5;
   flex: 1 1 100%;

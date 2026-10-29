@@ -260,7 +260,10 @@ async fn input_form(
                 <button type="button" class="button secondary compact cancel-upload">
                     (text.cancel)
                 </button>
-                crate::workspace::progress_links(locale: locale)
+                crate::workspace::progress_links(
+                    locale: locale,
+                    keep_open: text.keep_open
+                )
             </div>
         </form>
     })

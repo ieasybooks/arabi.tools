@@ -98,6 +98,7 @@
     const back = root.querySelector('.workspace-recovery');
     const previous = root.querySelector('.previous-result');
     const view = root.querySelector('.view-result');
+    const keepOpen = root.querySelector('.upload-progress .keep-open');
     const lifetime = new AbortController();
     let jobId = null;
     let resultId = output.querySelector('[data-result]')?.dataset.jobId;
@@ -135,6 +136,7 @@
       const phase = update.dataset.phase;
       const result = update.querySelector('[data-result]');
       const hold = result && holdReadingPosition();
+      if (keepOpen) keepOpen.hidden = !['queued', 'processing'].includes(phase);
       if (result) {
         if (resultId !== jobId) release(resultId);
         resultId = jobId;
@@ -186,6 +188,7 @@
     return {
       reserve: recover,
       begin() {
+        if (keepOpen) keepOpen.hidden = true;
         if (jobId !== resultId) release(jobId);
         if (back) back.hidden = true; // Until the next job has a link of its own.
         jobId = null;

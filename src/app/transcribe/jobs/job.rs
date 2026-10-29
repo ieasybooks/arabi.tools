@@ -470,6 +470,16 @@ mod review_tests {
     }
 }
 
+/// Resolves an uncertain upload without releasing receiving or accepted work.
+#[route(POST "./recover")]
+pub(super) async fn recover(cx: &Cx) -> Result<Json<Reply>> {
+    crate::workspace::private_response(cx);
+    let retry = app_context::<Transcription>(cx)
+        .queue
+        .recover_upload(path_param::<Id>(cx)?);
+    Ok(Json(Reply::Recovery { retry }))
+}
+
 /// Receives the file for a reserved job and queues the job.
 #[route(POST "./audio")]
 pub(super) async fn upload(cx: &Cx, mut form: Multipart) -> Result<(StatusCode, Json<Reply>)> {

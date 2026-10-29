@@ -33,7 +33,10 @@ enum Reply {
         job_id: String,
         next: String,
         upload: String,
+        recover: String,
     },
+    /// Whether the uncertain upload's reservation was safely released.
+    Recovery { retry: bool },
     /// The page to show once the file is uploaded.
     Next { job_id: String, next: String },
     /// Why the request was refused, ready to show.
@@ -63,6 +66,7 @@ pub(super) async fn reserve(
     Ok(match transcription.queue.reserve(client_ip(cx), attempt) {
         Ok(id) => {
             let upload = href!(job::upload, job::Id(id.clone())).resolve(cx);
+            let recover = href!(job::recover, job::Id(id.clone())).resolve(cx);
             let next = href!(job::page, job::Id(id.clone())).resolve(cx);
             (
                 StatusCode::OK,
@@ -70,6 +74,7 @@ pub(super) async fn reserve(
                     job_id: id.to_string(),
                     next,
                     upload,
+                    recover,
                 }),
             )
         }

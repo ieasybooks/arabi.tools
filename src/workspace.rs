@@ -106,12 +106,19 @@ pub(crate) async fn privacy_note(text: String) -> Result<impl View> {
     })
 }
 
-/// Shown under a job's progress: the job's own page while it runs, and a jump to its finished
-/// result that appears on keyboard focus, like a skip link.
+/// Shown under progress: a keep-open warning and the job's own page while it runs,
+/// and a jump to its finished result that appears on keyboard focus, like a skip link.
 #[component]
-pub(crate) async fn progress_links(locale: crate::i18n::Locale) -> Result<impl View> {
+pub(crate) async fn progress_links(
+    locale: crate::i18n::Locale,
+    keep_open: &'static str,
+) -> Result<impl View> {
     let text = &locale.text().workspace;
     Ok(view! {
+        <p class="keep-open" hidden=(true)>
+            icon(data: icons::WARNING, size: 20)
+            <span>(keep_open)</span>
+        </p>
         <p class="progress-links">
             <a class="view-result" href="#workspace-result" hidden=(true)>
                 (text.view_result)

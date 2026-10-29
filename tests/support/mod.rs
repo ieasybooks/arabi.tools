@@ -222,7 +222,10 @@ impl TestApp {
         assert!(upload.starts_with("/transcribe/jobs/") && upload.ends_with("/audio"));
         let next = upload.strip_suffix("/audio").context("audio route")?;
         let id = next.rsplit('/').next().unwrap();
-        assert_eq!(reply, json!({"upload": upload, "next": next, "job_id": id}));
+        assert_eq!(
+            reply,
+            json!({"upload": upload, "next": next, "job_id": id, "recover": format!("{next}/recover")})
+        );
         Ok(upload.to_owned())
     }
 
