@@ -253,6 +253,26 @@ for (const locale of ['ar', 'en']) {
     expect(css.bidi).toBe('plaintext');
     expect(css.line).toBeGreaterThanOrEqual(css.size * 1.9);
     expect(posts).toEqual([]);
+    // At 200% text the source's zoom label, value and chevron must wrap, and every open
+    // menu must remain inside the viewport in either page direction.
+    await page.evaluate(async () => { document.documentElement.style.fontSize = '200%'; await document.fonts.ready; });
+    await sourceRadio.check();
+    await rendered(page, 3);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+    for (const name of ['zoom', 'download', 'copy']) {
+      const menu = root.locator(`.${name}-menu`);
+      await menu.locator('summary').focus();
+      await menu.locator('summary').press('Enter');
+      const list = menu.locator('.menu-list');
+      await expect(list).toBeVisible();
+      const bounds = await list.boundingBox();
+      expect(bounds.x).toBeGreaterThanOrEqual(0);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(320);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+      await page.keyboard.press('Escape');
+      await expect(list).toBeHidden();
+      await expect(menu.locator('summary')).toBeFocused();
+    }
     // A direct reload has recognized text immediately and honestly loses the local source.
     await page.reload();
     await expect(resultRoot(page)).toHaveAttribute('data-enhanced', 'true');
