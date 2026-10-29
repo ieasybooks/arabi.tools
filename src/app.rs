@@ -57,7 +57,7 @@ const PREVIEW_EN: Asset = asset!("./app/images/og-en.png");
 const THEME_COLOR: &str = "#f8f4ea";
 
 /// The site's source code.
-const SOURCE_URL: &str = "https://github.com/ieasybooks/arlang.tools";
+const SOURCE_URL: &str = "https://github.com/ieasybooks/arabi.tools";
 
 /// The initiative behind the site.
 const INITIATIVE_URL: &str = "https://ieasybooks.com";
@@ -191,9 +191,9 @@ async fn layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                 topcoat::font::link(font: TRANSCRIPT_FONT)
                 <link rel="stylesheet" href=(STYLES)>
                 topcoat::dev::script()
-                topcoat::runtime::script()
             </head>
             <body>
+                <a class="skip-link" href="#main-content">(text.skip_to_main)</a>
                 <header class="site-header">
                     <div class="container header-inner">
                         <a
@@ -212,6 +212,7 @@ async fn layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                         </a>
                         <form
                             class="language-switch"
+                            data-reload-message=(text.workspace.language_reload)
                             method="post"
                             action=(href!(language::switch))
                         >
@@ -232,7 +233,7 @@ async fn layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                         </form>
                     </div>
                 </header>
-                <main class="page">
+                <main class="page" id="main-content" tabindex="-1">
                     error_boundary(
                         fallback: move |error| {
                             if error.downcast_ref::<NotFoundError>().is_none() {
@@ -249,6 +250,8 @@ async fn layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                     )
                 </main>
                 site_footer(locale: locale)
+                // Deferred tool controllers start before runtime hydration, even on a slow connection.
+                topcoat::runtime::script()
             </body>
         </html>
     })
@@ -436,30 +439,19 @@ impl IntoResponse for Typed {
     }
 }
 
-/// The initiative behind the site, its accounts, and the site's source code.
+/// One flat line: the initiative behind the site, then plain links to its accounts and to the
+/// site's source code. Each account keeps its full name as the link's accessible name; the email
+/// link is named by its own text.
 #[component]
 async fn site_footer(locale: Locale) -> Result<impl View> {
     let text = locale.text();
     let social = &text.social;
     let links = [
-        ("https://t.me/ieasybooks", icons::TELEGRAM, social.telegram),
-        (
-            "https://youtube.com/@ieasybooks",
-            icons::YOUTUBE,
-            social.youtube,
-        ),
-        ("https://x.com/iieasybooks", icons::X, social.x),
-        (
-            "https://fb.com/ieasybooks",
-            icons::FACEBOOK,
-            social.facebook,
-        ),
-        (
-            "https://github.com/ieasybooks",
-            icons::GITHUB,
-            social.github,
-        ),
-        ("mailto:easybooksdev@gmail.com", icons::MAIL, social.email),
+        ("https://t.me/ieasybooks", &social.telegram),
+        ("https://youtube.com/@ieasybooks", &social.youtube),
+        ("https://x.com/iieasybooks", &social.x),
+        ("https://fb.com/ieasybooks", &social.facebook),
+        ("https://github.com/ieasybooks", &social.github),
     ];
     Ok(view! {
         <footer class="site-footer">
@@ -470,19 +462,21 @@ async fn site_footer(locale: Locale) -> Result<impl View> {
                     <a href=(INITIATIVE_URL)>(text.initiative_name)</a>
                     (text.initiative_after)
                 </p>
-                <ul class="social" role="list" aria-label=(social.label)>
-                    for (href, data, label) in links {
+                <div class="footer-links">
+                    <ul role="list" aria-label=(social.label)>
+                        for (href, account) in links {
+                            <li>
+                                <a href=(href) aria-label=(account.label)>
+                                    (account.name)
+                                </a>
+                            </li>
+                        }
                         <li>
-                            <a href=(href) title=(label) aria-label=(label)>
-                                icon(data: data, size: 20)
-                            </a>
+                            <a href="mailto:easybooksdev@gmail.com">(social.email)</a>
                         </li>
-                    }
-                </ul>
-                <a class="footer-link" href=(SOURCE_URL)>
-                    icon(data: icons::CODE, size: 16)
-                    <span>(text.source_code)</span>
-                </a>
+                    </ul>
+                    <a href=(SOURCE_URL)>(text.source_code)</a>
+                </div>
             </div>
         </footer>
     })
@@ -493,7 +487,7 @@ async fn home(cx: &Cx) -> Result<impl View> {
     let text = Locale::of(cx).text();
     Ok(view! {
         <section class="hero">
-            <div class="container">
+            <div class="container container-narrow">
                 <h1>(text.tagline)</h1>
                 <p class="lead">(text.lead)</p>
                 <ul class="highlights" role="list">
@@ -513,7 +507,7 @@ async fn home(cx: &Cx) -> Result<impl View> {
             </div>
         </section>
         <section class="section">
-            <div class="container">
+            <div class="container container-narrow">
                 <h2 class="section-title">(text.tools_title)</h2>
                 <ul class="tools" role="list">
                     tool_card(
@@ -580,7 +574,7 @@ async fn missing_page(locale: Locale) -> Result<impl View> {
     let text = locale.text();
     Ok(view! {
         <section class="hero not-found">
-            <div class="container">
+            <div class="container container-narrow">
                 <p class="error-code" dir="ltr">"404"</p>
                 <h1>(text.not_found_title)</h1>
                 <p class="lead">(text.not_found)</p>

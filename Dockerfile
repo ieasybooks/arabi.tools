@@ -47,6 +47,8 @@ RUN apt-get update \
     && useradd --system --uid 10001 --create-home arlang
 WORKDIR /app
 COPY --from=builder /out/ ./
+COPY src/app/vendor/pdfjs/LICENSE /usr/share/doc/pdfjs/LICENSE
+COPY src/app/vendor/pdfjs/wasm/LICENSE_* /usr/share/doc/pdfjs/wasm/
 COPY --from=pdfium /pdfium/lib/libpdfium.so ./libpdfium.so
 COPY --from=pdfium /pdfium/LICENSE /usr/share/doc/pdfium/LICENSE
 COPY --from=pdfium /pdfium/licenses/ /usr/share/doc/pdfium/licenses/

@@ -28,14 +28,14 @@ const cards = {
     dir: "rtl",
     title: "أدوات العربية",
     tagline: "أدوات مجانية للغة العربية",
-    tool: "تفريغ الصوت إلى نص مكتوب وملف ترجمة SRT",
+    tool: "تفريغ الصوت · استخراج النص من PDF والصور · التشكيل التلقائي",
     initiative: "مشروع من مبادرة الكتب الميسّرة",
   },
   en: {
     dir: "ltr",
     title: "arabi.tools",
     tagline: "Free tools for the Arabic language",
-    tool: "Turn audio into text and SRT subtitles",
+    tool: "Audio transcription · PDF/image text recognition · Automatic diacritization",
     initiative: "A project of the iEasyBooks initiative",
   },
 };

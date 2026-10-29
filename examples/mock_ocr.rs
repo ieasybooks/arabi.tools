@@ -1,4 +1,6 @@
 //! Runs the full site with local Drive and Wit mocks for browser tests. Start `mock_wit` first.
+//! It serves port 3204 with mock Wit at port 9804; set `MOCK_SITE_PORT` and `WIT_API_URL` to
+//! run another copy beside the browser suite.
 use anyhow::Context;
 use arlang_tools::{
     app,
@@ -16,7 +18,7 @@ mod drive;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let drive = drive::Drive::start(Duration::from_millis(750)).await;
+    let drive = drive::Drive::start_with_review(Duration::from_millis(750), true).await;
     let slots = Slots::new(RUNNING_JOBS);
     let ocr = Ocr::new(
         drive.config(),
@@ -26,7 +28,7 @@ async fn main() -> anyhow::Result<()> {
     .await?;
     ocr.queue.spawn_sweeper();
     let mut wit = WitConfig::new(["dev"]);
-    wit.api_url = "http://127.0.0.1:9804".into();
+    wit.api_url = std::env::var("WIT_API_URL").unwrap_or_else(|_| "http://127.0.0.1:9804".into());
     let transcription = Transcription::new(vec![("ar".into(), wit)], &slots).await?;
     transcription.queue.spawn_sweeper();
     let diacritization = Diacritization::unavailable(&slots);
@@ -41,7 +43,10 @@ async fn main() -> anyhow::Result<()> {
     diacritization.queue.spawn_sweeper();
     let config = Config {
         host: "127.0.0.1".into(),
-        port: 3204,
+        port: std::env::var("MOCK_SITE_PORT")
+            .ok()
+            .and_then(|port| port.parse().ok())
+            .unwrap_or(3204),
         wit_tokens: vec![],
         wit_api_url: None,
         client_ip_header: None,

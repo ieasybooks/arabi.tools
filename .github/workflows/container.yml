@@ -1,12 +1,17 @@
 name: Container
 
 # The release workflow builds the image before every deploy. Here it is only checked on pull
-# requests that change how it is built, so ordinary code changes skip the slow image build.
+# requests that change packaging or browser assets, including the locally bundled PDF viewer.
 on:
   pull_request:
     paths:
       - Dockerfile
       - .dockerignore
+      - src/**/*.js
+      - src/**/*.css
+      - src/**/*.mjs
+      - src/app/vendor/**
+      - src/app/ocr/**
       - compose.yaml
       - deploy/**
       - Cargo.toml
@@ -72,11 +77,13 @@ jobs:
           docker exec arlang-ci sh -c 'test "$(id -u)" != 0 && ffmpeg -version > /dev/null && ffprobe -version > /dev/null'
           python3 - <<'PY'
           import re
+          import subprocess
+          import tomllib
           from urllib.request import Request, urlopen
 
           base = "http://127.0.0.1:3000"
           assets = set()
-          for route in ("/", "/transcribe"):
+          for route in ("/", "/transcribe", "/ocr"):
               for language, direction in (("ar", "rtl"), ("en", "ltr")):
                   request = Request(base + route, headers={"Cookie": f"lang={language}"})
                   with urlopen(request, timeout=10) as response:
@@ -85,10 +92,24 @@ jobs:
                   assets.update(re.findall(r'(?:href|src)="(/[^"?]+\.(?:css|js))"', html))
           assert any(asset.endswith(".css") for asset in assets), "missing styles"
           assert any(asset.endswith(".js") for asset in assets), "missing scripts"
+          manifest = tomllib.loads(subprocess.check_output(
+              ["docker", "exec", "arlang-ci", "cat", "/app/assets/manifest.toml"], text=True))
+          entries = manifest["assets"]
+          for stem, extension in (("ocr-review", "js"), ("pdf.min", "mjs"), ("pdf.worker.min", "mjs"),
+                                  ("jbig2", "wasm"), ("openjpeg", "wasm")):
+              matches = [entry for entry in entries if re.fullmatch(rf"{re.escape(stem)}-[0-9a-f]+\.{extension}", entry["file"])]
+              assert len(matches) == 1, f"missing or duplicated PDF viewer asset: {stem}"
+              entry = matches[0]
+              if extension in ("js", "mjs"):
+                  assert entry["content_type"] in ("application/javascript", "text/javascript")
+              assets.add("/_topcoat/assets/" + entry["file"])
+          # Absolute bundle URLs must also resolve when requested by a deep job page.
           for asset in assets:
-              with urlopen(base + asset, timeout=10) as response:
+              with urlopen(Request(base + asset, headers={"Referer": base + "/ocr/jobs/" + "0" * 32}), timeout=10) as response:
                   assert response.read(), f"empty asset: {asset}"
-          print("Arabic and English pages and their bundled assets are available.")
+                  if asset.endswith((".js", ".mjs")):
+                      assert response.headers.get_content_type() in ("application/javascript", "text/javascript")
+          print("Arabic and English pages, OCR viewer, worker and image decoders are bundled and available.")
           PY
           python3 .github/scripts/diacritization-smoke.py
           docker stop --time 300 arlang-ci

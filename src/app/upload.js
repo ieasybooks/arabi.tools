@@ -1,136 +1,219 @@
-// Uploads the chosen file with a progress bar, after reserving a place in the queue so a
-// full queue is reported before any time is spent uploading. Messages come from the form's
-// data attributes, already in the page's language.
-
-const form = document.getElementById("upload-form");
-
-if (form) {
-  const input = form.elements.file;
-  const fileName = form.querySelector(".file-name");
-  const button = form.querySelector("button[type=submit]");
-  const progress = form.querySelector(".upload-progress");
-  const bar = progress.querySelector("progress");
-  const error = form.querySelector(".error");
-  const back = form.querySelector(".return-to-job");
-  const extensions = form.dataset.extensions.split(",");
-  const maxBytes = Number(form.dataset.maxBytes);
-  let inProgress = false;
-
-  const setInProgress = (value) => {
-    inProgress = value;
-    input.disabled = value;
-    button.disabled = value;
-  };
-
-  const randomId = () =>
-    Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
-      byte.toString(16).padStart(2, "0"),
-    ).join("");
-  // This tab's upload attempt, which lets it replace a reservation it lost. It is made when a
-  // file is sent and dropped once the upload arrives. A duplicated tab, or one this page opens,
-  // starts with a copy of the session storage, so the attempt is kept there only while the
-  // page is away, for a reload or the Back button to pick up.
-  let attempt = null;
-  const takeStoredAttempt = () => {
-    try {
-      attempt = sessionStorage.getItem("attempt") || attempt;
-      sessionStorage.removeItem("attempt");
-    } catch {
-      // Storage is blocked, so the attempt ends with the page.
-    }
-  };
-  takeStoredAttempt();
-  window.addEventListener("pagehide", () => {
-    try {
-      if (attempt) sessionStorage.setItem("attempt", attempt);
-    } catch {
-      // Storage is blocked.
-    }
-  });
-
-  const problemWith = (file) => {
-    if (!file) return form.dataset.missing;
-    const dot = file.name.lastIndexOf(".");
-    const extension = dot > 0 ? file.name.slice(dot + 1).toLowerCase() : "";
-    if (!extensions.includes(extension)) return form.dataset.wrongType;
-    if (file.size > maxBytes) return form.dataset.tooLarge;
-    return null;
-  };
-
-  const showError = (message, job) => {
-    error.textContent = message;
-    error.hidden = false;
-    progress.hidden = true;
-    back.hidden = !job;
-    if (job) back.href = job;
-  };
-
-  // Sends a POST and resolves with its JSON reply, or rejects with an error to show.
-  const post = (url, body, onProgress) =>
-    new Promise((resolve, reject) => {
-      const request = new XMLHttpRequest();
-      request.open("POST", url);
-      request.responseType = "json";
-      if (onProgress) {
-        request.upload.onprogress = (event) => {
-          if (event.lengthComputable) onProgress(event.loaded / event.total);
-        };
-      }
-      request.onload = () => {
-        const reply = request.response;
-        if (reply && reply.error) reject(reply);
-        else if (request.status === 413) reject({ error: form.dataset.tooLarge });
-        else if (request.status < 300 && reply) resolve(reply);
-        else reject({ error: form.dataset.failed });
-      };
-      request.onerror = () => reject({ error: form.dataset.failed });
-      request.send(body);
-    });
-
-  // The Back button can restore this page from the browser's cache, even mid-submission.
-  window.addEventListener("pageshow", (event) => {
-    if (!event.persisted) return;
-    takeStoredAttempt();
-    setInProgress(false);
-    progress.hidden = true;
-  });
-
-  input.addEventListener("change", () => {
-    if (inProgress) return;
-    if (input.files[0]) fileName.textContent = input.files[0].name;
-    const problem = problemWith(input.files[0]);
-    if (problem) showError(problem);
-    else {
+// ASR and OCR keep their own routes and validation contracts. This controller owns
+// only file selection, one submission attempt, and the accepted job's observation.
+(() => {
+  const app = window.arabiTools;
+  const active = new Set(['reserving', 'uploading', 'validating', 'observing', 'reserved', 'queued', 'processing']);
+  app.mount('[data-workspace="transcript"], [data-workspace="ocr"]', root => {
+    const form = root.querySelector('#upload-form');
+    const input = form.elements.file;
+    const button = form.querySelector('[type=submit]');
+    const progress = form.querySelector('.upload-progress');
+    const bar = progress.querySelector('progress');
+    const status = progress.querySelector('.submission-status');
+    const percentLabel = progress.querySelector('.submission-percent');
+    const detail = progress.querySelector('.server-detail');
+    const error = form.querySelector('.error');
+    const back = form.querySelector('.return-to-job');
+    const lifetime = new AbortController();
+    const attemptKey = `${form.dataset.tool}:attempt`;
+    let attempt = app.stored(attemptKey);
+    // Only a page being left stores its attempt. A tab opened from this page
+    // cannot inherit the identity of its still-active upload.
+    app.store(attemptKey, null);
+    let state = { phase: 'idle', job: null };
+    let generation = 0;
+    let request;
+    let disposed = false;
+    let uncertainUpload = false;
+    let recovering = false;
+    let recoveryTimer;
+    const locked = () => active.has(state.phase);
+    const current = run => !disposed && run === generation;
+    const clearError = () => {
       error.hidden = true;
       back.hidden = true;
+      input.setAttribute('aria-invalid', 'false');
+    };
+    const showError = (message, job, invalid = false) => {
+      if (error.textContent !== message) error.textContent = message;
+      error.hidden = false;
+      back.hidden = !job;
+      if (job) back.href = job;
+      input.setAttribute('aria-invalid', String(invalid));
+    };
+    // A chosen file is one bar with the run button at its end. Result first: while the workspace
+    // holds the result of the file still chosen, the bar folds into the result's card as its top
+    // row and its button steps down to secondary. Choosing another file, or removing it, unfolds
+    // it. The button stays the same element, so it keeps its focus. Folding above the visitor's
+    // view would move the page, so then it waits until the input is back in view.
+    let resultIsCurrent = false;
+    const fold = () => {
+      form.toggleAttribute('data-collapsed', resultIsCurrent);
+      button.classList.toggle('primary', !resultIsCurrent);
+      button.classList.toggle('secondary', resultIsCurrent);
+    };
+    const foldInView = () => {
+      if (form.hasAttribute('data-collapsed') !== resultIsCurrent && form.getBoundingClientRect().top >= 0) fold();
+    };
+    window.addEventListener('scroll', foldInView, { passive: true, signal: lifetime.signal });
+    const updateFile = app.fileSelection(form, button, locked, problem => {
+      resultIsCurrent = false;
+      fold();
+      clearError();
+      if (problem) showError(problem, null, true);
+      // Without a file the run button is not shown; the drop zone takes its focus.
+      if (!input.files.length && document.activeElement === button) input.focus({ preventScroll: true });
+    }, lifetime.signal);
+    const transition = (phase, message = '', percent) => {
+      state = { ...state, phase };
+      root.dataset.phase = phase;
+      input.disabled = locked();
+      // Keep the user's Submit button focusable throughout the operation.
+      button.setAttribute('aria-disabled', String(locked()));
+      updateFile();
+      progress.hidden = ['idle', 'invalid', 'failed'].includes(phase);
+      if (status.textContent !== message) status.textContent = message;
+      bar.hidden = !active.has(phase);
+      bar.setAttribute('aria-label', message || form.dataset.observing);
+      if (percent === undefined) bar.removeAttribute('value'); else bar.value = percent;
+      percentLabel.textContent = percent === undefined ? '' : new Intl.NumberFormat(document.documentElement.lang, { style: 'percent' }).format(percent / 100);
+      if (phase !== 'processing') detail.textContent = '';
+    };
+    const observer = app.observeWorkspace(root, (phase, message, result, update) => {
+      if (phase === 'completed' && result) {
+        resultIsCurrent = true; // The input stays locked while a job runs, so it is the file sent.
+        foldInView();
+      }
+      if (['completed', 'failed', 'missing'].includes(phase)) {
+        uncertainUpload = false;
+        clearTimeout(recoveryTimer);
+        attempt = null;
+        app.store(attemptKey, null);
+        clearError();
+      }
+      const serverBar = update.querySelector('progress[value]');
+      transition(phase, message, serverBar ? serverBar.value : undefined);
+      detail.textContent = update.querySelector('.page-progress')?.textContent || '';
+      if (phase === 'failed') showError(message);
+      if (phase === 'reserved' && uncertainUpload) void recoverUpload();
+    });
+    const post = (url, body, upload, run, timeout = 0) => new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      request = xhr;
+      xhr.open('POST', url);
+      xhr.responseType = 'json';
+      xhr.timeout = timeout;
+      if (upload) {
+        xhr.upload.onprogress = event => {
+          if (current(run) && state.phase === 'uploading' && event.lengthComputable) {
+            transition('uploading', form.dataset.uploading, Math.round(event.loaded / event.total * 100));
+          }
+        };
+        xhr.upload.onload = () => {
+          if (current(run) && state.phase === 'uploading') transition('validating', form.dataset.validating);
+        };
+      }
+      const finish = () => { if (request === xhr) request = null; };
+      xhr.onload = () => {
+        finish();
+        if (xhr.response?.error) reject(xhr.response);
+        else if (xhr.status === 413) reject({ error: form.dataset.tooLarge });
+        else if (xhr.status >= 200 && xhr.status < 300 && xhr.response) resolve(xhr.response);
+        else reject({ error: form.dataset.failed, uncertain: true });
+      };
+      xhr.onerror = xhr.onabort = xhr.ontimeout = () => { finish(); reject({ error: form.dataset.failed, uncertain: true }); };
+      xhr.send(body);
+    });
+    async function recoverUpload() {
+      if (recovering || !uncertainUpload || !state.job?.recover) return;
+      clearTimeout(recoveryTimer);
+      const run = generation;
+      const job = state.job;
+      recovering = true;
+      try {
+        const reply = await post(job.recover, new URLSearchParams(), false, run, 15_000);
+        if (!current(run) || state.job !== job || !uncertainUpload || reply.retry !== true) return;
+        // The server revoked the unused reservation under the same lock as
+        // begin_upload. A late upload can no longer be accepted after we unlock.
+        uncertainUpload = false;
+        // Recovery can finish while the visitor is on a link that folds away.
+        // Keep unrelated focus in place; the selected file's button stays mounted.
+        const focused = document.activeElement;
+        if (progress.contains(focused) || focused === back || focused === root.querySelector('.retry-observation')) {
+          button.focus({ preventScroll: true });
+        }
+        observer.begin();
+        state.job = null;
+        const language = document.querySelector('.language-switch input[name=back]');
+        if (language) language.value = location.pathname;
+        transition('failed');
+        showError(form.dataset.failed);
+      } catch {
+        // The release response can be lost too. A removed reservation stops its
+        // observer's heartbeats, so repeat the idempotent check independently.
+        if (current(run) && uncertainUpload && state.job === job) {
+          recoveryTimer = setTimeout(() => { void recoverUpload(); }, 2_000);
+        }
+      } finally {
+        if (current(run)) recovering = false;
+      }
     }
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      if (locked()) return;
+      const problem = app.fileProblem(form);
+      if (problem) { transition('invalid'); showError(problem, null, true); return; }
+      const file = input.files[0];
+      const run = ++generation;
+      uncertainUpload = false;
+      recovering = false;
+      clearTimeout(recoveryTimer);
+      observer.begin();
+      state = { phase: 'idle', job: null };
+      clearError();
+      transition('reserving', form.dataset.reserving);
+      try {
+        attempt ??= app.randomId();
+        const reservation = await post(form.dataset.reserve, new URLSearchParams({ attempt }), false, run);
+        if (!current(run)) return;
+        state.job = reservation;
+        observer.reserve(reservation);
+        const body = new FormData();
+        body.append('file', file);
+        transition('uploading', form.dataset.uploading, 0);
+        const reply = await post(reservation.upload, body, true, run);
+        if (!current(run)) return;
+        attempt = null;
+        app.store(attemptKey, null);
+        state.job = { ...reservation, ...reply };
+        transition('observing', form.dataset.observing);
+        // Set and announce the exact File before any result can be rendered.
+        observer.watch(state.job, file);
+      } catch (failure) {
+        if (!current(run)) return;
+        if (failure?.uncertain && state.job) {
+          // An upload can have arrived even if its response was lost. Observe
+          // its existing identity and keep duplicate submission locked.
+          transition('observing', form.dataset.observing);
+          uncertainUpload = true;
+          observer.watch(state.job, file);
+          void recoverUpload();
+        } else {
+          transition('failed');
+        }
+        showError(failure?.error || form.dataset.failed, failure?.job || state.job?.next);
+      }
+    }, { signal: lifetime.signal });
+    window.addEventListener('pagehide', () => { if (attempt) app.store(attemptKey, attempt); }, { signal: lifetime.signal });
+    window.addEventListener('pageshow', event => { if (event.persisted) app.store(attemptKey, null); }, { signal: lifetime.signal });
+    transition('idle');
+    return () => {
+      disposed = true;
+      generation++;
+      lifetime.abort();
+      clearTimeout(recoveryTimer);
+      request?.abort();
+      observer.dispose();
+    };
   });
-
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (inProgress) return;
-    const file = input.files[0];
-    const problem = problemWith(file);
-    if (problem) return showError(problem);
-
-    error.hidden = true;
-    back.hidden = true;
-    setInProgress(true);
-    bar.value = 0;
-    progress.hidden = false;
-    try {
-      attempt ??= randomId();
-      const reservation = await post(form.dataset.reserve, new URLSearchParams({ attempt }));
-      const data = new FormData();
-      data.append("file", file);
-      const result = await post(reservation.upload, data, (done) => {
-        bar.value = Math.round(done * 100);
-      });
-      attempt = null; // Its reservation is used, so there is nothing left to replace.
-      window.location.assign(result.next);
-    } catch (failure) {
-      setInProgress(false);
-      showError(failure?.error || form.dataset.failed, failure?.job);
-    }
-  });
-}
+})();

@@ -1,6 +1,8 @@
 // Expected mark ordering is copied from the released model reference fixtures.
 #![allow(clippy::unicode_not_nfc)]
 
+#[path = "support/runtime.rs"]
+mod runtime;
 #[allow(dead_code)]
 mod support;
 
@@ -513,4 +515,126 @@ fn part(bytes: &[u8], name: &str) -> anyhow::Result<Vec<u8>> {
     let mut content = Vec::new();
     archive.by_name(name)?.read_to_end(&mut content)?;
     Ok(content)
+}
+
+#[tokio::test]
+async fn workspace_observer_keeps_a_job_alive_reconnects_and_releases_on_abandonment()
+-> anyhow::Result<()> {
+    use arlang_tools::queue::{Limits, Queue};
+    let mut tool = Diacritization::unavailable(&Slots::new(RUNNING_JOBS));
+    tool.queue = Queue::new(
+        Limits {
+            jobs: 8,
+            running: 3,
+            upload_start: Duration::from_secs(10),
+            unwatched: Duration::from_millis(40),
+            keep_finished: Duration::from_secs(10),
+        },
+        tool.queue.slots(),
+    );
+    let app = TestApp::start_with_diacritization(tool).await?;
+    let id = app.diacritization.queue.reserve(None, None).unwrap();
+    app.diacritization
+        .queue
+        .begin_upload(&id)
+        .unwrap()
+        .submit(|_| async { std::future::pending::<anyhow::Result<Document>>().await })
+        .unwrap();
+    let mut socket = runtime::RuntimeSocket::open(&app.url("/")).await?;
+    socket
+        .observe("/diacritize/observe", &id.to_string())
+        .await?;
+    socket.until("running").await?;
+    tokio::time::sleep(Duration::from_millis(80)).await;
+    app.diacritization.queue.sweep();
+    assert!(app.diacritization.queue.is_unfinished(&id));
+    drop(socket);
+    let mut socket = runtime::RuntimeSocket::open(&app.url("/")).await?;
+    socket
+        .observe("/diacritize/observe", &id.to_string())
+        .await?;
+    socket.until("running").await?;
+    tokio::time::sleep(Duration::from_millis(80)).await;
+    app.diacritization.queue.sweep();
+    assert!(app.diacritization.queue.is_unfinished(&id));
+    drop(socket);
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    app.diacritization.queue.sweep();
+    assert!(matches!(
+        app.diacritization.queue.watch(&id).unwrap().status(),
+        Status::Cancelled(CancelReason::Unwatched)
+    ));
+    app.stop().await
+}
+
+#[tokio::test]
+async fn workspace_observer_checks_ids_and_returns_private_missing_state() -> anyhow::Result<()> {
+    let app = TestApp::start().await?;
+    for (id, status) in [
+        ("not-a-job", StatusCode::NOT_FOUND),
+        ("00000000000000000000000000000000", StatusCode::OK),
+    ] {
+        let response = app
+            .client
+            .post(app.url("/diacritize/observe"))
+            .json(&serde_json::json!({"args": [id], "signals": {}}))
+            .send()
+            .await?;
+        assert_eq!(response.status(), status);
+        assert!(
+            response.headers()["cache-control"]
+                .to_str()?
+                .contains("no-store")
+        );
+        if status == StatusCode::OK {
+            assert!(response.text().await?.contains("missing"));
+        }
+    }
+    app.stop().await
+}
+
+#[tokio::test]
+#[ignore = "requires the verified model cache and native ONNX Runtime"]
+async fn terminal_workspace_observer_releases_the_disk_result_while_socket_stays_open()
+-> anyhow::Result<()> {
+    use arlang_tools::queue::{Limits, Queue};
+    let cache = PathBuf::from(std::env::var_os("TASHKEEL_MODEL_CACHE").context("model cache")?);
+    let mut tool = Diacritization::unavailable(&Slots::new(RUNNING_JOBS));
+    tool.initialize(
+        &cache,
+        std::env::var_os("ORT_DYLIB_PATH").map(PathBuf::from),
+    )
+    .await?;
+    tool.queue = Queue::new(
+        Limits {
+            jobs: 8,
+            running: 3,
+            upload_start: Duration::from_secs(10),
+            unwatched: Duration::from_secs(10),
+            keep_finished: Duration::ZERO,
+        },
+        tool.queue.slots(),
+    );
+    let app = TestApp::start_with_diacritization(tool).await?;
+    let job = submit_text(&app, "shakkelha", "اللغة العربية جميلة").await?;
+    let mut socket = runtime::RuntimeSocket::open(&app.url("/")).await?;
+    socket
+        .observe("/diacritize/observe", job.rsplit('/').next().unwrap())
+        .await?;
+    socket.until("completed").await?;
+    let document = finished(&app, &job).await?;
+    let weak = Arc::downgrade(&document);
+    let path = document.path.clone();
+    drop(document);
+    // Expiry is measured from completion. An open terminal observer cannot extend it.
+    app.diacritization.queue.sweep();
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while weak.upgrade().is_some() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await?;
+    assert!(!path.exists());
+    drop(socket);
+    app.stop().await
 }

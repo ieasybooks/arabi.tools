@@ -8,12 +8,13 @@
 //! The port defaults to 9876. Set `MOCK_WIT_DELAY_MS` on the first command to change the delay per chunk (default 1500 ms), for example `MOCK_WIT_DELAY_MS=5000`.
 
 use std::net::TcpListener;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use anyhow::Context;
 use serde_json::json;
 use wiremock::matchers::{method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -37,22 +38,31 @@ async fn main() -> anyhow::Result<()> {
         ])))
         .mount(&server)
         .await;
-    // tafrigh adds 500 ms of silence before each chunk's speech.
+    // Each request receives a different cue, with a repeated search word. These
+    // are deterministic UI fixtures, independent of the uploaded speech language.
+    let requests = AtomicUsize::new(0);
     Mock::given(method("POST"))
         .and(path("/dictation"))
-        .respond_with(
+        .respond_with(move |_: &Request| {
+            let samples = [
+                "مرحبا بالعالم كِتَاب مُدَر\u{0650}\u{0651}س كتاب",
+                "مـدرسة عـَلَم أمل إمل آمل كتاب",
+                "😀 كتاب Arabic 123 <b> & \"نص\" [a.*] café",
+            ];
+            let text = samples[requests.fetch_add(1, Ordering::Relaxed) % samples.len()];
+            // tafrigh adds 500 ms of silence before each chunk's speech.
+            let tokens: Vec<_> = text.split_whitespace().enumerate().map(|(index, token)| {
+                json!({"token": token, "start": 500 + index * 5, "end": 505 + index * 5, "confidence": 0.99})
+            }).collect();
             ResponseTemplate::new(200)
                 .set_body_json(json!({
                     "type": "FINAL_TRANSCRIPTION",
                     "is_final": true,
-                    "text": "مرحبا بالعالم",
-                    "speech": {"confidence": 0.99, "tokens": [
-                        {"token": "مرحبا", "start": 500, "end": 600, "confidence": 0.99},
-                        {"token": "بالعالم", "start": 600, "end": 700, "confidence": 0.99}
-                    ]}
+                    "text": text,
+                    "speech": {"confidence": 0.99, "tokens": tokens}
                 }))
-                .set_delay(Duration::from_millis(delay)),
-        )
+                .set_delay(Duration::from_millis(delay))
+        })
         .mount(&server)
         .await;
     println!(

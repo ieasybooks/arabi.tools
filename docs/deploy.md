@@ -66,6 +66,8 @@ Jobs and finished results are held in memory and do not survive replacement. Use
 
 ## OCR runtime and credentials
 
+The browser OCR preview bundles [PDF.js and its rendering resources](../src/app/vendor/pdfjs/README.md) through Topcoat alongside the binary, including its same-origin worker; it needs no additional host, endpoint, or retained upload. Container checks cover JavaScript/CSS/vendor changes and verify the viewer module, worker MIME types and rendering resources.
+
 The runtime image includes PDFium chromium/8111 beside the app binary, with its `LICENSE` and third-party `licenses/` under `/usr/share/doc/pdfium`. `deploy/pdfium.sh` verifies the upstream archive against tahweel's pinned SHA-256 before extracting it. The script supports Linux x86-64 and arm64; the release workflow currently builds x86-64.
 
 Store `DRIVE_SERVICE_ACCOUNTS` as a JSON array, not a JSON string containing an array. The private key's newlines must be JSON `\n` escapes. The workflow's `deploy/write-env.py` validates and compacts the JSON, then writes it as a single-quoted Compose value. Single quotes preserve JSON backslashes and dollar signs through both `--env-file` and the service's `env_file`; apostrophes and dollar signs inside JSON strings become `\u0027` and `\u0024`. Key contents survive unchanged. Do not source `.env` as a shell script or print the resolved Compose configuration. `python3 tests/deploy_env.py` checks this path with generated dummy values and the installed Docker Compose parser.

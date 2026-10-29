@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, truncate, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
+import { allowClipboard } from "./review-helpers.js";
 
 const source = "\n  اللُّغة العربية جميلة، API 2026.\nهذا نص للتشكيل.  ";
 const stripMarks = (text) => text.replace(/[\u064b-\u0652]/gu, "");
@@ -35,8 +36,10 @@ function docxPart(bytes, name) {
   return execFileSync("python3", ["-c", "import io, sys, zipfile; sys.stdout.buffer.write(zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())).read(sys.argv[1]))", name], { input: bytes }).toString();
 }
 
-async function download(page, label) {
+// A document result lists its two downloads in the Download menu.
+async function download(page, label, menu = false) {
   const started = page.waitForEvent("download");
+  if (menu) await page.locator(".download-menu summary").click();
   await page.getByRole("link", { name: label, exact: true }).click();
   const result = await started;
   expect(await result.failure()).toBeNull();
@@ -52,10 +55,10 @@ for (const locale of [
   {
     code: "ar", dir: "rtl", name: "تشكيل النص العربي", text: "نص", document: "مستند",
     original: "النص الأصلي", result: "النص المشكول", submit: "شكِّل النص", upload: "شكِّل المستند",
-    file: "ملف TXT أو DOCX", done: "اكتمل التشكيل.", copy: "نسخ النص", copied: "نُسخ النص.",
+    file: "ملف TXT أو DOCX", done: "اكتمل التشكيل.", copy: "نسخ النص كاملًا", copied: "نُسخ النص",
     txt: "تنزيل النص (TXT)", docx: "تنزيل مستند Word (DOCX)", originalFile: "تنزيل الملف الأصلي",
     limit: "أدخل نصًا لا يتجاوز 1000 حرفًا، بما فيها الحركات والمسافات.",
-    wrongType: "نقبل ملف TXT أو DOCX واحدًا فقط. ملفات DOC غير مدعومة.",
+    wrongFile: "الملف \u2068legacy.doc\u2069 ليس بصيغة TXT أو DOCX.",
     invalidUtf8: "تعذّر قراءة ترميز النص. احفظ ملف TXT بترميز UTF-8 ثم حاول مرة أخرى.",
     invalidDocx: "تعذّر قراءة مستند Word. تأكد أنه ملف DOCX سليم وغير محمي بكلمة مرور.",
     docxLimits: "يتجاوز محتوى مستند Word أو ناتج تشكيله حدود المعالجة. قسّمه إلى مستندات أصغر وفقرات أقصر ثم حاول مرة أخرى.",
@@ -68,10 +71,10 @@ for (const locale of [
   {
     code: "en", dir: "ltr", name: "Arabic diacritization", text: "Text", document: "Document",
     original: "Original text", result: "Diacritized text", submit: "Diacritize text", upload: "Diacritize document",
-    file: "TXT or DOCX file", done: "Diacritization complete.", copy: "Copy text", copied: "Text copied.",
+    file: "TXT or DOCX file", done: "Diacritization complete.", copy: "Copy all text", copied: "Text copied",
     txt: "Download text (.txt)", docx: "Download Word document (.docx)", originalFile: "Download original file",
     limit: "Enter up to 1000 characters, including diacritics and spaces.",
-    wrongType: "Choose exactly one TXT or DOCX file. DOC files are not supported.",
+    wrongFile: "\u2068legacy.doc\u2069 is not a TXT or DOCX file.",
     invalidUtf8: "We could not read the text encoding. Save the TXT file as UTF-8 and try again.",
     invalidDocx: "We could not read this Word document. Check that it is a valid DOCX file and is not password protected.",
     docxLimits: "This Word document's content or diacritized output exceeds processing limits. Split it into smaller documents and shorter paragraphs, then try again.",
@@ -89,10 +92,10 @@ for (const locale of [
     await expect(page.locator("html")).toHaveAttribute("dir", locale.dir);
   }
 
-  test(`Diacritization retains input, copies, downloads and retries both models in ${locale.code}`, async ({ page, context }) => {
+  test(`Diacritization retains input, copies, downloads and retries both models in ${locale.code}`, async ({ page, context, browserName }) => {
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await allowClipboard(context, browserName);
     await open(page, "/");
     await fitsViewport(page);
     if (process.env.DIACRITIZATION_SCREENSHOT_DIR) {
@@ -118,31 +121,62 @@ for (const locale of [
     await expect(page.locator('bdi[lang="en"]')).toHaveAttribute("dir", "ltr");
     await page.getByLabel(locale.original, { exact: true }).fill(source);
     for (const model of ["شكِّلها", "CATT"]) {
-      const previousUrl = page.url();
+      const previousJob = await page.locator(".workspace-recovery").getAttribute("href");
+      const documentStart = await page.evaluate(() => performance.timeOrigin);
       await page.getByRole("radio", { name: model, exact: true }).check();
       await page.getByRole("button", { name: locale.submit, exact: true }).click();
-      await page.waitForURL((url) => /\/diacritize\/jobs\/[a-f0-9]{32}$/.test(url.pathname) && url.href !== previousUrl);
+      await expect(page.locator(".workspace-recovery")).toHaveAttribute("href", /\/diacritize\/jobs\/[a-f0-9]{32}$/);
+      await expect(page.locator(".workspace-recovery")).not.toHaveAttribute("href", previousJob || "");
       await expect(page.locator("#job-status")).toHaveText(locale.done, { timeout: 60_000 });
       const output = await page.getByLabel(locale.result, { exact: true }).inputValue();
       expect(stripMarks(output)).toBe(stripMarks(source));
       expect(output).toMatch(/[\u064b-\u0652]/u);
       await expect(page.getByLabel(locale.original, { exact: true })).toHaveValue(source);
       await expect(page.getByRole("radio", { name: model, exact: true })).toBeChecked();
+      if (model !== "CATT") {
+        // One container: input and output side by side, the same height, split by one line; the
+        // output has no grip, its text starts level with the input's, and a slim header row above
+        // it, level with the tabs, holds the model and the two actions on one line. Only the
+        // Diacritize button is filled.
+        const layout = await page.evaluate(() => {
+          const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+          const head = [...document.querySelectorAll(".diacritize-output-head > .diacritize-model, .diacritize-output-head .result-actions > *")]
+            .map((element) => Math.round(element.getBoundingClientRect().top + element.getBoundingClientRect().height / 2));
+          return {
+            input: box("#diacritize-form"), output: box(".workspace-review"), box: box(".diacritize-box"),
+            source: box("#source-text"), result: box("#diacritized-text"), head, tabs: box(".diacritize-top"),
+            actions: box(".diacritize-output-head .result-actions"),
+            filled: [...document.querySelectorAll(".diacritize-box .button.primary")].filter((button) => button.getClientRects().length).length,
+            resize: getComputedStyle(document.querySelector("#diacritized-text")).resize,
+            border: getComputedStyle(document.querySelector("#diacritized-text")).borderTopStyle,
+          };
+        });
+        expect(Math.round(layout.input.top)).toBe(Math.round(layout.output.top));
+        expect(Math.round(layout.input.height)).toBe(Math.round(layout.output.height));
+        expect(Math.round(layout.input.width + layout.output.width)).toBeGreaterThanOrEqual(Math.round(layout.box.width) - 2);
+        expect(Math.abs(layout.source.top - layout.result.top)).toBeLessThanOrEqual(1);
+        expect(layout.resize).toBe("none");
+        expect(layout.border).toBe("none");
+        expect(Math.max(...layout.head) - Math.min(...layout.head)).toBeLessThanOrEqual(4);
+        expect(layout.actions.bottom).toBeLessThanOrEqual(layout.tabs.bottom + 1);
+        expect(layout.filled).toBe(1);
+      }
       await page.getByRole("button", { name: locale.copy, exact: true }).click();
       await expect(page.locator(".copy-status")).toHaveText(locale.copied);
       expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(output);
       const result = await download(page, locale.txt);
       expect(result.name).toBe("text.txt");
       expect(result.bytes.toString()).toBe(output);
-      await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
+      expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentStart);
       await fitsViewport(page);
       // A saved result retains its own model and text mode even after this tab
       // chooses different defaults on the tool page.
-      const completedUrl = page.url();
+      const completedUrl = await page.locator(".workspace-recovery").getAttribute("href");
       await page.goto("/diacritize");
       await page.getByRole("radio", { name: model === "CATT" ? "شكِّلها" : "CATT", exact: true }).check();
       await page.getByRole("radio", { name: locale.document, exact: true }).check();
       await page.goto(completedUrl);
+      await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
       await expect(page.getByLabel(locale.original, { exact: true })).toBeVisible();
       await expect(page.getByLabel(locale.original, { exact: true })).toHaveValue(source);
       await expect(page.getByRole("radio", { name: model, exact: true })).toBeChecked();
@@ -166,12 +200,10 @@ for (const locale of [
       const page = await context.newPage();
       await page.goto(`${address}/diacritize`);
       await page.getByLabel(locale.original, { exact: true }).fill(source);
-      const [request] = await Promise.all([
-        page.waitForRequest((request) => request.isNavigationRequest()),
-        page.getByRole("button", { name: locale.submit, exact: true }).click(),
-      ]);
-      expect(request.method()).toBe("POST");
-      expect(new URL(request.url()).search).toBe("");
+      await expect(page.getByRole("button", { name: locale.submit, exact: true })).toBeDisabled();
+      await expect(page.locator("noscript")).toBeVisible();
+      await expect(page.getByLabel(locale.original, { exact: true })).toHaveValue(source);
+      expect(new URL(page.url()).search).toBe("");
     } finally {
       await context.close();
     }
@@ -182,16 +214,16 @@ for (const locale of [
     const input = page.getByLabel(locale.original, { exact: true });
     expect(await input.getAttribute("maxlength")).toBeNull();
     await input.fill("🙂".repeat(1001));
-    await expect(page.locator("#text-count")).toContainText("1001 / 1000");
+    await expect(page.locator("#text-count")).toContainText(locale.code === "ar" ? "1001 من 1000" : "1001 / 1000");
     await expect(page.getByRole("alert")).toHaveText(locale.limit);
     await page.getByRole("button", { name: locale.submit, exact: true }).click();
     await expect(page).toHaveURL(/\/diacritize$/);
     const boundary = `${"🙂".repeat(999)}ا`;
     await input.fill(boundary);
-    await expect(page.locator("#text-count")).toContainText("1000 / 1000");
+    await expect(page.locator("#text-count")).toContainText(locale.code === "ar" ? "1000 من 1000" : "1000 / 1000");
     await expect(page.getByRole("alert")).toBeHidden();
     await page.getByRole("button", { name: locale.submit, exact: true }).click();
-    await page.waitForURL(/\/diacritize\/jobs\/[a-f0-9]{32}$/);
+    await expect(page.locator(".workspace-recovery")).toHaveAttribute("href", /\/diacritize\/jobs\/[a-f0-9]{32}$/);
     await expect(page.locator("#job-status")).toHaveText(locale.done, { timeout: 60_000 });
     await expect(page.getByLabel(locale.original, { exact: true })).toHaveValue(boundary);
   });
@@ -211,10 +243,11 @@ for (const locale of [
       await page.getByRole("radio", { name: locale.document, exact: true }).check();
       await page.getByLabel(locale.file, { exact: true }).setInputFiles({ name: `مستند.${extension}`, mimeType: extension === "txt" ? "text/plain" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: bytes });
       await page.getByRole("button", { name: locale.upload, exact: true }).click();
-      await page.waitForURL(/\/diacritize\/jobs\/[a-f0-9]{32}$/);
+      await expect(page.locator(".workspace-recovery")).toHaveAttribute("href", /\/diacritize\/jobs\/[a-f0-9]{32}$/);
       await expect(page.locator("#job-status")).toHaveText(locale.done, { timeout: 60_000 });
-      await expect(page.locator(".result-heading bdi")).toHaveText(model);
-      const result = await download(page, locale[extension]);
+      // The result is labelled with the model that produced it, in the output's header row.
+      await expect(page.locator(".diacritize-output-head .diacritize-model bdi")).toHaveText(model);
+      const result = await download(page, locale[extension], true);
       expect(result.name).toBe(`مستند.${extension}`);
       if (extension === "txt") {
         expect(stripMarks(result.bytes.toString())).toBe(txt.toString());
@@ -226,24 +259,29 @@ for (const locale of [
         expect(stripMarks(after)).toBe(before);
         expect(docxPart(result.bytes, "word/styles.xml")).toBe(docxPart(docx, "word/styles.xml"));
       }
-      const original = await download(page, locale.originalFile);
+      const original = await download(page, locale.originalFile, true);
       expect(original.bytes).toEqual(bytes);
       await expect(page.locator("#diacritized-text")).toHaveCount(0);
       await fitsViewport(page);
     }
   });
 
-  test(`Diacritization rejects DOC, oversized files and invalid documents in ${locale.code}`, async ({ page }) => {
+  test(`Diacritization rejects DOC, oversized files and invalid documents in ${locale.code}`, async ({ page }, testInfo) => {
     await open(page);
     await page.getByRole("radio", { name: locale.document, exact: true }).check();
     const input = page.getByLabel(locale.file, { exact: true });
     await input.setInputFiles({ name: "legacy.doc", mimeType: "application/msword", buffer: Buffer.from("legacy") });
-    await expect(page.getByRole("alert")).toHaveText(locale.wrongType);
-    await input.setInputFiles({ name: "large.txt", mimeType: "text/plain", buffer: Buffer.from("test") });
-    // Exercise the browser's boundary without allocating a 99 MB fixture for this UI check.
-    await input.evaluate((element) => Object.defineProperty(element.files[0], "size", { value: 99_000_001 }));
-    await page.getByRole("button", { name: locale.upload, exact: true }).click();
+    await expect(page.getByRole("alert")).toHaveText(locale.wrongFile);
+    // A sparse local file exercises the real size in both engines without a large
+    // in-memory buffer or an override on a browser-owned File wrapper.
+    const oversized = testInfo.outputPath("large.txt");
+    await writeFile(oversized, "");
+    await truncate(oversized, 99_000_001);
+    // An oversized file is refused as it is chosen and never becomes the chosen file.
+    await input.setInputFiles(oversized);
     await expect(page.getByRole("alert")).toHaveText(locale.tooLarge);
+    await expect(page.locator(".file-row")).toBeHidden();
+    await expect(page.getByRole("button", { name: locale.upload, exact: true })).toBeDisabled();
     for (const [name, bytes, message] of [
       ["invalid.txt", Buffer.from([0xff]), locale.invalidUtf8],
       ["invalid.docx", Buffer.from("broken"), locale.invalidDocx],
@@ -361,7 +399,8 @@ for (const locale of [
       await page.getByRole("button", { name: locale.submit, exact: true }).click();
       await expect.poll(() => completedUrl).toBeTruthy();
       await page.getByRole("button", { name: locale.cancel, exact: true }).click();
-      await expect(page).toHaveURL(new RegExp(`${completedUrl}$`));
+      await expect(page.locator(".workspace-recovery")).toHaveAttribute("href", completedUrl);
+      await expect(page).toHaveURL(/\/diacritize$/);
       await expect(page.locator("#job-status")).toHaveText(locale.done);
       const output = await page.getByLabel(locale.result, { exact: true }).inputValue();
       expect(stripMarks(output)).toBe(stripMarks(source));
@@ -371,17 +410,61 @@ for (const locale of [
     }
   });
 
-  test(`Diacritization cancels a running job in ${locale.code}`, async ({ page }) => {
+  test(`Diacritization keeps observing an accepted job when cancellation fails before its reply in ${locale.code}`, async ({ page }) => {
     await open(page);
-    await page.getByRole("radio", { name: locale.document, exact: true }).check();
-    await page.getByLabel(locale.file, { exact: true }).setInputFiles({ name: "long.txt", mimeType: "text/plain", buffer: Buffer.from("اللغة العربية جميلة وهذا نص طويل للتشكيل.\n".repeat(10_000)) });
-    await page.getByRole("button", { name: locale.upload, exact: true }).click();
-    await page.waitForURL(/\/diacritize\/jobs\/[a-f0-9]{32}$/);
-    await expect(page.getByRole("progressbar")).toBeVisible();
-    await page.getByRole("button", { name: locale.cancel, exact: true }).click();
-    await expect(page.locator("#job-status")).toHaveText(locale.cancelled);
-    await expect(page.getByRole("link", { name: locale.txt, exact: true })).toHaveCount(0);
+    await page.getByLabel(locale.original, { exact: true }).fill(source);
+    let releaseResponse;
+    const held = new Promise((resolve) => { releaseResponse = resolve; });
+    let acceptedUrl;
+    let reservations = 0;
+    let cancellations = 0;
+    page.on("request", (request) => {
+      if (request.method() === "POST" && new URL(request.url()).pathname === "/diacritize/jobs") reservations++;
+    });
+    // The server accepts the text, but its reply reaches the page only after cancellation failed.
+    await page.route("**/diacritize/jobs/*/text", async (route) => {
+      const response = await route.fetch();
+      acceptedUrl = (await response.json()).next;
+      await held;
+      await route.fulfill({ response }).catch(() => {});
+    });
+    await page.route("**/diacritize/jobs/*/cancel", async (route) => {
+      cancellations++;
+      await route.abort("failed");
+    });
+    try {
+      await page.getByRole("button", { name: locale.submit, exact: true }).click();
+      await expect.poll(() => acceptedUrl).toBeTruthy();
+      await page.getByRole("button", { name: locale.cancel, exact: true }).click();
+      await expect(page.getByRole("alert")).toHaveText(locale.cancelFailed);
+      releaseResponse();
+      await expect(page.locator("#job-status")).toHaveText(locale.done);
+      const output = await page.getByLabel(locale.result, { exact: true }).inputValue();
+      expect(stripMarks(output)).toBe(stripMarks(source));
+      const original = page.getByLabel(locale.original, { exact: true });
+      await expect(original).toHaveValue(source);
+      await expect(original).toBeEditable();
+      expect(cancellations).toBe(1);
+      expect(reservations).toBe(1);
+    } finally {
+      releaseResponse();
+    }
   });
+
+  for (const stage of ["submission", "processing"]) {
+    test(`Diacritization cancels during ${stage} in ${locale.code}`, async ({ page }) => {
+      await open(page);
+      await page.getByRole("radio", { name: locale.document, exact: true }).check();
+      await page.getByLabel(locale.file, { exact: true }).setInputFiles({ name: "long.txt", mimeType: "text/plain", buffer: Buffer.from("اللغة العربية جميلة وهذا نص طويل للتشكيل.\n".repeat(10_000)) });
+      await page.getByRole("button", { name: locale.upload, exact: true }).click();
+      await expect(page.locator(".workspace-recovery")).toHaveAttribute("href", /\/diacritize\/jobs\/[a-f0-9]{32}$/);
+      if (stage === "processing") await expect(page.locator("[data-workspace]")).toHaveAttribute("data-phase", "processing");
+      await expect(page.getByRole("progressbar")).toBeVisible();
+      await page.getByRole("button", { name: locale.cancel, exact: true }).click();
+      await expect(page.locator("#job-status")).toHaveText(locale.cancelled);
+      await expect(page.getByRole("link", { name: locale.txt, exact: true })).toHaveCount(0);
+    });
+  }
 
   test(`Diacritization is unavailable without models in ${locale.code}`, async ({ page }) => {
     await open(page, "http://127.0.0.1:3205/diacritize");

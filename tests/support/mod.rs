@@ -220,7 +220,12 @@ impl TestApp {
         let reply = json_reply(response, StatusCode::OK).await?;
         let upload = reply["upload"].as_str().context("missing upload URL")?;
         assert!(upload.starts_with("/transcribe/jobs/") && upload.ends_with("/audio"));
-        assert_eq!(reply, json!({"upload": upload}));
+        let next = upload.strip_suffix("/audio").context("audio route")?;
+        let id = next.rsplit('/').next().unwrap();
+        assert_eq!(
+            reply,
+            json!({"upload": upload, "next": next, "job_id": id, "recover": format!("{next}/recover")})
+        );
         Ok(upload.to_owned())
     }
 

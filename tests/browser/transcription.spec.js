@@ -3,7 +3,11 @@ import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 
 const speech = fileURLToPath(new URL("../fixtures/speech.mp3", import.meta.url));
-const transcript = "مرحبا بالعالم";
+const samples = [
+  "مرحبا بالعالم كِتَاب مُدَرِّس كتاب",
+  "مـدرسة عـَلَم أمل إمل آمل كتاب",
+  '😀 كتاب Arabic 123 <b> & "نص" [a.*] café',
+];
 
 for (const locale of [
   {
@@ -42,22 +46,26 @@ for (const locale of [
         jobNavigations.push(frame.url());
       }
     });
+    await page.evaluate(() => { window.__sentinel = performance.timeOrigin; window.__fileInput = document.querySelector("[name=file]"); });
     await page.getByLabel(locale.file, { exact: true }).setInputFiles(speech);
     await page.getByRole("button", { name: locale.submit, exact: true }).click();
-    await page.waitForURL(/\/transcribe\/jobs\/[a-f0-9]{32}$/);
+    await expect(page.locator(".workspace-recovery")).toHaveAttribute("href", /\/transcribe\/jobs\/[a-f0-9]{32}$/);
     await expect(page.getByRole("progressbar")).toBeVisible();
-    await expect(page.getByText(locale.done, { exact: true })).not.toBeVisible();
+    await expect(page.locator(".submission-status")).not.toHaveText(locale.done);
 
     // The same document must change from running to done, without refresh or polling navigation.
-    await expect(page.getByText(locale.done, { exact: true })).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByText(transcript, { exact: true }).first()).toBeVisible();
-    expect(jobNavigations).toHaveLength(1);
-    const jobPath = new URL(page.url()).pathname;
+    await expect(page.locator(".submission-status")).toHaveText(locale.done, { timeout: 60_000 });
+    await expect(page.locator(".cue-text").first()).toBeVisible();
+    expect(jobNavigations).toHaveLength(0);
+    expect(await page.evaluate(() => window.__sentinel === performance.timeOrigin && window.__fileInput === document.querySelector("[name=file]"))).toBe(true);
+    const jobPath = await page.locator(".workspace-recovery").getAttribute("href");
 
     for (const [extension, label, contentType] of [
       ["txt", locale.text, "text/plain; charset=utf-8"],
       ["srt", locale.subtitles, "application/x-subrip; charset=utf-8"],
     ]) {
+      // Each download is listed in the Download menu, which closes after a choice.
+      await page.locator(".download-menu summary").click();
       const link = page.getByRole("link", { name: label, exact: true });
       const href = await link.getAttribute("href");
       expect(href).toBe(`${jobPath}/transcript.${extension}`);
@@ -70,10 +78,13 @@ for (const locale of [
       const body = await response.text();
       if (extension === "txt") {
         const lines = body.trim().split(/\r?\n/);
-        expect(lines).toContain(transcript);
-        expect(lines.every((line) => line === transcript)).toBe(true);
+        expect(lines.length).toBeGreaterThan(0);
+        expect(lines.every((line) => samples.includes(line))).toBe(true);
       } else {
-        expect(body).toMatch(/^1\r?\n\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}\r?\nمرحبا بالعالم/);
+        expect(body).toMatch(/^1\r?\n\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}\r?\n/);
+        for (const block of body.trim().split("\n\n")) {
+          expect(samples).toContain(block.split("\n").slice(2).join("\n"));
+        }
       }
       const downloadStarted = page.waitForEvent("download");
       await link.click();
@@ -111,8 +122,8 @@ test("the form stays locked while the file is being sent", async ({ page }) => {
 
   release();
   expect(reservations).toBe(1);
-  await page.waitForURL(/\/transcribe\/jobs\/[a-f0-9]{32}$/);
-  await expect(page.getByRole("status")).toHaveText("اكتمل التفريغ.", { timeout: 60_000 });
+  await expect(page.locator(".workspace-recovery")).toHaveAttribute("href", /\/transcribe\/jobs\/[a-f0-9]{32}$/);
+  await expect(page.locator(".submission-status")).toHaveText("اكتمل التفريغ.", { timeout: 60_000 });
 });
 
 // Chooses the recording on the Arabic upload page and sends it.
@@ -132,8 +143,8 @@ test("a reloaded tab replaces the reservation it lost", async ({ page }) => {
   await page.unroute("**/audio");
   await page.reload();
   await send(page);
-  await page.waitForURL(/\/transcribe\/jobs\/[a-f0-9]{32}$/);
-  await expect(page.getByRole("status")).toHaveText("اكتمل التفريغ.", { timeout: 60_000 });
+  await expect(page.locator(".workspace-recovery")).toHaveAttribute("href", /\/transcribe\/jobs\/[a-f0-9]{32}$/);
+  await expect(page.locator(".submission-status")).toHaveText("اكتمل التفريغ.", { timeout: 60_000 });
 });
 
 test("a tab opened from the upload page cannot replace its reservation", async ({ page }) => {
@@ -170,6 +181,6 @@ test("a tab opened from the upload page cannot replace its reservation", async (
 
   // The held upload still arrives and its job runs.
   release();
-  await page.waitForURL(/\/transcribe\/jobs\/[a-f0-9]{32}$/);
-  await expect(page.getByRole("status")).toHaveText("اكتمل التفريغ.", { timeout: 60_000 });
+  await expect(page.locator(".workspace-recovery")).toHaveAttribute("href", /\/transcribe\/jobs\/[a-f0-9]{32}$/);
+  await expect(page.locator(".submission-status")).toHaveText("اكتمل التفريغ.", { timeout: 60_000 });
 });

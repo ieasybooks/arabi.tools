@@ -20,7 +20,7 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   reporter: "list",
   use: {
-    ...devices["Desktop Chrome"],
+    ...devices[process.env.BROWSER === "webkit" ? "Desktop Safari" : "Desktop Chrome"],
     baseURL: "http://127.0.0.1:3204",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",

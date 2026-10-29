@@ -1,6 +1,8 @@
 #[allow(dead_code)]
 #[path = "support/drive.rs"]
 mod drive;
+#[path = "support/runtime.rs"]
+mod runtime;
 #[allow(dead_code)]
 mod support;
 
@@ -25,6 +27,56 @@ use wiremock::{
 
 fn pdfium() -> Option<PathBuf> {
     std::env::var_os("TAHWEEL_TEST_PDFIUM").map(PathBuf::from)
+}
+
+#[tokio::test]
+async fn upload_recovery_routes_release_unused_but_preserve_receiving_reservations()
+-> anyhow::Result<()> {
+    let drive = drive::Drive::start(Duration::ZERO).await;
+    let app =
+        support::TestApp::start_with_ocr(support::Setup::default(), ocr(&drive).await?).await?;
+    for tool in ["transcribe", "ocr"] {
+        let reserve = || app.client.post(app.url(&format!("/{tool}/jobs")));
+        let unused: Value = reserve().send().await?.error_for_status()?.json().await?;
+        let recover = app.url(unused["recover"].as_str().context("recovery URL")?);
+        for _ in 0..2 {
+            let response = app.client.post(&recover).send().await?.error_for_status()?;
+            assert!(
+                response.headers()["cache-control"]
+                    .to_str()?
+                    .contains("no-store")
+            );
+            assert_eq!(response.json::<Value>().await?, json!({"retry": true}));
+        }
+        // The old URL is irrevocably invalid before the next upload is attempted.
+        let late = app
+            .client
+            .post(app.url(unused["upload"].as_str().unwrap()))
+            .multipart(multipart::Form::new().part(
+                "file",
+                multipart::Part::bytes(drive::png()).file_name("late.png"),
+            ))
+            .send()
+            .await?;
+        assert_eq!(late.status(), StatusCode::CONFLICT);
+
+        let receiving: Value = reserve().send().await?.error_for_status()?.json().await?;
+        let id: JobId = receiving["job_id"].as_str().unwrap().parse()?;
+        let transcription =
+            (tool == "transcribe").then(|| app.transcription.queue.begin_upload(&id).unwrap());
+        let document = (tool == "ocr").then(|| app.ocr.queue.begin_upload(&id).unwrap());
+        let response = app
+            .client
+            .post(app.url(receiving["recover"].as_str().unwrap()))
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<Value>()
+            .await?;
+        assert_eq!(response, json!({"retry": false}));
+        drop((transcription, document));
+    }
+    app.stop().await
 }
 
 async fn ocr(drive: &drive::Drive) -> anyhow::Result<Ocr> {
@@ -105,7 +157,7 @@ async fn uploads_preview_and_all_downloads_in_both_languages() -> anyhow::Result
             assert!(page.contains(&format!("lang=\"{code}\"")));
             assert!(page.contains(drive::TEXT));
             assert!(page.contains("noindex"));
-            assert_eq!(page.matches("class=\"cue\"").count(), pages);
+            assert_eq!(page.matches("class=\"ocr-page\"").count(), pages);
         }
         for extension in ["txt", "docx", "json"] {
             let response = app
@@ -481,6 +533,84 @@ async fn drive_startup_does_not_block_transcription() -> anyhow::Result<()> {
     assert!(app.ocr.is_available());
     let html = app.client.get(app.url("/ocr")).send().await?.text().await?;
     assert!(html.contains("id=\"upload-form\""));
+    drive.assert_clean();
+    app.stop().await
+}
+
+#[tokio::test]
+async fn workspace_observer_uses_the_ocr_queue_and_releases_its_completed_document()
+-> anyhow::Result<()> {
+    let drive = drive::Drive::start(Duration::from_millis(150)).await;
+    let mut ocr = ocr(&drive).await?;
+    ocr.queue = Queue::new(
+        arlang_tools::queue::Limits {
+            unwatched: Duration::from_millis(40),
+            keep_finished: Duration::ZERO,
+            ..transcription::limits()
+        },
+        ocr.queue.slots(),
+    );
+    let app = support::TestApp::start_with_ocr(support::Setup::default(), ocr).await?;
+    let reserve: Value = app
+        .client
+        .post(app.url("/ocr/jobs"))
+        .send()
+        .await?
+        .json()
+        .await?;
+    let reply: Value = app
+        .upload(
+            reserve["upload"].as_str().unwrap(),
+            "page.png",
+            &drive::png(),
+            None,
+        )
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    assert_eq!(reply["job_id"], reserve["job_id"]);
+    assert_eq!(reply["next"], reserve["next"]);
+    let id: JobId = reply["job_id"].as_str().unwrap().parse()?;
+    let mut socket = runtime::RuntimeSocket::open(&app.url("/")).await?;
+    socket.observe("/ocr/observe", &id.to_string()).await?;
+    socket.until("processing").await?;
+    tokio::time::sleep(Duration::from_millis(80)).await;
+    app.ocr.queue.sweep();
+    assert!(app.ocr.queue.is_unfinished(&id));
+    socket.until("completed").await?;
+    let result = app.ocr.queue.result(&id).context("finished OCR")?;
+    let weak = std::sync::Arc::downgrade(&result);
+    drop(result);
+    app.ocr.queue.sweep();
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while weak.upgrade().is_some() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await?;
+    assert!(app.ocr.queue.result(&id).is_none());
+    for (id, code) in [
+        ("invalid", StatusCode::NOT_FOUND),
+        ("00000000000000000000000000000000", StatusCode::OK),
+    ] {
+        let response = app
+            .client
+            .post(app.url("/ocr/observe"))
+            .json(&json!({"args": [id], "signals": {}}))
+            .send()
+            .await?;
+        assert_eq!(response.status(), code);
+        assert!(
+            response.headers()["cache-control"]
+                .to_str()?
+                .contains("no-store")
+        );
+        if code == StatusCode::OK {
+            assert!(response.text().await?.contains("missing"));
+        }
+    }
+    drop(socket);
     drive.assert_clean();
     app.stop().await
 }

@@ -392,6 +392,23 @@ impl<R: Send + Sync + 'static> Queue<R> {
         })
     }
 
+    /// Releases an unused reservation after an uncertain upload. `true` means its
+    /// upload capability is gone, so a retry cannot race a late request. Receiving,
+    /// accepted and finished uploads are left intact for their observer to follow.
+    /// Repeating recovery after a lost response is safe, including for a missing job.
+    pub fn recover_upload(&self, id: &JobId) -> bool {
+        let mut state = self.lock();
+        if state
+            .jobs
+            .get(id)
+            .is_some_and(|job| !job.is_unused_reservation())
+        {
+            return false;
+        }
+        state.jobs.remove(id);
+        true
+    }
+
     /// Follows the status of job `id`. The job counts as watched while the returned value
     /// lives.
     pub fn watch(&self, id: &JobId) -> Option<Watch<R>> {
@@ -1205,6 +1222,39 @@ mod tests {
             queue.reserve(client(1), attempt(1)),
             Err(Rejection::ActiveJob)
         );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn uncertain_upload_recovery_revokes_only_unused_reservations() {
+        let queue = queue();
+        let unused = queue.reserve(client(1), attempt(1)).unwrap();
+        assert!(queue.recover_upload(&unused));
+        assert!(queue.recover_upload(&unused)); // The recovery response can also be lost.
+        assert!(matches!(
+            queue.begin_upload(&unused),
+            Err(Rejection::NoReservation)
+        ));
+
+        let id = queue.reserve(client(1), attempt(1)).unwrap();
+        let upload = queue.begin_upload(&id).unwrap();
+        assert_eq!(status(&queue, &id), "Reserved");
+        assert!(!queue.recover_upload(&id)); // Reserved does not mean unused.
+        let (_blocker, finish_blocker) = submit(&queue, 2);
+        let (finish, finished) = oneshot::channel();
+        upload
+            .submit(|_progress| async move { finished.await.unwrap() })
+            .unwrap();
+        settle().await;
+        assert_eq!(status(&queue, &id), "Waiting { position: 1 }");
+        assert!(!queue.recover_upload(&id));
+        finish_blocker.send(Ok("done")).unwrap();
+        settle().await;
+        assert_eq!(status(&queue, &id), "Running { percent: 0, pages: None }");
+        assert!(!queue.recover_upload(&id));
+        finish.send(Ok("done")).unwrap();
+        settle().await;
+        assert!(!queue.recover_upload(&id)); // Do not repeat already finished work either.
+        assert_eq!(*queue.result(&id).unwrap(), "done");
     }
 
     // Another tab or browser on the same connection may not take over a reservation whose

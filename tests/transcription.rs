@@ -1,3 +1,5 @@
+#[path = "support/runtime.rs"]
+mod runtime;
 mod support;
 
 use std::net::{IpAddr, Ipv4Addr};
@@ -47,7 +49,10 @@ async fn transcribe_fixture(
     )
     .await?;
     let job = reply["next"].as_str().context("missing job page URL")?;
-    assert_eq!(reply, json!({"next": job}));
+    assert_eq!(
+        reply,
+        json!({"next": job, "job_id": job.rsplit('/').next().unwrap()})
+    );
     assert_eq!(Some(job), upload.strip_suffix("/audio"));
 
     let response = app.client.get(app.url(job)).send().await?;
@@ -88,16 +93,7 @@ async fn transcribe_fixture(
             assert!(body.lines().all(|line| line == ARABIC_TEXT), "{body}");
         } else {
             assert_subtitles(&body)?;
-            // The page lists the same cues, each with its number and time range.
-            for (number, cue) in (1..).zip(body.trim().split("\n\n")) {
-                let mut lines = cue.lines().skip(1);
-                let times = lines.next().context("missing cue times")?;
-                let shown = format!(
-                    "<span class=\"cue-number\">{number}</span>{}",
-                    times.replace(" --> ", " → ")
-                );
-                assert!(page.contains(&shown), "missing {shown:?}: {page}");
-            }
+            assert_cues_shown(&page, &body)?;
         }
     }
     let requests = app
@@ -152,6 +148,38 @@ fn assert_subtitles(body: &str) -> anyhow::Result<()> {
         previous_end = end;
     }
     Ok(())
+}
+
+/// The page lists the same cues as `srt`, each with its number and short start time; the cue
+/// picker names each cue by the same short time, so the exact time stays in the SRT file.
+fn assert_cues_shown(page: &str, srt: &str) -> anyhow::Result<()> {
+    for (number, cue) in (1..).zip(srt.trim().split("\n\n")) {
+        let timing = cue.lines().nth(1).context("missing cue times")?;
+        let (start, _) = timing.split_once(" --> ").context("invalid SRT timing")?;
+        let short = short_time(start)?;
+        let shown = format!(
+            "<span class=\"cue-number visually-hidden\">{number}</span><bdi dir=\"ltr\" data-cue-time=\"\">{short}</bdi>"
+        );
+        assert!(page.contains(&shown), "missing {shown:?}: {page}");
+        let option = format!("المقطع {number} عند \u{2066}{short}\u{2069}");
+        assert!(page.contains(&option), "missing {option:?}: {page}");
+        assert!(
+            !page.contains(start),
+            "the page shows the exact time {start:?}"
+        );
+    }
+    Ok(())
+}
+
+/// An SRT start time as the transcript shows it: `0:03`, `12:45` or `1:02:03`.
+fn short_time(timestamp: &str) -> anyhow::Result<String> {
+    let seconds = timestamp_millis(timestamp)? / 1000;
+    let (hours, minutes, seconds) = (seconds / 3600, seconds / 60 % 60, seconds % 60);
+    Ok(if hours > 0 {
+        format!("{hours}:{minutes:02}:{seconds:02}")
+    } else {
+        format!("{minutes}:{seconds:02}")
+    })
 }
 
 fn timestamp_millis(timestamp: &str) -> anyhow::Result<u64> {
@@ -396,7 +424,9 @@ async fn uploads_in_each_language_use_its_tokens_and_transcript() -> anyhow::Res
             .text()
             .await?;
         assert!(
-            page.contains(&format!("lang=\"{language}\" dir=\"auto\"")),
+            page.contains(&format!(
+                "class=\"cue-text\" dir=\"auto\" lang=\"{language}\""
+            )),
             "{page}"
         );
         assert!(
@@ -447,7 +477,7 @@ async fn refuses_uploads_only_past_the_size_limit() -> anyhow::Result<()> {
         (
             MAX_UPLOAD_BYTES + 1,
             format!(
-                "حجم الملف أكبر من {} ميغابايت.",
+                "حجم الملف أكبر من {} ميغابايت. صدّره بصيغة MP3 بمعدل 64 كيلوبت في الثانية وبقناة واحدة (Mono)، فيبقى الكلام واضحًا ويتسع الحد لتسجيل يصل إلى 3 ساعات.",
                 MAX_UPLOAD_BYTES / 1_000_000
             ),
         ),
@@ -1235,5 +1265,103 @@ async fn crawlers_find_the_sitemap_icons_and_manifest() -> anyhow::Result<()> {
         home.contains("<img class=\"brand-logo\" src=\"/_topcoat/assets/logo-"),
         "{home}"
     );
+    app.stop().await
+}
+
+#[tokio::test]
+async fn workspace_observer_keeps_queue_position_private_and_releases_on_abandonment()
+-> anyhow::Result<()> {
+    let app = TestApp::start_with(Setup {
+        limits: Limits {
+            running: 0,
+            unwatched: Duration::from_millis(40),
+            ..limits()
+        },
+        ..Setup::default()
+    })
+    .await?;
+    let upload = app.reserve().await?;
+    let reply = json_reply(
+        app.upload(&upload, "speech.mp3", MP3, None).await?,
+        StatusCode::OK,
+    )
+    .await?;
+    let id: JobId = reply["job_id"].as_str().unwrap().parse()?;
+    let mut socket = runtime::RuntimeSocket::open(&app.url("/")).await?;
+    socket
+        .observe("/transcribe/observe", &id.to_string())
+        .await?;
+    let frame = socket.until("queued").await?;
+    assert!(frame.contains("data-job-id"));
+    assert!(frame.contains("Your file is in the queue") || frame.contains("في الطابور"));
+    tokio::time::sleep(Duration::from_millis(80)).await;
+    app.transcription.queue.sweep();
+    assert!(app.transcription.queue.is_unfinished(&id));
+    drop(socket);
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    app.transcription.queue.sweep();
+    assert!(!app.transcription.queue.is_unfinished(&id));
+    for (id, code) in [
+        ("invalid", StatusCode::NOT_FOUND),
+        ("00000000000000000000000000000000", StatusCode::OK),
+    ] {
+        let response = app
+            .client
+            .post(app.url("/transcribe/observe"))
+            .json(&json!({"args": [id], "signals": {}}))
+            .send()
+            .await?;
+        assert_eq!(response.status(), code);
+        assert!(
+            response.headers()["cache-control"]
+                .to_str()?
+                .contains("no-store")
+        );
+        if code == StatusCode::OK {
+            assert!(response.text().await?.contains("missing"));
+        }
+    }
+    app.stop().await
+}
+
+#[tokio::test]
+async fn workspace_terminal_observer_does_not_retain_a_transcript_after_expiry()
+-> anyhow::Result<()> {
+    let app = TestApp::start_with(Setup {
+        limits: Limits {
+            keep_finished: Duration::ZERO,
+            ..limits()
+        },
+        ..Setup::default()
+    })
+    .await?;
+    let upload = app.reserve().await?;
+    let reply = json_reply(
+        app.upload(&upload, "speech.mp3", MP3, None).await?,
+        StatusCode::OK,
+    )
+    .await?;
+    let id: JobId = reply["job_id"].as_str().unwrap().parse()?;
+    let mut socket = runtime::RuntimeSocket::open(&app.url("/")).await?;
+    socket
+        .observe("/transcribe/observe", &id.to_string())
+        .await?;
+    socket.until("completed").await?;
+    let result = app
+        .transcription
+        .queue
+        .result(&id)
+        .context("finished transcript")?;
+    let weak = std::sync::Arc::downgrade(&result);
+    drop(result);
+    app.transcription.queue.sweep();
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while weak.upgrade().is_some() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await?;
+    assert!(app.transcription.queue.result(&id).is_none());
+    drop(socket);
     app.stop().await
 }

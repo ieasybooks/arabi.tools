@@ -16,11 +16,11 @@ use topcoat::{
             Json,
             multipart::{Field, Multipart},
         },
-        error::RouterErrorExt,
+        error::{RouterErrorExt, not_found},
         href, module_param, page, path_param, route,
     },
-    runtime::connected,
-    view::{View, component, emit, live, view},
+    runtime::{connected, shard},
+    view::{View, ViewExt, component, emit, live, view},
 };
 
 use super::{COOKIE, Reply, rejected};
@@ -29,6 +29,7 @@ use crate::app::transcribe;
 use crate::i18n::Locale;
 use crate::icons;
 use crate::queue::{CancelReason, JobId, Status};
+use crate::result_controls::{self, COPY_SCRIPT, CopyAll, DownloadLink, SEARCH_SCRIPT};
 use crate::tools::transcription::{
     AudioProblem, MAX_UPLOAD_BYTES, Transcript, Transcription, check_audio, download_name,
     has_accepted_extension,
@@ -43,39 +44,111 @@ const HEARTBEAT: Duration = Duration::from_secs(30);
 pub(super) async fn page(cx: &Cx) -> Result<impl View> {
     let id = path_param::<Id>(cx)?.clone();
     let locale = Locale::of(cx);
-    let mut watch = app_context::<Transcription>(cx)
-        .queue
-        .watch(&id)
-        .ok_or_not_found()?;
+    crate::workspace::private_response(cx);
+    let exists = app_context::<Transcription>(cx).queue.watch(&id).is_some();
     Ok(view! {
+        <script src=(SEARCH_SCRIPT) defer=(true)></script>
+        <script src=(COPY_SCRIPT) defer=(true)></script>
+        <script src=(transcribe::REVIEW_SCRIPT) defer=(true)></script>
         transcribe::tool_hero(locale: locale, lead: false)
         <section class="workspace">
             <div class="container workspace-layout">
-                (live! {
-                    loop {
-                        let status = watch.status();
-                        let finished = status.is_finished();
-                        let token = emit! {
-                            job_status(locale: locale, id: id.clone(), status: status)
-                        }?;
-                        if finished || !connected(cx) {
-                            break Ok(token);
-                        }
-                        tokio::select! {
+                if exists {
+                    (live! {
+                        let mut watch = app_context::<Transcription>(cx)
+                            .queue
+                            .watch(&id)
+                            .ok_or_not_found()?;
+                        loop {
+                            let status = watch.status();
+                            let finished = status.is_finished();
+                            let token = emit! {
+                                job_status(
+                                    locale: locale,
+                                    id: id.clone(),
+                                    status: status,
+                                    embedded: false
+                                )
+                            }?;
+                            if finished || !connected(cx) {
+                                drop(watch);
+                                break Ok(token);
+                            }
+                            tokio::select! {
                             changed = watch.changed() => if !changed {
                                 break Ok(token);
                             },
                             () = tokio::time::sleep(HEARTBEAT) => {}
                         }
-                    }
-                })
+                        }
+                    })
+                } else {
+                    (StatusCode::NOT_FOUND)
+                    <p class="notice">(locale.text().workspace.missing)</p>
+                    <a class="button secondary" href=(href!(transcribe::page))>
+                        (locale.text().transcription.another)
+                    </a>
+                }
             </div>
         </section>
+        <script src=(crate::workspace::SCRIPT) defer=(true)></script>
     })
 }
 
+/// A job link is the existing read capability. The shard observes it without starting another job.
+#[shard("/transcribe/observe")]
+pub(crate) async fn observe(cx: &Cx, job: String) -> Result<impl View> {
+    crate::workspace::private_response(cx);
+    let locale = Locale::of(cx);
+    let id = if job.is_empty() {
+        None
+    } else {
+        Some(job.parse::<JobId>().map_err(|_| not_found())?)
+    };
+    Ok(view! {
+        cx =>
+        if let Some(id) = id {
+            (live! {
+                let Some(mut watch) = app_context::<Transcription>(cx).queue.watch(&id) else {
+                    return emit! {
+                        <div data-job-id=(id.to_string()) data-phase="missing">
+                            <p class="status">(locale.text().workspace.missing)</p>
+                        </div>
+                    };
+                };
+                loop {
+                    let status = watch.status();
+                    let finished = status.is_finished();
+                    let token = emit! {
+                        job_status(
+                            locale: locale,
+                            id: id.clone(),
+                            status: status,
+                            embedded: true
+                        )
+                    }?;
+                    if finished || !connected(cx) {
+                        drop(watch);
+                        break Ok(token);
+                    }
+                    tokio::select! {
+                        changed = watch.changed() => if !changed { break Ok(token); },
+                        () = tokio::time::sleep(HEARTBEAT) => {}
+                    }
+                }
+            })
+        }
+    }
+    .boxed())
+}
+
 #[component]
-async fn job_status(locale: Locale, id: JobId, status: Status<Transcript>) -> Result<impl View> {
+async fn job_status(
+    locale: Locale,
+    id: JobId,
+    status: Status<Transcript>,
+    embedded: bool,
+) -> Result<impl View> {
     let text = &locale.text().transcription;
     let finished = status.is_finished();
     let message = match &status {
@@ -88,16 +161,18 @@ async fn job_status(locale: Locale, id: JobId, status: Status<Transcript>) -> Re
         Status::Cancelled(CancelReason::Unwatched) => text.cancelled_unwatched.to_owned(),
         Status::Cancelled(CancelReason::Shutdown) => text.cancelled_shutdown.to_owned(),
     };
+    let phase = match &status {
+        Status::Reserved => "reserved",
+        Status::Waiting { .. } => "queued",
+        Status::Running { .. } => "processing",
+        Status::Done(_) => "completed",
+        Status::Failed | Status::Cancelled(_) => "failed",
+    };
     let (state, state_icon) = match &status {
         Status::Reserved | Status::Waiting { .. } => ("waiting", Some(icons::WAITING)),
         Status::Running { .. } => ("running", None),
         Status::Done(_) => ("done", Some(icons::DONE)),
         Status::Failed | Status::Cancelled(_) => ("failed", Some(icons::FAILED)),
-    };
-    let step = if state == "done" {
-        transcribe::Step::Download
-    } else {
-        transcribe::Step::Transcribe
     };
     let percent = match status {
         Status::Running { percent, .. } => Some(percent),
@@ -109,15 +184,29 @@ async fn job_status(locale: Locale, id: JobId, status: Status<Transcript>) -> Re
         _ => None,
     };
     Ok(view! {
-        transcribe::steps(locale: locale, current: step, failed: state == "failed")
-        <div class="job" data-state=(state)>
+        <div
+            class="job"
+            data-state=(state)
+            data-job-id=(id.to_string())
+            data-phase=(phase)
+            data-update=(std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis())
+        >
             <div class="job-heading">
                 if let Some(state_icon) = state_icon {
                     <span class="job-icon">icon(data: state_icon, size: 20)</span>
                 }
                 // Topcoat preserves this node across live updates. Only status text belongs
                 // here, so percentage updates do not repeat the polite announcement.
-                <p id="job-status" class="status" role="status">(message)</p>
+                <p
+                    id=((!embedded).then_some("job-status"))
+                    class="status"
+                    role=((!embedded).then_some("status"))
+                >
+                    (message)
+                </p>
                 if let Some(percent) = percent {
                     <p class="percent">(locale.percent(percent))</p>
                 }
@@ -133,6 +222,9 @@ async fn job_status(locale: Locale, id: JobId, status: Status<Transcript>) -> Re
             }
             if let Some(transcript) = transcript {
                 result(locale: locale, id: id, transcript: transcript)
+            } else if !embedded {
+                // The job's own page has no input to carry the line before a result.
+                crate::workspace::privacy_note(text: locale.privacy_note())
             }
         </div>
         if finished {
@@ -152,66 +244,240 @@ async fn job_status(locale: Locale, id: JobId, status: Status<Transcript>) -> Re
     })
 }
 
-/// A finished job's downloads and transcript.
+/// A finished job's header, its toolbar (reading controls, then search) and transcript, with the
+/// page's privacy line at its foot. A matching folded input bar takes over the name visually.
 #[component]
-async fn result(locale: Locale, id: JobId, transcript: Arc<Transcript>) -> Result<impl View> {
+async fn result(
+    cx: &Cx,
+    locale: Locale,
+    id: JobId,
+    transcript: Arc<Transcript>,
+) -> Result<impl View> {
     let text = &locale.text().transcription;
+    let review = &locale.text().review;
+    // JSON escapes line endings that HTML attribute parsing would normalize.
+    let copy_override = transcript_copy_override(&transcript)
+        .map(serde_json::to_string)
+        .transpose()?;
+    // The time column is as wide as the longest start time, so every cue's text lines up.
+    let time_chars = transcript
+        .cues
+        .iter()
+        .map(|cue| short_time(&cue.start).len())
+        .max()
+        .unwrap_or(4);
+    let downloads = vec![
+        DownloadLink {
+            label: text.download_text,
+            href: href!(download_text, Id(id.clone())).resolve(cx),
+        },
+        DownloadLink {
+            label: text.download_srt,
+            href: href!(download_srt, Id(id.clone())).resolve(cx),
+        },
+    ];
     Ok(view! {
-        <div class="result">
-            <div class="result-heading">
-                <p class="result-name">
-                    icon(data: icons::TRANSCRIPT, size: 20)
-                    <span dir="auto">(transcript.name.as_str())</span>
-                </p>
-                <div class="downloads">
-                    <a
-                        class="button primary"
-                        href=(href!(download_text, Id(id.clone())))
-                        download=(true)
-                    >
-                        icon(data: icons::DOWNLOAD, size: 16)
-                        <span>(text.download_text)</span>
-                    </a>
-                    <a
-                        class="button secondary"
-                        href=(href!(download_srt, Id(id.clone())))
-                        download=(true)
-                    >
-                        icon(data: icons::DOWNLOAD, size: 16)
-                        <span>(text.download_srt)</span>
-                    </a>
-                </div>
+        <div
+            class="result transcript-result"
+            data-result="transcript"
+            data-job-id=(id.to_string())
+            data-copy-text=(copy_override)
+        >
+            result_controls::result_header(
+                locale: locale,
+                name: transcript.name.clone(),
+                copy: Some(CopyAll::Transcript),
+                downloads: downloads
+            )
+            <div class="result-toolbar">
+                reading_controls(locale: locale, transcript: transcript.clone())
+                result_controls::search_toolbar(
+                    locale: locale,
+                    label: review.search_transcript
+                )
             </div>
-            <p class="hint">(locale.kept_for())</p>
+            result_controls::copy_feedback(locale: locale)
             if transcript.text.trim().is_empty() {
                 <p>(text.no_speech)</p>
             } else {
-                <h2 class="transcript-title">(text.transcript_title)</h2>
-                // The cues of the SRT file. Their direction follows the transcript's text, while
-                // each number and time range stays left to right.
+                <h2 class="visually-hidden">(text.transcript_title)</h2>
+                // Rows run in the transcript's direction, so each time sits beside its text.
                 <ol
                     class="cues"
                     role="list"
-                    lang=(transcript.language.as_str())
-                    dir="auto"
+                    aria-label=(text.transcript_title)
+                    tabindex="0"
+                    dir=(text_direction(&transcript.language))
+                    style=(format!("--time-chars: {time_chars}"))
                 >
                     for (number, cue) in (1..).zip(&transcript.cues) {
-                        <li class="cue">
+                        <li
+                            class="cue"
+                            data-cue=(number.to_string())
+                            id=(format!("transcript-{id}-cue-{number}"))
+                        >
                             <p class="cue-time">
-                                <span dir="ltr">
-                                    <span class="cue-number">(number.to_string())</span>
-                                    (cue.start.as_str())
-                                    " → "
-                                    (cue.end.as_str())
+                                <span class="cue-number visually-hidden">
+                                    (number.to_string())
                                 </span>
+                                <bdi dir="ltr" data-cue-time=(true)>
+                                    (short_time(&cue.start))
+                                </bdi>
                             </p>
-                            <p class="cue-text">(cue.text.as_str())</p>
+                            <p
+                                class="cue-text"
+                                dir="auto"
+                                lang=(transcript.language.as_str())
+                            >
+                                (cue.text.as_str())
+                            </p>
+                            <button
+                                type="button"
+                                class="button ghost compact copy-cue"
+                                data-copy-cue=(true)
+                                aria-label=(review.copy_cue)
+                                hidden=(true)
+                            >
+                                icon(data: icons::COPY, size: 16)
+                                <span>(review.copy)</span>
+                            </button>
                         </li>
                     }
                 </ol>
             }
+            crate::workspace::privacy_note(text: locale.privacy_note())
         </div>
     })
+}
+
+/// The start of the toolbar: the timestamps switch, then the cue picker, each cue named by its
+/// short start time.
+#[component]
+async fn reading_controls(locale: Locale, transcript: Arc<Transcript>) -> Result<impl View> {
+    let text = &locale.text().review;
+    Ok(view! {
+        <div class="transcript-actions" data-transcript-controls=(true) hidden=(true)>
+            if !transcript.cues.is_empty() {
+                <label class="timestamps-choice">
+                    <input type="checkbox" data-show-timestamps=(true) checked=(true)>
+                    (text.show_timestamps)
+                </label>
+                <label class="cue-choice">
+                    <span class="visually-hidden">(text.go_to_cue)</span>
+                    <select data-cue-select=(true)>
+                        for (number, cue) in (1..).zip(&transcript.cues) {
+                            <option value=(number.to_string())>
+                                (text
+                                    .cue_at
+                                    .replace("{number}", &number.to_string())
+                                    .replace(
+                                        "{time}",
+                                        &format!("\u{2066}{}\u{2069}", short_time(&cue.start)),
+                                    ))
+                            </option>
+                        }
+                    </select>
+                </label>
+            }
+        </div>
+    })
+}
+
+/// A cue's start time as a reader expects it, from the SRT form `HH:MM:SS,mmm`: `0:03`,
+/// `12:45` or `1:02:03`. The rows, the cue picker and search show this; the precise time stays in
+/// the SRT file.
+fn short_time(srt: &str) -> String {
+    let clock = srt.split_once(',').map_or(srt, |(clock, _)| clock);
+    let mut parts = clock
+        .split(':')
+        .map(|part| part.parse::<u64>().unwrap_or(0));
+    let (hours, minutes, seconds) = (
+        parts.next().unwrap_or(0),
+        parts.next().unwrap_or(0),
+        parts.next().unwrap_or(0),
+    );
+    if hours > 0 {
+        format!("{hours}:{minutes:02}:{seconds:02}")
+    } else {
+        format!("{minutes}:{seconds:02}")
+    }
+}
+
+/// The direction of text in a transcript's language.
+fn text_direction(language: &str) -> &'static str {
+    if matches!(language, "ar" | "fa" | "he" | "ps" | "ur" | "yi") {
+        "rtl"
+    } else {
+        "ltr"
+    }
+}
+
+/// Normally TXT is the cue text plus a newline per cue. SRT parsing can fold
+/// internal newlines, so retain the exact TXT only when it cannot be rebuilt.
+/// This avoids a second full transcript in ordinary result markup.
+fn transcript_copy_override(transcript: &Transcript) -> Option<&str> {
+    let mut remaining = transcript.text.as_str();
+    for cue in &transcript.cues {
+        let Some(rest) = remaining
+            .strip_prefix(&cue.text)
+            .and_then(|rest| rest.strip_prefix('\n'))
+        else {
+            return Some(&transcript.text);
+        };
+        remaining = rest;
+    }
+    (!remaining.is_empty()).then_some(transcript.text.as_str())
+}
+
+#[cfg(test)]
+mod review_tests {
+    use super::*;
+    use crate::tools::transcription::Cue;
+
+    #[test]
+    fn cue_times_read_like_a_clock() {
+        assert_eq!(short_time("00:00:03,046"), "0:03");
+        assert_eq!(short_time("00:12:45,999"), "12:45");
+        assert_eq!(short_time("01:02:03,500"), "1:02:03");
+        assert_eq!(short_time("02:59:59,000"), "2:59:59");
+    }
+
+    #[test]
+    fn copy_preserves_txt_even_when_srt_cues_fold_lines() {
+        let mut transcript = Transcript {
+            name: "lesson".into(),
+            language: "ar".into(),
+            text: "كِتَاب\nhello & <b>\n".into(),
+            srt: String::new(),
+            cues: ["كِتَاب", "hello & <b>"]
+                .into_iter()
+                .map(|text| Cue {
+                    start: "00:00:00,000".into(),
+                    end: "00:00:01,000".into(),
+                    text: text.into(),
+                })
+                .collect(),
+        };
+        assert_eq!(transcript_copy_override(&transcript), None);
+        transcript.text = "كِتَاب\nhello &\n<b>\n".into();
+        assert_eq!(
+            transcript_copy_override(&transcript),
+            Some("كِتَاب\nhello &\n<b>\n")
+        );
+        transcript.cues.clear();
+        transcript.text.clear();
+        assert_eq!(transcript_copy_override(&transcript), None);
+    }
+}
+
+/// Resolves an uncertain upload without releasing receiving or accepted work.
+#[route(POST "./recover")]
+pub(super) async fn recover(cx: &Cx) -> Result<Json<Reply>> {
+    crate::workspace::private_response(cx);
+    let retry = app_context::<Transcription>(cx)
+        .queue
+        .recover_upload(path_param::<Id>(cx)?);
+    Ok(Json(Reply::Recovery { retry }))
 }
 
 /// Receives the file for a reserved job and queues the job.
@@ -256,6 +522,7 @@ pub(super) async fn upload(cx: &Cx, mut form: Multipart) -> Result<(StatusCode, 
                 (
                     StatusCode::OK,
                     Json(Reply::Next {
+                        job_id: id.to_string(),
                         next: href!(page, Id(id.clone())).resolve(cx),
                     }),
                 )

@@ -4,20 +4,21 @@
 :root {
   --font-body: "Gilroy", "Noto Naskh Arabic UI", system-ui, sans-serif;
   --font-display: "Gilroy", "Thmanyah Serif Display", "Noto Naskh Arabic UI", serif;
-  --font-transcript: "Kitab", "Noto Naskh Arabic UI", serif;
+  --font-transcript: "Kitab", "Gilroy", "Noto Naskh Arabic UI", serif;
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
   --paper: #f8f4ea;
   --surface: #fffcf5;
   --well: #f1ebdd;
   --text: #2b2119;
   --muted: #5f5245;
-  --faint: #7d6e5e;
+  --faint: #6e5f50;
   --line: rgb(74 52 30 / 0.16);
   --line-soft: rgb(74 52 30 / 0.09);
   --green: #1f5c49;
   --green-strong: #164536;
   --green-soft: #e4ede6;
   --gold: #a4824a;
+  --gold-text: #7d6232;
   --danger: #9f2a1d;
   --danger-soft: #f7e6df;
   --warning: #8a5a14;
@@ -25,7 +26,15 @@
   --shadow: 0 2px 16px rgb(74 52 30 / 0.07);
   --radius: 1.25rem;
   --radius-control: 0.75rem;
-  --container: 48rem;
+  /* One width for the header, the tool pages and the footer, wide enough for two panes side by
+     side; the home page keeps a narrower column. */
+  --page: 64rem;
+  --narrow: 48rem;
+  /* The longest comfortable line of running text, such as a transcript's. */
+  --measure: 44rem;
+  /* The root size relative to the browser's; Arabic is set larger. Page widths divide by it,
+     so a page is equally wide in both languages. */
+  --rem-scale: 1;
 
   color-scheme: light;
   color: var(--text);
@@ -41,7 +50,8 @@
 
 /* Arabic letters read best a touch larger and with more room between lines. */
 :root:lang(ar) {
-  font-size: 106.25%;
+  --rem-scale: 1.0625;
+  font-size: calc(var(--rem-scale) * 100%);
   line-height: 1.75;
 }
 
@@ -112,6 +122,40 @@ a:hover {
   outline-offset: 2px;
 }
 
+/* Shared shell: keyboard access and reduced motion. */
+
+.skip-link {
+  position: fixed;
+  inset-block-start: 1rem;
+  inset-inline-start: 1rem;
+  z-index: 10;
+  max-inline-size: calc(100% - 2rem);
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--green);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-weight: 500;
+}
+
+.skip-link:not(:focus) {
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
 svg {
   flex-shrink: 0;
 }
@@ -123,14 +167,18 @@ svg {
 
 .container {
   width: 100%;
-  max-width: var(--container);
+  max-width: calc((var(--page) + 4rem) / var(--rem-scale));
   margin-inline: auto;
   padding-inline: 1.25rem;
 }
 
+.container-narrow {
+  max-width: var(--narrow);
+}
+
 @media (min-width: 40rem) {
   .container {
-    padding-inline: 2rem;
+    padding-inline: calc(2rem / var(--rem-scale));
   }
 }
 
@@ -142,6 +190,8 @@ svg {
 
 .header-inner {
   display: flex;
+  flex-wrap: wrap;
+  padding-block: 0.75rem;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
@@ -152,6 +202,7 @@ svg {
   display: inline-flex;
   align-items: center;
   gap: 0.625rem;
+  min-inline-size: 0;
   color: var(--text);
   text-decoration: none;
 }
@@ -172,7 +223,9 @@ svg {
 }
 
 .brand .brand-name {
+  min-inline-size: 0;
   font-size: 1.1875rem;
+  overflow-wrap: anywhere;
 }
 
 /* Thmanyah has one weight, and Arabic reads larger at it. */
@@ -206,15 +259,11 @@ svg {
   flex: 1;
 }
 
-/* Centred title pages, with an ornament under the lead. */
-
-.hero,
-.tool-hero {
-  text-align: center;
-}
+/* The home and 404 pages: a centred title, with an ornament under the lead. */
 
 .hero {
   padding-block: 4.5rem 2rem;
+  text-align: center;
 }
 
 .hero h1 {
@@ -228,8 +277,7 @@ svg {
   font-size: 1.1875rem;
 }
 
-.hero .lead::after,
-.tool-hero .container::after {
+.hero .lead::after {
   content: "";
   display: block;
   width: 9rem;
@@ -345,18 +393,26 @@ svg {
   text-align: center;
 }
 
-/* Tool pages: one column, the notes following the form like footnotes. */
+/* Tool and job pages: a compact title on the start edge of the page's column, so the tool
+   starts near the top of the screen. */
 
 .tool-hero {
-  padding-block: 3.5rem 0;
+  padding-block: 1.75rem 0;
 }
 
 .tool-hero h1 {
-  font-size: 2.625rem;
+  font-size: 1.75rem;
+}
+
+.tool-hero .lead {
+  max-width: none;
+  margin: 0.25rem 0 0;
+  font-size: 1rem;
 }
 
 .crumbs {
-  margin-block-end: 0.5rem;
+  margin-block-end: 0.125rem;
+  font-size: 0.9375rem;
 }
 
 .crumbs a {
@@ -369,7 +425,7 @@ svg {
 }
 
 .workspace {
-  padding-block: 2rem 5rem;
+  padding-block: 1.5rem 4rem;
 }
 
 .workspace-layout {
@@ -378,10 +434,10 @@ svg {
   gap: 2rem;
 }
 
-.workspace-main,
 .job {
   display: flex;
   flex-direction: column;
+  min-inline-size: 0;
   padding: 2rem;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -389,128 +445,95 @@ svg {
   box-shadow: var(--shadow);
 }
 
-.workspace-main {
-  gap: 1.75rem;
-}
-
-.workspace-aside {
-  padding-block-start: 1.5rem;
-  border-block-start: 1px solid var(--line);
-}
-
-.aside-title {
-  margin-block-end: 1rem;
-  font-size: 1.375rem;
-}
-
-.notes {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  color: var(--muted);
-}
-
-.notes li {
+/* The page's one privacy line: close under the input card until there is a result, then at the
+   foot of the result (or of a job page's card) instead. */
+.privacy-note {
   display: flex;
   align-items: flex-start;
-  gap: 0.75rem;
+  gap: 0.5rem;
+  margin-block-start: -0.75rem;
+  padding-inline: 0.25rem;
+  color: var(--muted);
+  font-size: 0.875rem;
 }
 
-.notes svg {
+.privacy-note svg {
   margin-block-start: 0.25em;
   color: var(--gold);
 }
 
-/* Steps: numbered seals joined by a gold line, each label under its seal. */
-
-.steps {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  max-width: 30rem;
-  width: 100%;
-  margin-inline: auto;
+:is(.result, .job) > .privacy-note {
+  margin-block-start: 0;
+  padding-inline: 0;
 }
 
-.step {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.375rem;
-  color: var(--faint);
-  text-align: center;
+[data-workspace]:has(> .workspace-review .result) > .privacy-note {
+  display: none;
 }
 
-/* The line runs from this seal's edge to the next one's. */
-.step:not(:last-child)::after {
-  content: "";
-  position: absolute;
-  inset-block-start: 1rem;
-  inset-inline-start: calc(50% + 1.5rem);
-  width: calc(100% - 3rem);
-  height: 1px;
-  background: var(--gold);
-  opacity: 0.5;
-}
-
-.step[data-state="done"]::after {
-  opacity: 1;
-}
-
-.step-marker {
-  display: inline-grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 999px;
-  box-shadow: inset 0 0 0 1px var(--gold);
-  color: var(--gold);
-  font-family: "Gilroy", sans-serif;
-  font-size: 0.875rem;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
-.step[data-state="done"] {
-  color: var(--muted);
-}
-
-.step[data-state="done"] .step-marker {
-  background: var(--green-soft);
-  box-shadow: inset 0 0 0 1px var(--green);
-  color: var(--green);
-}
-
-.step[data-state="current"] {
-  color: var(--text);
-  font-weight: 500;
-}
-
-.step[data-state="current"] .step-marker {
-  background: var(--green);
-  box-shadow: none;
-  color: #fff;
-}
-
-.step[data-state="failed"] {
-  color: var(--danger);
-  font-weight: 500;
-}
-
-.step[data-state="failed"] .step-marker {
-  background: var(--danger-soft);
-  box-shadow: inset 0 0 0 1px var(--danger);
-  color: var(--danger);
-}
-
-/* Upload form */
+/* Upload form: one shape in every state. Before a file is chosen it is only the drop zone; once
+   one is, it is one bar like an attachment, the file row with the run button at its end (filled
+   while it can run, secondary beside the file's result, disabled while a job runs), and the
+   progress line or a message on full lines under it. */
 
 .upload {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 0.5rem;
+  min-width: 0;
 }
+
+/* Until there is a file there is nothing to run: the drop zone is the call to action. */
+.upload:not(:has(> .dropzone[data-selected="true"])) > .form-actions {
+  display: none;
+}
+
+.upload:has(> .dropzone[data-selected="true"]) {
+  flex-flow: row wrap;
+  align-items: center;
+  gap: 0.375rem 0.75rem;
+  /* The file's icon and the run button line up with the content of a result card below. */
+  padding-block: 0.625rem;
+  padding-inline: calc(2rem - 1px) 2rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.upload:has(> .dropzone[data-selected="true"]) > * {
+  flex: 1 1 100%;
+}
+
+.upload > .dropzone[data-selected="true"] {
+  flex: 1 1 10rem;
+  min-inline-size: 0;
+}
+
+/* Alone, the drop zone is the input's card. */
+.upload > .dropzone:not([data-selected="true"]) {
+  border-radius: var(--radius);
+}
+
+.upload:has(> .dropzone[data-selected="true"]) > .form-actions {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  margin-inline-start: auto;
+}
+
+/* One size in every state, so the bar keeps its height when its button changes weight. */
+.upload > .form-actions .button {
+  min-block-size: 2.5rem;
+  padding: 0.375rem 1.25rem;
+  font-size: 0.9375rem;
+}
+
+.upload:has(> .dropzone[data-selected="true"]) > :is(.error, .return-to-job, .upload-progress) {
+  padding-inline-start: 1px;
+}
+
+/* The drop zone prompts for a file, then becomes one row for the chosen file, like an
+   attachment. The real input covers it either way, so a click or a drop still chooses. */
 
 .dropzone {
   position: relative;
@@ -518,14 +541,14 @@ svg {
   flex-direction: column;
   align-items: center;
   gap: 0.25rem;
-  padding: 2.5rem 1.25rem;
+  padding: 1.75rem 1.25rem;
   border: 1px dashed var(--gold);
   border-radius: 1rem;
-  background: var(--paper);
+  background: var(--surface);
   text-align: center;
 }
 
-.dropzone:hover,
+.dropzone:has(input:enabled:hover),
 .dropzone:has(input:focus-visible) {
   border-color: var(--green);
   background: var(--green-soft);
@@ -552,40 +575,146 @@ svg {
 
 .dropzone-icon {
   display: flex;
-  margin-block-end: 0.5rem;
+  margin-block-end: 0.25rem;
   color: var(--gold);
 }
 
 .dropzone-title {
   font-family: var(--font-display);
-  font-size: 1.375rem;
+  font-size: 1.25rem;
   font-weight: 500;
 }
 
 .dropzone-hint {
-  color: var(--faint);
-}
-
-.file-name {
-  max-width: 100%;
-  margin-block-start: 0.75rem;
-  overflow-wrap: anywhere;
   color: var(--muted);
 }
 
-/* A chosen file stands out. */
-.dropzone:has(input:valid) .file-name {
-  padding: 0.25rem 0.875rem;
-  border-radius: 999px;
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--line);
-  color: var(--text);
-  font-weight: 500;
+/* A job keeps this row as it is; only its buttons are disabled. The bar around it is the card, so
+   the row has no box of its own; a pointer over it tints it, as a click chooses another file. */
+.dropzone[data-selected="true"] {
+  align-items: stretch;
+  padding: 0.25rem 0.5rem;
+  margin-inline-start: -0.5rem;
+  border-style: solid;
+  border-color: transparent;
+  border-radius: 0.75rem;
+  background: transparent;
+  text-align: start;
 }
 
+.dropzone[data-selected="true"]:has(input:enabled:hover) {
+  border-color: transparent;
+  background: var(--well);
+}
+
+.dropzone[data-selected="true"] > :is(.dropzone-icon, .dropzone-title, .dropzone-hint),
+.dropzone:not([data-selected="true"]) > .file-row {
+  display: none;
+}
+
+/* One line, phones included: the icon, the name on one line (cut short with an ellipsis) with its
+   size under it, then Remove at the end. Only very large text wraps it, with Remove kept at the
+   end. */
+.file-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  min-inline-size: 0;
+}
+
+.file-icon {
+  display: flex;
+  color: var(--gold);
+}
+
+/* Each line keeps its own direction but starts at the page's start edge. */
+.file-details {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: flex-start;
+  min-inline-size: min(100%, 6rem);
+  overflow-wrap: anywhere;
+}
+
+.file-details > * {
+  max-inline-size: 100%;
+}
+
+.file-name {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-size {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+/* Above the invisible input, so it takes its own clicks. */
+.file-row > button {
+  position: relative;
+  z-index: 1;
+  margin-inline-start: auto;
+}
+
+/* A file error sits right under the file and outlines it: the drop zone before a file is chosen,
+   the bar once one is. */
+.upload:has(> .error:not([hidden])) > .dropzone:not([data-selected="true"]),
+.upload:has(> .dropzone[data-selected="true"]):has(> .error:not([hidden])),
+.diacritize-form:has(> .error:not([hidden])) .dropzone {
+  border-color: var(--danger);
+}
+
+.diacritize-form > :is(.error, .return-to-job) {
+  margin-block-start: -0.75rem;
+}
+
+:is(.upload, .diacritize-form) > .error {
+  padding: 0;
+  background: none;
+  font-size: 0.9375rem;
+}
+
+/* Result first: while the workspace holds the result of the file still chosen, the bar is the top
+   row of the result's card, a line under it, and the result continues below with no gap. */
+[data-workspace]:has(> .upload[data-collapsed]) {
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+[data-workspace]:has(> .upload[data-collapsed]) > .upload {
+  border: 0;
+  border-block-end: 1px solid var(--line-soft);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-workspace]:has(> .upload[data-collapsed]) > .workspace-review:has(.result) {
+  padding-block-start: 1rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* The button submits the form above it, so it ends where the form does. */
 .form-actions {
   display: flex;
-  justify-content: center;
+  justify-content: flex-end;
+}
+
+/* With very large text these labels wrap rather than push past the card. */
+:is(.form-actions, .upload-progress) .button {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
 }
 
 /* Buttons: one primary per page; the rest are secondary. */
@@ -615,9 +744,10 @@ svg {
   color: #fff;
 }
 
-.button.primary:disabled {
-  background: var(--faint);
-  cursor: progress;
+.button:disabled,
+.button[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .button.secondary {
@@ -657,13 +787,6 @@ progress::-moz-progress-bar {
   background: var(--green);
 }
 
-.upload-progress {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  color: var(--muted);
-}
-
 /* Messages */
 
 .notice {
@@ -695,7 +818,7 @@ progress::-moz-progress-bar {
 }
 
 .return-to-job {
-  align-self: center;
+  align-self: flex-start;
 }
 
 .hint {
@@ -721,6 +844,8 @@ progress::-moz-progress-bar {
 
 .status {
   flex: 1;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
   font-family: var(--font-display);
   font-size: 1.5rem;
   font-weight: 500;
@@ -759,14 +884,29 @@ progress::-moz-progress-bar {
   gap: 1rem;
 }
 
+/* The name and the two actions share one row. */
 .result-heading {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-areas: "name actions";
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  gap: 0.5rem 1rem;
   padding-block-end: 1rem;
   border-block-end: 1px solid var(--line-soft);
+}
+
+/* Under the workspace's bar, which names the file, the header is only its actions, at the end of
+   the row under the bar, close above the toolbar. */
+[data-workspace]:has(> .upload[data-collapsed]) .result-heading {
+  display: flex;
+  justify-content: flex-end;
+  margin-block-end: -0.5rem;
+  padding-block-end: 0;
+  border-block-end: 0;
+}
+
+[data-workspace]:has(> .upload[data-collapsed]) .result-name {
+  display: none;
 }
 
 .result-name {
@@ -782,59 +922,6 @@ progress::-moz-progress-bar {
   color: var(--gold);
 }
 
-.downloads {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-
-/* The transcript shows the SRT cues, each like a line of a printed page under its number and
-   time range. */
-
-.transcript-title {
-  padding-block-end: 0.75rem;
-  font-size: 1.375rem;
-  text-align: center;
-}
-
-.cues {
-  max-height: 36rem;
-  overflow-y: auto;
-  padding: 0.5rem 1.75rem;
-  border-radius: 1rem;
-  background: var(--paper);
-  box-shadow: inset 0 0 0 1px var(--line-soft);
-}
-
-.cue {
-  padding-block: 0.875rem;
-}
-
-.cue + .cue {
-  border-block-start: 1px solid var(--line-soft);
-}
-
-.cue-time {
-  color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: 0.8125rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.cue-number {
-  display: inline-block;
-  min-width: 2rem;
-  color: var(--gold);
-  font-weight: 600;
-}
-
-.cue-text {
-  margin-block-start: 0.25rem;
-  font-family: var(--font-transcript);
-  font-size: 1.3125rem;
-  line-height: 1.9;
-}
-
 .another {
   display: flex;
   justify-content: center;
@@ -843,7 +930,7 @@ progress::-moz-progress-bar {
 /* 404 */
 
 .not-found .error-code {
-  color: var(--gold);
+  color: var(--gold-text);
   font-family: "Gilroy", sans-serif;
   font-size: 4.5rem;
   font-weight: 500;
@@ -862,61 +949,49 @@ progress::-moz-progress-bar {
   margin-block-start: 2rem;
 }
 
-/* Footer */
+/* Footer: one flat line, the initiative's credit, then plain links. Phones wrap it. */
 
 .site-footer {
   margin-block-start: 2rem;
-  border-radius: 2rem 2rem 0 0;
-  background: var(--well);
+  border-block-start: 1px solid var(--line-soft);
   color: var(--muted);
+  font-size: 0.875rem;
 }
 
 .footer-inner {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.75rem;
-  padding-block: 2rem;
-  text-align: center;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 2rem;
+  padding-block: 1rem;
 }
 
 .site-footer .brand-name {
   color: var(--text);
 }
 
-.social {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.5rem;
+/* The links run like words, so the accounts and the source code wrap as one line. */
+.footer-links :is(ul, li) {
+  display: inline;
 }
 
-.social a {
-  display: inline-grid;
-  place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--green);
-}
-
-.social a:hover {
-  border-color: var(--gold);
-  color: var(--green-strong);
-}
-
-.footer-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  color: var(--faint);
+/* Tall enough to tap. */
+.footer-links a {
+  display: inline-block;
+  margin-inline-end: 1.25rem;
+  padding-block: 0.25rem;
+  color: var(--muted);
   text-decoration: none;
 }
 
-.footer-link:hover {
+.footer-links > a {
+  margin-inline-end: 0;
+}
+
+.footer-links a:hover {
   color: var(--text);
+  text-decoration: underline;
 }
 
 /* Phones: smaller titles and full-width actions. */
@@ -931,11 +1006,15 @@ progress::-moz-progress-bar {
   }
 
   .tool-hero {
-    padding-block: 2.25rem 0;
+    padding-block: 1.25rem 0;
   }
 
   .tool-hero h1 {
-    font-size: 2.125rem;
+    font-size: 1.5rem;
+  }
+
+  .workspace {
+    padding-block-start: 1.25rem;
   }
 
   .tool {
@@ -950,187 +1029,174 @@ progress::-moz-progress-bar {
     margin-block-start: 0.75rem;
   }
 
-  .workspace-main,
   .job {
     padding: 1.25rem;
   }
 
-  .cues {
-    padding-inline: 1rem;
-  }
-
-  .cue-text {
-    font-size: 1.1875rem;
-  }
-
   .form-actions .button,
-  .downloads .button,
   .another .button {
     flex: 1;
   }
 
-  .ocr-downloads .button {
-    flex-basis: 100%;
-  }
 }
 
-/* Each line takes its own direction: OCR pages often mix Arabic text with Latin or stray characters. */
-.ocr-pages .cue-text {
-  white-space: pre-wrap;
-  unicode-bidi: plaintext;
-  text-align: start;
-}
-
-/* Diacritization shares the tool workspace, with one model choice above both modes. */
+/* Hidden from sight, still read by screen readers. Positioned out of the flow, it needs no
+   negative margin, which would push it a pixel past an end-aligned container. */
 .visually-hidden {
   position: absolute;
   width: 1px;
   height: 1px;
   padding: 0;
-  margin: -1px;
+  margin: 0;
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
 }
 
-.diacritize-form,
-.diacritize-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+/* Diacritization: one container, as in a translation tool. The input panel (tabs across its top,
+   a borderless field with its count, then the model and the run button) and the output panel
+   (faintly tinted: a slim header row with the model and the result's two quiet actions, then the
+   result where its text appears) sit side by side, split by one line; narrow screens stack them
+   with a line between. */
+
+.diacritize-box {
+  --dz-pad: 1.5rem;
+  --dz-band: 3rem;
+  --dz-field: 11rem;
+  --dz-tint: rgb(74 52 30 / 0.035);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
 }
 
-.diacritize-form fieldset {
+.diacritize-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0 var(--dz-pad) 1.25rem;
+}
+
+.diacritize-form fieldset:not(.diacritize-top) {
   min-width: 0;
   margin: 0;
   padding: 0;
   border: 0;
 }
 
-.diacritize-form legend {
-  padding: 0;
-  margin-block-end: 0.625rem;
-  font-weight: 500;
+/* Text or Document: plain underline tabs on a line across the panel. */
+.diacritize-top {
+  display: flex;
+  align-items: flex-end;
+  min-width: 0;
+  min-block-size: var(--dz-band);
+  margin-block: 0;
+  margin-inline: calc(-1 * var(--dz-pad));
+  padding-block: 0;
+  padding-inline: calc(var(--dz-pad) - 1rem);
+  border: 0;
+  border-block-end: 1px solid var(--line);
 }
 
 .diacritize-choices {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
-}
-
-.diacritize-choices label {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  min-width: 0;
-  min-height: 3rem;
-  padding: 0.5rem 1rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  background: var(--surface);
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.diacritize-choices label:has(input:checked) {
-  border-color: var(--green);
-  background: var(--green-soft);
-  color: var(--green-strong);
-}
-
-.diacritize-choices label:hover {
-  border-color: var(--green);
-}
-
-.diacritize-choices label:has(input:focus-visible) {
-  outline: 2px solid var(--green);
-  outline-offset: 2px;
-}
-
-.diacritize-choices label:has(input:disabled) {
-  opacity: 0.65;
-  cursor: default;
-}
-
-.diacritize-choices input {
-  flex-shrink: 0;
-  width: 1rem;
-  height: 1rem;
-  margin: 0;
-  accent-color: var(--green);
-}
-
-.diacritize-modes .diacritize-choices {
-  gap: 0;
-  border-block-end: 1px solid var(--line);
 }
 
 .diacritize-modes label {
   position: relative;
-  flex: 1;
-  border: 0;
+  display: flex;
+  align-items: center;
+  min-block-size: 2.75rem;
+  margin-block-end: -1px;
+  padding: 0.375rem 1rem;
   border-block-end: 2px solid transparent;
-  border-radius: var(--radius-control) var(--radius-control) 0 0;
+  color: var(--muted);
+  font-weight: 500;
+  cursor: pointer;
 }
 
+/* The radios stay real; their labels draw the tabs. */
 .diacritize-modes input {
   position: absolute;
   opacity: 0;
 }
 
-.diacritize-modes label:has(input:checked) {
-  border-block-end-color: var(--green);
-  background: var(--paper);
+.diacritize-modes label:has(input:focus-visible) {
+  outline: 2px solid var(--green);
+  outline-offset: -2px;
+}
+
+.diacritize-modes label:hover {
   color: var(--text);
 }
 
-.diacritize-field-heading {
+.diacritize-modes label:has(input:disabled) {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.diacritize-modes label:has(input:checked) {
+  border-block-end-color: var(--green);
+  color: var(--green-strong);
+}
+
+/* The field, or the drop zone, fills the panel above its foot; both modes keep one height, so
+   switching tabs moves nothing. */
+.diacritize-panel {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.375rem 1rem;
-}
-
-.diacritize-field-heading label {
-  font-weight: 500;
-}
-
-.diacritize-count {
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.diacritize-count[data-invalid="true"] {
-  color: var(--danger);
-}
-
-.diacritize-text {
-  width: 100%;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.5rem;
   min-width: 0;
-  min-height: 12rem;
-  padding: 1rem 1.25rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  background: var(--paper);
+  min-block-size: calc(var(--dz-field) + 1.5rem);
+}
+
+.diacritize-panel > .dropzone {
+  flex: 1 1 auto;
+  justify-content: center;
+  margin-block-start: 0.75rem;
+}
+
+/* The chosen document is a plain row at the top of the panel, with no box of its own. */
+.diacritize-panel > .dropzone[data-selected="true"] {
+  flex: none;
+  padding-inline: 0 0.25rem;
+  border-color: transparent;
+  background: transparent;
+}
+
+/* The source and the result: one size, large enough for the diacritics to read clearly, with no
+   box of their own. */
+.diacritize-text {
+  inline-size: calc(100% + 1rem);
+  min-width: 0;
+  block-size: var(--dz-field);
+  margin-inline: -0.5rem;
+  padding: 0.75rem 0.5rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
   color: var(--text);
   font-family: var(--font-transcript);
   font-size: 1.25rem;
-  line-height: 2;
-  resize: vertical;
+  line-height: 2.1;
+  resize: none;
   text-align: start;
 }
 
 .diacritize-text:focus-visible {
-  outline-offset: -1px;
+  outline-offset: -2px;
 }
 
 .diacritize-text[aria-invalid="true"] {
-  border-color: var(--danger);
+  outline: 2px solid var(--danger);
+  outline-offset: -2px;
 }
 
 .diacritize-text::placeholder {
@@ -1138,34 +1204,1519 @@ progress::-moz-progress-bar {
   opacity: 1;
 }
 
-.diacritize-form .upload-progress .button {
-  align-self: flex-start;
+/* The field's foot: while the text already has diacritics, a note that they will be replaced,
+   then the count at the end. */
+.diacritize-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 1rem;
+  color: var(--muted);
+  font-size: 0.8125rem;
 }
 
-.diacritize-result .result-name span {
+.diacritize-marks {
+  flex: 1 1 0;
+  min-inline-size: min(100%, 12rem);
+}
+
+.diacritize-count {
+  flex: 0 1 auto;
+  margin-inline-start: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.diacritize-count[data-invalid="true"] {
+  color: var(--danger);
+}
+
+/* The panel's foot: the model at the start, the run button at the end. */
+.diacritize-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+.diacritize-foot > .model-unavailable {
+  flex-basis: 100%;
+  font-size: 0.875rem;
+}
+
+.diacritize-foot > .form-actions {
+  margin-inline-start: auto;
+}
+
+/* A small label, then the two names as native radios. */
+.diacritize-models {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 1rem;
+}
+
+.diacritize-models-label {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.diacritize-models label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-block-size: 2.25rem;
+  font-size: 0.9375rem;
+  cursor: pointer;
+}
+
+.diacritize-models input {
+  flex: none;
+  inline-size: 1rem;
+  block-size: 1rem;
+  margin: 0;
+  accent-color: var(--green);
+}
+
+.diacritize-models label:has(input:disabled) {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* The output panel: tinted, its text starting level with the input's under the tabs. The band
+   beside the tabs holds the result's header row; while another job runs, it names the result below
+   as the previous one there instead of its model. */
+[data-workspace="diacritization"] .workspace-review {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
   min-width: 0;
+  padding: 0 var(--dz-pad) 1.25rem;
+  border-block-start: 1px solid var(--line);
+  border-end-start-radius: calc(var(--radius) - 1px);
+  border-end-end-radius: calc(var(--radius) - 1px);
+  background: var(--dz-tint);
 }
 
-.copy-status:empty {
+[data-workspace="diacritization"] .workspace-review > .observation-notice,
+[data-workspace="diacritization"] .workspace-review > .previous-result {
+  margin-block-start: 0.75rem;
+}
+
+[data-workspace="diacritization"] .workspace-result {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
+/* Until the first result, the placeholder takes its place. */
+[data-workspace="diacritization"] .workspace-result:not(:has(.result)) {
   display: none;
 }
 
+.workspace-review:has(.workspace-result .result) .result-placeholder {
+  display: none;
+}
+
+[data-workspace="diacritization"] .result-placeholder {
+  padding-block: 0.75rem;
+  color: var(--faint);
+  font-size: 1rem;
+}
+
+.reading-label,
+.ocr-panel-title {
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+.result.diacritize-result {
+  flex: 1 1 auto;
+  gap: 0.5rem;
+}
+
+/* The slim header row: the model, muted, at its start; Copy all text and Download, quiet, at its
+   end. */
+.diacritize-output-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem 0.5rem;
+  min-block-size: 2.75rem;
+}
+
+.diacritize-output-head > .result-actions {
+  gap: 0.25rem;
+  margin-inline-end: -0.75rem;
+}
+
+/* Small buttons that keep their own width, so the row stays one line on phones too. */
+.diacritize-output-head .result-actions > * {
+  flex: none;
+}
+
+.diacritize-output-head .button.compact {
+  padding-inline: 0.625rem;
+}
+
+.diacritize-result > .copy-status {
+  font-size: 0.875rem;
+}
+
+.diacritize-result .diacritize-text {
+  flex: 1 1 0;
+  block-size: auto;
+  min-block-size: var(--dz-field);
+}
+
+/* A document result names its file where the text would appear. */
+.diacritize-document {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding-block: 0.75rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.diacritize-document svg {
+  margin-block-start: 0.2em;
+  color: var(--gold);
+}
+
+.diacritize-model {
+  color: var(--faint);
+  font-size: 0.875rem;
+}
+
+[data-workspace="diacritization"] .workspace-review:has(> .previous-result:not([hidden])) .diacritize-model {
+  visibility: hidden;
+}
+
+@media (min-width: 60rem) {
+  .diacritize-box {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  /* Leave the same space as the source label and its gap before the empty output. */
+  [data-workspace="diacritization"] .result-placeholder {
+    margin-block-start: calc(0.875rem * 1.6 + 0.5rem);
+  }
+
+  [data-workspace="diacritization"] .workspace-review {
+    padding-block-start: calc(var(--dz-band) + 0.75rem);
+    border-block-start: 0;
+    border-inline-start: 1px solid var(--line);
+    border-end-start-radius: 0;
+    border-start-end-radius: calc(var(--radius) - 1px);
+  }
+
+  /* Level with the tabs, so showing or hiding them moves nothing: the header row, and in its
+     place at the start, the previous-result line. */
+  [data-workspace="diacritization"] .workspace-review > .previous-result,
+  [data-workspace="diacritization"] .workspace-review .diacritize-output-head {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline: var(--dz-pad);
+    block-size: var(--dz-band);
+    margin: 0;
+  }
+
+  [data-workspace="diacritization"] .workspace-review > .previous-result {
+    display: flex;
+    align-items: center;
+    inset-inline-end: auto;
+  }
+
+  [data-workspace="diacritization"] .workspace-review .diacritize-output-head {
+    flex-wrap: nowrap;
+    min-block-size: 0;
+  }
+
+  /* One line across both panels under the tabs and the header row, as in a translation tool. */
+  [data-workspace="diacritization"] .workspace-review::before {
+    content: "";
+    position: absolute;
+    inset-block-start: calc(var(--dz-band) - 1px);
+    inset-inline: 0;
+    border-block-start: 1px solid var(--line);
+  }
+}
+
 @media (max-width: 39.99rem) {
-  .diacritize-models label {
-    flex: 1;
+  .diacritize-box {
+    --dz-pad: 1.25rem;
+    --dz-field: 10rem;
   }
 
   .diacritize-text {
-    padding: 0.75rem;
-    font-size: 1.3125rem;
+    font-size: 1.375rem;
   }
 
-  .diacritize-choices input {
-    width: 1.25rem;
-    height: 1.25rem;
+  /* The panels follow their text rather than keep one height. */
+  .diacritize-panel {
+    min-block-size: 0;
   }
 
-  .diacritize-result .downloads .button {
+  .diacritize-result .diacritize-text {
+    flex: none;
+    block-size: var(--dz-field);
+    min-block-size: 0;
+  }
+
+  .diacritize-foot > .form-actions {
+    flex: 1 1 100%;
+  }
+}
+
+/* Phones: both text areas grow with their text from a small height, where the browser can size a
+   field by its content; elsewhere they keep the fixed height above. */
+@supports (field-sizing: content) {
+  @media (max-width: 39.99rem) {
+    .diacritize-text,
+    .diacritize-result .diacritize-text {
+      field-sizing: content;
+      block-size: auto;
+      min-block-size: 7.5rem;
+    }
+  }
+}
+
+/* Compact controls for toolbars: one size, three weights (secondary, ghost, icon). */
+
+.button.compact {
+  gap: 0.375rem;
+  min-block-size: 2.5rem;
+  padding: 0.375rem 1rem;
+  font-size: 0.9375rem;
+}
+
+.button.ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.button.ghost:hover {
+  background: var(--well);
+  color: var(--text);
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: var(--well);
+  color: var(--text);
+}
+
+.icon-button:disabled {
+  opacity: 0.4;
+  background: transparent;
+  cursor: default;
+}
+
+/* Regions that receive focus from a script, not from the keyboard, need no ring. */
+[tabindex="-1"]:focus {
+  outline: none;
+}
+
+/* Workspace: the page's one width, centred on the page axis, for the title, input, notes and
+   result of every tool. */
+
+.workspace-entry,
+[data-workspace],
+.job {
+  --radius: 0.75rem;
+  --radius-control: 0.5rem;
+  --shadow: none;
+}
+
+:is(.workspace-entry, [data-workspace], .job) .button {
+  border-radius: var(--radius-control);
+}
+
+.workspace-entry,
+[data-workspace] {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-width: 0;
+}
+
+.workspace-card,
+[data-workspace]:not([data-workspace="diacritization"]) .workspace-review:has(.result) {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+  padding: 2rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.workspace-review {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.workspace-result {
+  min-width: 0;
+}
+
+/* Progress: one line under the button while a job runs, readable at a glance: a small spinner,
+   the stage and its percentage, then any Cancel at the end; a thin bar under them, with a band
+   sweeping along it while there is no percentage; then any detail and the job's own link. */
+
+.upload-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem 0.75rem;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+.upload-progress .submission-status {
+  order: 1;
+  min-inline-size: 0;
+  min-block-size: 1.75em;
+  color: var(--text);
+}
+
+.upload-progress .submission-percent {
+  order: 2;
+  font-variant-numeric: tabular-nums;
+}
+
+.upload-progress .cancel-upload {
+  order: 3;
+  margin-inline-start: auto;
+}
+
+.upload-progress progress {
+  order: 4;
+  flex: 1 1 100%;
+  block-size: 0.25rem;
+}
+
+.upload-progress .server-detail,
+.upload-progress .keep-open,
+.upload-progress .progress-links {
+  order: 5;
+  flex: 1 1 100%;
+}
+
+/* The spinner turns while the bar shows, that is while the job is under way. */
+.upload-progress:has(> progress:not([hidden])) .submission-status::before {
+  content: "";
+  display: inline-block;
+  inline-size: 0.875em;
+  block-size: 0.875em;
+  margin-inline-end: 0.5rem;
+  border: 2px solid var(--line);
+  border-block-start-color: var(--green);
+  border-radius: 50%;
+  vertical-align: -0.125em;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+.upload-progress progress:indeterminate {
+  background: var(--well) linear-gradient(var(--green), var(--green)) no-repeat;
+  background-size: 30% 100%;
+  animation: progress-sweep 1.4s ease-in-out infinite;
+}
+
+.upload-progress progress:indeterminate::-webkit-progress-bar {
+  background: transparent;
+}
+
+.upload-progress progress:indeterminate::-moz-progress-bar {
+  background: transparent;
+}
+
+/* From just off the start edge to just past the end edge. */
+@keyframes progress-sweep {
+  from {
+    background-position: -43% 0;
+  }
+
+  to {
+    background-position: 143% 0;
+  }
+}
+
+[dir="rtl"] .upload-progress progress:indeterminate {
+  animation-direction: reverse;
+}
+
+/* Without motion, the bar stays empty rather than showing a band that could read as progress. */
+@media (prefers-reduced-motion: reduce) {
+  .upload-progress progress:indeterminate {
+    background-image: none;
+  }
+}
+
+.submission-percent:empty,
+.server-detail:empty {
+  display: none;
+}
+
+[data-workspace][data-phase="cancelled"] .submission-status {
+  color: var(--muted);
+}
+
+.progress-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+}
+
+.progress-links:not(:has(> :not([hidden]))) {
+  display: none;
+}
+
+/* Retire the recovery link after a job ends, without taking away keyboard focus. */
+[data-workspace]:is([data-phase="completed"], [data-phase="failed"], [data-phase="cancelled"], [data-phase="missing"]) .workspace-recovery:not(:focus) {
+  display: none;
+}
+
+/* Once a job completes, the result is the news: its progress is hidden from sight, keeping the
+   status for screen readers, and View result shows only on keyboard focus, like a skip link. */
+.view-result:not(:focus),
+[data-workspace][data-phase="completed"] .upload-progress:not(:focus-within),
+[data-workspace][data-phase="completed"] .submission-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.observation-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+.observation-notice:not(:has(> :not([hidden]))) {
+  display: none;
+}
+
+.observation-notice:has(.observation-status:not([hidden])) {
+  padding: 0.75rem 1rem;
+  border: 1px solid rgb(138 90 20 / 0.25);
+  border-radius: var(--radius-control);
+  background: var(--warning-soft);
+}
+
+.observation-status {
+  flex: 1;
+  min-inline-size: 12rem;
+}
+
+/* While another job runs, a plain line says the result below is the previous one. */
+.previous-result {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+/* Results: a header with the name and the two whole-result actions; then one toolbar; then the
+   content. */
+
+.result {
+  gap: 1.25rem;
+  min-inline-size: 0;
+}
+
+.result-name {
+  grid-area: name;
+}
+
+/* Copy and Download use the same quiet style across tools. They keep one
+   line beside the name on wide screens. */
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  grid-area: actions;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* With very large text these labels wrap rather than push past the card. */
+.result-actions .button {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 40rem) {
+  .result-actions {
+    flex-wrap: nowrap;
+  }
+
+  .result-actions .button {
+    white-space: nowrap;
+  }
+}
+
+/* Menus (Download, Copy, zoom): a button that opens a small list under it, aligned with the
+   button's end edge, or its start edge for a menu at the start of a row (menu-start). */
+.menu {
+  position: relative;
+}
+
+.menu > summary {
+  list-style: none;
+}
+
+.menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* The chevron after the button's label, drawn in its text color; it turns over while open. */
+.menu > summary::after {
+  content: "";
+  flex: none;
+  inline-size: 1rem;
+  block-size: 1rem;
+  margin-inline-end: -0.25rem;
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.menu[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+.menu-list {
+  position: absolute;
+  z-index: 5;
+  inset-block-start: calc(100% + 0.375rem);
+  inset-inline-end: 0;
+  display: flex;
+  flex-direction: column;
+  inline-size: max-content;
+  min-inline-size: 100%;
+  /* The card's border also sits between the menu's anchor and the viewport edge. */
+  max-inline-size: min(22rem, calc(100vw - 2.5rem - 2px));
+  padding: 0.375rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  box-shadow: 0 10px 28px rgb(74 52 30 / 0.16);
+}
+
+.menu-start > .menu-list {
+  inset-inline: 0 auto;
+}
+
+.menu-list :is(a, button) {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  inline-size: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9375rem;
+  text-align: start;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.menu-list :is(a, button):hover {
+  background: var(--well);
+  color: var(--text);
+}
+
+.menu-list :is(a, button):focus-visible {
+  outline-offset: -2px;
+}
+
+.menu-list button:disabled {
+  opacity: 0.4;
+  background: transparent;
+  cursor: default;
+}
+
+.menu-list svg {
+  color: var(--muted);
+}
+
+/* A choice that is in use is checked; the others keep its place, so their labels line up. */
+.menu-list [aria-pressed]::before {
+  content: "";
+  flex: none;
+  inline-size: 1rem;
+  block-size: 1rem;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.menu-list [aria-pressed="true"]::before {
+  background: var(--green);
+}
+
+/* A line before a second group of choices, such as the zoom steps after the fit choices. */
+.menu-group {
+  margin-block-start: 0.25rem;
+  padding-block-start: 0.25rem;
+  border-block-start: 1px solid var(--line-soft);
+}
+
+.copy-status {
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+.copy-status:empty,
+[data-copy-fallback]:empty {
+  display: none;
+}
+
+.copy-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-inline-size: 0;
+}
+
+.copy-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.copy-panel textarea {
+  inline-size: 100%;
+  min-block-size: 10rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+  color: var(--text);
+  font-family: var(--font-transcript);
+  line-height: 1.9;
+  white-space: pre-wrap;
+  unicode-bidi: plaintext;
+  resize: vertical;
+}
+
+/* Search: a find bar. The count, the two steps and Clear sit inside the field at its end; the
+   matching options show under it only while searching, with the active match's cue or page. */
+
+.result-search {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A compact find field; very large text wraps the tools onto a second line inside it. */
+.search-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  column-gap: 0.375rem;
+  min-inline-size: 0;
+  min-block-size: 2.5rem;
+  padding-inline: 0.875rem 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+}
+
+.search-field:focus-within {
+  border-color: var(--green);
+  box-shadow: 0 0 0 1px var(--green);
+}
+
+.search-field > svg {
+  color: var(--faint);
+}
+
+.search-field input {
+  flex: 1 1 2rem;
+  min-inline-size: 0;
+  min-block-size: 2.375rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
+.search-field input:focus-visible {
+  outline: none;
+}
+
+.search-field input::placeholder {
+  color: var(--faint);
+  opacity: 1;
+}
+
+/* An empty field follows the page, so an Arabic placeholder starts on the right. */
+[dir="rtl"] .search-field input:placeholder-shown {
+  direction: rtl;
+}
+
+.search-field input::-webkit-search-cancel-button {
+  display: none;
+  appearance: none;
+}
+
+.search-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.125rem;
+  min-inline-size: 0;
+}
+
+.search-tools .icon-button {
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+}
+
+/* The steps and Clear come with a query. */
+.search-field:has(input:placeholder-shown) .search-tools .icon-button {
+  display: none;
+}
+
+.search-count {
+  padding-inline: 0.125rem;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.search-count:empty {
+  display: none;
+}
+
+.search-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 1.25rem;
+  padding-inline: 0.875rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+/* The options show from focusing the find bar until leaving it with the field empty. */
+.result-search:not([data-search-open]):has([data-search-query]:placeholder-shown) .search-options {
+  display: none;
+}
+
+.search-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-block-size: 2rem;
+  cursor: pointer;
+}
+
+.search-options input,
+.timestamps-choice input {
+  flex: none;
+  inline-size: 1rem;
+  block-size: 1rem;
+  margin: 0;
+  accent-color: var(--green);
+}
+
+/* The active match's cue or page is announced with the count; the cue picker or the page
+   navigator already shows it. */
+.search-active {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+::highlight(arabi-search-match) {
+  color: var(--text);
+  background: var(--warning-soft);
+}
+
+::highlight(arabi-search-active) {
+  color: var(--surface);
+  background: var(--green);
+  text-decoration: underline double;
+}
+
+.search-painted {
+  background-image: var(--search-backgrounds);
+  background-position: var(--search-positions);
+  background-size: var(--search-sizes);
+  background-repeat: no-repeat;
+  background-origin: border-box;
+}
+
+/* One toolbar row under the result header: the view's own controls at the start, a compact
+   search at the end. The search's matching options open under its field, on the end side. */
+
+.result-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.5rem 1.5rem;
+  min-inline-size: 0;
+}
+
+.result-toolbar:not(:has(> :not([hidden]))) {
+  display: none;
+}
+
+.result-toolbar > .result-search {
+  flex: 1 1 14rem;
+  align-items: flex-end;
+}
+
+.result-toolbar .search-field {
+  inline-size: min(100%, 20rem);
+}
+
+.result-toolbar .search-options {
+  justify-content: flex-end;
+  padding-inline: 0.5rem;
+}
+
+/* Transcript: the toolbar over a flat list of compact rows, each with its start time, its text
+   beside it and, at the end, its Copy. */
+
+.transcript-result {
+  overflow-wrap: anywhere;
+}
+
+.transcript-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 1rem;
+  min-block-size: 2.5rem;
+  min-inline-size: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.transcript-actions:empty {
+  display: none;
+}
+
+.timestamps-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-block-size: 2rem;
+  cursor: pointer;
+}
+
+.cue-choice {
+  display: flex;
+  min-inline-size: 0;
+  max-inline-size: 16rem;
+}
+
+/* A quiet picker: plain text with its chevron on the closing side. */
+.cue-choice select {
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 2rem;
+  padding-block: 0.25rem;
+  padding-inline: 0.5rem 1.75rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%235f5245'%3E%3Cpath fill-rule='evenodd' d='M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z'/%3E%3C/svg%3E") no-repeat right 0.375rem center / 1rem;
+  color: var(--muted);
+  font: inherit;
+  appearance: none;
+  cursor: pointer;
+}
+
+[dir="rtl"] .cue-choice select {
+  background-position: left 0.375rem center;
+}
+
+.cue-choice select:hover {
+  background-color: var(--well);
+  color: var(--text);
+}
+
+.cues {
+  max-block-size: 36rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 0.75rem;
+  padding-block: 0.5rem;
+}
+
+/* The text wraps beside the time; only very large text moves it under the time. */
+.cue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 1rem;
+  padding-block: 0.25rem;
+  padding-inline: 0.5rem 0.25rem;
+  border-radius: 0.5rem;
+}
+
+/* Wide enough for the transcript's longest time; the server sets how many characters. */
+.cue-time {
+  flex: 0 0 calc(var(--time-chars, 7) * 1ch);
+  color: var(--faint);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Each line keeps its own direction but starts on the list's start edge, beside the time. Lines
+   stop at a reading measure on wide pages. */
+.cue-text {
+  flex: 1 1 6em;
+  min-inline-size: 0;
+  max-inline-size: var(--measure);
+  font-family: var(--font-transcript);
+  font-size: 1.3125rem;
+  line-height: 1.9;
+  white-space: pre-wrap;
+  unicode-bidi: plaintext;
+  overflow-wrap: anywhere;
+  text-align: match-parent;
+}
+
+/* A small labelled button: the icon and a short Copy, named in full for screen readers. */
+.button.compact.copy-cue {
+  align-self: flex-start;
+  min-block-size: 2rem;
+  margin-inline-start: auto;
+  margin-block-start: 0.25rem;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.8125rem;
+}
+
+.transcript-result.timestamps-hidden .cue-time {
+  display: none;
+}
+
+/* With a pointer, a cue's row lights up and shows its copy button; touch screens always show
+   the button. */
+@media (hover: hover) {
+  .cue:hover {
+    background: rgb(74 52 30 / 0.035);
+  }
+
+  .cue:not(:hover, :focus-within) .copy-cue {
+    opacity: 0;
+  }
+}
+
+/* Script-only controls stay out of sight until their script has taken over the result. */
+.transcript-result:not([data-transcript-ready]) [data-copy-all],
+.ocr-review:not([data-enhanced]) .copy-menu {
+  display: none;
+}
+
+/* OCR: the toolbar over both columns (above the source, its page navigator and zoom; above the
+   text, the search), then the page and its text side by side, starting level. The page floats on
+   the card with a soft shadow, as in a file preview. */
+
+.ocr-review {
+  min-inline-size: 0;
+}
+
+/* Two halves as wide as the columns under them; the page's half takes more only if its controls
+   need it. */
+.ocr-page-tools {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-block-size: 2.5rem;
+  min-inline-size: calc(50% - 0.75rem);
+}
+
+.ocr-search {
+  display: flex;
+  flex: 1 1 16rem;
+  min-inline-size: 0;
+}
+
+.ocr-search > .result-search {
+  flex: 1;
+  align-items: flex-end;
+}
+
+.ocr-search .search-field {
+  inline-size: min(100%, 20rem);
+}
+
+.ocr-search .search-options {
+  justify-content: flex-end;
+  padding-inline: 0.5rem;
+}
+
+.ocr-toolbar > .error {
+  flex-basis: 100%;
+}
+
+/* With very large text the navigator and the view switch wrap rather than push past the card. The
+   count runs in the page's direction; its numbers are isolated left to right. */
+.ocr-page-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  min-inline-size: 0;
+}
+
+.ocr-page-count {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.ocr-page-field input {
+  inline-size: 2.75rem;
+  min-block-size: 2.25rem;
+  padding: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.ocr-page-total {
+  padding-inline: 0.25rem 0.125rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ocr-review [aria-invalid="true"] {
+  border-color: var(--danger);
+  outline-color: var(--danger);
+}
+
+.ocr-page-tools .icon-button {
+  inline-size: 2rem;
+  block-size: 2rem;
+}
+
+/* The zoom acts on the page, so it closes its half of the toolbar: one quiet button reading the
+   current zoom, whose menu holds the fit choices and the steps. */
+.ocr-zoom {
+  display: flex;
+}
+
+.zoom-menu > summary {
+  flex-wrap: wrap;
+  min-block-size: 2rem;
+  padding-inline: 0.625rem 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+[data-ocr-zoom-value] {
+  min-inline-size: 2.75rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.ocr-panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5rem;
+}
+
+.ocr-source-panel,
+.ocr-text-panel,
+.ocr-source-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-inline-size: 0;
+}
+
+.ocr-source-status,
+.ocr-no-text,
+.ocr-page h3 {
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+/* Where the preview came from matters only when there is none. */
+.ocr-review[data-source-attached] .ocr-source-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.ocr-source-picker > label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-inline-size: 0;
+}
+
+.ocr-source-picker input[type="file"] {
+  inline-size: 100%;
+  min-inline-size: 0;
+  color: var(--text);
+  font: inherit;
+}
+
+/* A quiet local file action, separate from the tool's processing action. */
+.ocr-source-picker input::file-selector-button {
+  min-block-size: 2.5rem;
+  max-inline-size: 100%;
+  margin-inline-end: 0.75rem;
+  padding: 0.375rem 1rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--well);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ocr-source-picker .ocr-confirm {
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.ocr-confirm input {
+  flex-shrink: 0;
+  inline-size: 1.125rem;
+  block-size: 1.125rem;
+  margin-block-start: 0.25rem;
+  accent-color: var(--green);
+}
+
+.ocr-source-picker .button,
+.copy-panel .button {
+  align-self: flex-start;
+  background: var(--well);
+  color: var(--text);
+}
+
+/* Side by side, the source fills the height its text pane sets; the page's top meets the text's
+   first line, with room around it for its shadow. */
+.ocr-source-viewport {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  min-block-size: 0;
+  padding: 0.5rem 1rem 1.25rem;
+  border-radius: 0.375rem;
+  background: var(--well);
+  direction: ltr;
+  overflow: auto;
+}
+
+.ocr-source-viewport :is(canvas, img) {
+  display: block;
+  max-inline-size: none;
+  margin-inline: auto;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(43 33 25 / 0.14), 0 6px 20px rgb(43 33 25 / 0.12);
+}
+
+.ocr-text-viewport {
+  min-inline-size: 0;
+  block-size: clamp(22rem, 65vh, 45rem);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.ocr-page + .ocr-page {
+  margin-block-start: 1.5rem;
+}
+
+.ocr-page h3 {
+  font-family: var(--font-body);
+  font-weight: 500;
+}
+
+.ocr-page h3:not(.visually-hidden) + .ocr-page-text {
+  margin-block-start: 0.5rem;
+}
+
+.ocr-page-text {
+  font-family: var(--font-transcript);
+  font-size: 1.125rem;
+  line-height: 2;
+  white-space: pre-wrap;
+  unicode-bidi: plaintext;
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+
+.ocr-no-text {
+  margin-block-start: 0.5rem;
+}
+
+.ocr-empty-document {
+  color: var(--muted);
+}
+
+/* Narrow screens show one view at a time, chosen with the toolbar's one segmented control. */
+.ocr-view-choice {
+  display: none;
+  flex-wrap: wrap;
+  max-inline-size: 100%;
+  gap: 0.125rem;
+  margin: 0;
+  padding: 0.1875rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--well);
+}
+
+.ocr-view-choice label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-block-size: 2.125rem;
+  padding: 0.25rem 1rem;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.ocr-view-choice label:has(:checked) {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgb(74 52 30 / 0.16);
+}
+
+.ocr-view-choice input {
+  position: absolute;
+  opacity: 0;
+}
+
+.ocr-view-choice label:has(input:focus-visible) {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+@media (max-width: 55rem) {
+  .ocr-panels {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ocr-view-choice {
+    display: inline-flex;
+  }
+
+  /* The view switch already names the single visible pane. */
+  .ocr-review[data-enhanced] .ocr-panel-title {
+    display: none;
+  }
+
+  /* One column: the search first and full width, then the view switch and the page navigator,
+     then the zoom while the original is in view. */
+  .ocr-search {
+    flex: 1 1 100%;
+    order: -1;
+  }
+
+  .ocr-search .search-field {
+    inline-size: 100%;
+  }
+
+  .ocr-page-tools {
+    flex: 1 1 auto;
+    justify-content: flex-start;
+    column-gap: 0.5rem;
+    min-inline-size: 0;
+  }
+
+  .ocr-review[data-view="text"] :is(.ocr-source-panel, .ocr-zoom),
+  .ocr-review[data-view="source"] .ocr-text-panel {
+    display: none;
+  }
+
+  .ocr-source-viewport {
+    flex: none;
+    block-size: clamp(22rem, 65vh, 45rem);
+  }
+
+  .ocr-text-viewport {
+    block-size: auto;
+    overflow-y: visible;
+  }
+}
+
+/* Phones */
+
+@media (max-width: 39.99rem) {
+  .workspace-card,
+  [data-workspace]:not([data-workspace="diacritization"]) .workspace-review:has(.result) {
+    padding: 1.25rem;
+  }
+
+  /* The bar's run button takes a full line under the file, which keeps Remove at its end. */
+  .upload:has(> .dropzone[data-selected="true"]) {
+    padding-inline: calc(1.25rem - 1px) 1.25rem;
+  }
+
+  .upload:has(> .dropzone[data-selected="true"]) > .form-actions {
+    flex: 1 1 100%;
+  }
+
+  .upload > .form-actions .button {
+    min-block-size: 2.75rem;
+  }
+
+  [data-workspace]:has(> .upload[data-collapsed]) > .workspace-review:has(.result) {
+    padding-block-start: 1rem;
+  }
+
+  .result-heading {
+    grid-template-areas:
+      "name"
+      "actions";
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .result-heading .result-actions {
+    justify-content: stretch;
+    margin-block-start: 0.25rem;
+  }
+
+  /* Copy all and Download share the row when they fit. */
+  .result-actions > * {
+    flex: 1 1 auto;
+  }
+
+  .result-actions .menu > summary {
+    inline-size: 100%;
+  }
+
+  [data-workspace]:has(> .upload[data-collapsed]) .result-heading > .result-actions {
+    flex: 1;
+  }
+
+  /* The toolbar wraps: the search first and full width, then the rest. */
+  .result-toolbar {
+    column-gap: 0.5rem;
+  }
+
+  .result-toolbar > .result-search {
     flex-basis: 100%;
+    order: -1;
+  }
+
+  .result-toolbar .search-field {
+    inline-size: 100%;
+  }
+
+  .ocr-view-choice label {
+    padding-inline: 0.75rem;
+  }
+
+  .cue {
+    column-gap: 0.5rem;
+    padding-inline: 0.25rem 0;
+  }
+
+  .cue-time {
+    font-size: 0.8125rem;
+  }
+
+  /* The page scrolls the transcript, which stays one focusable, named list. */
+  .cues {
+    max-block-size: none;
+    overflow-y: visible;
+  }
+
+  .cue-text {
+    font-size: 1.0625rem;
+    line-height: 1.85;
+  }
+
+  .search-options,
+  :is(.result-toolbar, .ocr-search) .search-options {
+    justify-content: flex-start;
+    column-gap: 1rem;
+    padding-inline: 0.5rem;
+  }
+
+  /* While searching, the toolbar stays at the top of the screen over the result it searches, so
+     the steps stay at hand as the page scrolls from match to match. It keeps one size either way,
+     so starting a search moves nothing; its background and the line under it reach across the
+     card's padding as shadows, which take no room. */
+  .result-toolbar {
+    margin-block: -0.5rem;
+    padding-block: 0.5rem;
+  }
+
+  .result-toolbar:has([data-search-open], [data-search-query]:not(:placeholder-shown)) {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 3;
+    background: var(--surface);
+    box-shadow:
+      -1.25rem 0 var(--surface),
+      1.25rem 0 var(--surface),
+      0 1px var(--line-soft),
+      -1.25rem 1px var(--line-soft),
+      1.25rem 1px var(--line-soft);
   }
 }

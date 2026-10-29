@@ -21,8 +21,8 @@ use topcoat::{
         response::{IntoResponse, Response},
         route,
     },
-    runtime::connected,
-    view::{View, component, emit, live, view},
+    runtime::{connected, shard},
+    view::{View, ViewExt, component, emit, live, view},
 };
 
 use super::{COOKIE, Reply, error, rejected, remember, unavailable};
@@ -35,6 +35,7 @@ use crate::{
     i18n::Locale,
     icons,
     queue::{CancelReason, JobId, Status},
+    result_controls::{self, COPY_SCRIPT, CopyAll, DownloadLink},
 };
 
 module_param!(pub id: JobId, error = not_found);
@@ -42,43 +43,72 @@ module_param!(pub id: JobId, error = not_found);
 const HEARTBEAT: Duration = Duration::from_secs(30);
 
 #[page]
-pub(super) async fn page(cx: &Cx) -> Result<impl View> {
+pub(in crate::app::diacritize) async fn page(cx: &Cx) -> Result<impl View> {
+    crate::workspace::private_response(cx);
     let id = path_param::<Id>(cx)?.clone();
     let locale = Locale::of(cx);
-    let mut watch = app_context::<Diacritization>(cx)
-        .queue
-        .watch(&id)
-        .ok_or_not_found()?;
-    let can_cancel = owns_job(cx, &id);
+    let exists = app_context::<Diacritization>(cx).queue.watch(&id).is_some();
     Ok(view! {
         diacritize::tool_hero(locale: locale, lead: false)
         <section class="workspace">
             <div class="container workspace-layout">
-                (live! {
-                    loop {
-                        let status = watch.status();
-                        let finished = status.is_finished();
-                        let token = emit! {
-                            job_status(
-                                locale: locale,
-                                id: id.clone(),
-                                status: status,
-                                can_cancel: can_cancel
-                            )
-                        }?;
-                        if finished || !connected(cx) {
-                            break Ok(token);
-                        }
-                        tokio::select! {
-                            changed = watch.changed() => if !changed { break Ok(token); },
-                            () = tokio::time::sleep(HEARTBEAT) => {}
-                        }
-                    }
-                })
+                if exists {
+                    diacritize::editor(locale: locale, initial: Some(id))
+                } else {
+                    (StatusCode::NOT_FOUND)
+                    <p class="notice">(locale.text().workspace.missing)</p>
+                    <a class="button secondary" href=(href!(diacritize::page))>
+                        (locale.text().diacritization.another)
+                    </a>
+                }
             </div>
         </section>
+        <script src=(COPY_SCRIPT) defer=(true)></script>
+        <script src=(crate::workspace::SCRIPT) defer=(true)></script>
         <script src=(diacritize::SCRIPT) defer=(true)></script>
     })
+}
+
+/// A job link is the existing read capability. Cancellation stays on its HTTP route.
+#[shard("/diacritize/observe")]
+pub(crate) async fn observe(cx: &Cx, job: String) -> Result<impl View> {
+    crate::workspace::private_response(cx);
+    let locale = Locale::of(cx);
+    let id = if job.is_empty() {
+        None
+    } else {
+        Some(job.parse::<JobId>().map_err(|_| not_found())?)
+    };
+    Ok(view! {
+        cx =>
+        if let Some(id) = id {
+            (live! {
+                let Some(mut watch) = app_context::<Diacritization>(cx).queue.watch(&id) else {
+                    return emit! {
+                        <div data-job-id=(id.to_string()) data-phase="missing">
+                            <p class="status">(locale.text().workspace.missing)</p>
+                        </div>
+                    };
+                };
+                loop {
+                    let status = watch.status();
+                    let finished = status.is_finished();
+                    let token = emit! {
+                        job_status(locale: locale, id: id.clone(), status: status)
+                    }?;
+                    if finished || !connected(cx) {
+                        drop(watch);
+                        break Ok(token);
+                    }
+                    tokio::select! {
+                        changed = watch.changed() => if !changed { break Ok(token); },
+                        () = tokio::time::sleep(HEARTBEAT) => {}
+                    }
+                }
+            })
+        }
+    }
+    .boxed())
 }
 
 #[component]
@@ -87,7 +117,6 @@ async fn job_status(
     locale: Locale,
     id: JobId,
     status: Status<Document>,
-    can_cancel: bool,
 ) -> Result<impl View> {
     let text = &locale.text().diacritization;
     let finished = status.is_finished();
@@ -112,7 +141,16 @@ async fn job_status(
         Status::Reserved | Status::Waiting { .. } => ("waiting", Some(icons::WAITING)),
         Status::Running { .. } => ("running", None),
         Status::Done(_) => ("done", Some(icons::DONE)),
+        Status::Cancelled(CancelReason::User) => ("cancelled", None),
         Status::Failed | Status::Cancelled(_) => ("failed", Some(icons::FAILED)),
+    };
+    let phase = match &status {
+        Status::Reserved => "reserved",
+        Status::Waiting { .. } => "queued",
+        Status::Running { .. } => "processing",
+        Status::Done(_) => "completed",
+        Status::Cancelled(CancelReason::User) => "cancelled",
+        Status::Failed | Status::Cancelled(_) => "failed",
     };
     let percent = match &status {
         Status::Running { percent, .. } => Some(*percent),
@@ -122,28 +160,22 @@ async fn job_status(
         Status::Done(document) => Some(document),
         _ => None,
     };
-    let retry = document.as_ref().and_then(|document| {
-        document
-            .text
-            .as_ref()
-            .map(|text_result| (text_result.source.clone(), document.model))
-    });
     Ok(view! {
-        diacritize::steps(
-            locale: locale,
-            current: if state == "done" {
-                diacritize::Step::Download
-            } else {
-                diacritize::Step::Diacritize
-            },
-            failed: state == "failed"
-        )
-        <div class="job" data-state=(state)>
+        <div
+            class="job"
+            data-state=(state)
+            data-update=(std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis())
+            data-job-id=(id.to_string())
+            data-phase=(phase)
+        >
             <div class="job-heading">
                 if let Some(state_icon) = state_icon {
                     <span class="job-icon">icon(data: state_icon, size: 20)</span>
                 }
-                <p id="job-status" class="status" role="status">(message)</p>
+                <p class="status">(message)</p>
                 if let Some(percent) = percent {
                     <p class="percent">(locale.percent(percent))</p>
                 }
@@ -156,29 +188,11 @@ async fn job_status(
                     icon(data: icons::WARNING, size: 20)
                     <span>(text.keep_open)</span>
                 </p>
-                if can_cancel {
-                    <form method="post" action=(href!(cancel, Id(id.clone())))>
-                        <button type="submit" class="button secondary">
-                            (text.cancel)
-                        </button>
-                    </form>
-                }
             }
             if let Some(document) = document {
                 result(locale: locale, id: id.clone(), document: document)
             }
         </div>
-        if let Some((source, model)) = retry {
-            <div class="workspace-main">
-                <p>(text.try_again)</p>
-                diacritize::editor(
-                    locale: locale,
-                    source: source,
-                    model: model,
-                    retry: true
-                )
-            </div>
-        }
         if finished {
             <p class="another">
                 <a class="button secondary" href=(href!(diacritize::page))>
@@ -189,29 +203,57 @@ async fn job_status(
     })
 }
 
+/// The output panel's content: a slim header row with the model that produced the result, muted,
+/// at its start and the result's two quiet actions at its end; then the diacritized text (or the
+/// document's name) where the text appears, and a line saying whether a copy worked.
 #[component]
-async fn result(locale: Locale, id: JobId, document: Arc<Document>) -> Result<impl View> {
+async fn result(cx: &Cx, locale: Locale, id: JobId, document: Arc<Document>) -> Result<impl View> {
     let text = &locale.text().diacritization;
-    let name = if document.kind == DocumentKind::Text {
-        text.result_label.to_owned()
-    } else {
-        document.name.clone()
-    };
+    let mut downloads = vec![DownloadLink {
+        label: if document.kind == DocumentKind::Docx {
+            text.download_docx
+        } else {
+            text.download_text
+        },
+        href: href!(download_result, Id(id.clone())).resolve(cx),
+    }];
+    if document.text.is_none() {
+        downloads.push(DownloadLink {
+            label: text.download_original,
+            href: href!(download_original, Id(id.clone())).resolve(cx),
+        });
+    }
+    let copy = document
+        .text
+        .is_some()
+        .then_some(CopyAll::Field("diacritized-text"));
+    let model = locale.diacritization_model(document.model);
     Ok(view! {
-        <div class="result diacritize-result">
-            <div class="result-heading">
-                <p class="result-name">
-                    icon(data: icons::TRANSCRIPT, size: 20)
-                    <span dir="auto">(name)</span>
+        <div
+            class="result diacritize-result"
+            data-result="diacritization"
+            data-job-id=(id.to_string())
+            data-model=(model)
+            data-model-value=(document.model.as_str())
+            data-source=(document.text.as_ref().map(|text| text.source.as_str()))
+            data-mode=(if document.text.is_some() { "text" } else { "document" })
+        >
+            <div class="diacritize-output-head">
+                <p class="diacritize-model">
+                    <span class="visually-hidden">
+                        (text.model)
+                        ": "
+                    </span>
+                    <bdi dir="auto">(model)</bdi>
                 </p>
-                <p class="hint">
-                    (text.model)
-                    ": "
-                    <bdi dir="auto">(locale.diacritization_model(document.model))</bdi>
-                </p>
+                result_controls::result_actions(
+                    locale: locale,
+                    copy: copy,
+                    downloads: downloads
+                )
             </div>
             if let Some(text_result) = document.text.as_ref() {
-                <label class="visually-hidden" for="diacritized-text">
+                <label class="reading-label" for="diacritized-text">
                     (text.result_label)
                 </label>
                 <textarea
@@ -225,44 +267,15 @@ async fn result(locale: Locale, id: JobId, document: Arc<Document>) -> Result<im
                     "\n"
                     (text_result.output.as_str())
                 </textarea>
+            } else {
+                <p class="diacritize-document">
+                    icon(data: icons::DOCUMENT, size: 20)
+                    <span dir="auto">(document.name.as_str())</span>
+                </p>
             }
-            <div class="downloads">
-                if document.text.is_some() {
-                    <button
-                        type="button"
-                        class="button secondary"
-                        data-copy="diacritized-text"
-                        data-copied=(text.copied)
-                        data-copy-failed=(text.copy_failed)
-                    >
-                        (text.copy)
-                    </button>
-                }
-                <a
-                    class="button secondary"
-                    href=(href!(download_result, Id(id.clone())))
-                    download=(true)
-                >
-                    icon(data: icons::DOWNLOAD, size: 16)
-                    (if document.kind == DocumentKind::Docx {
-                        text.download_docx
-                    } else {
-                        text.download_text
-                    })
-                </a>
-                if document.text.is_none() {
-                    <a
-                        class="button secondary"
-                        href=(href!(download_original, Id(id)))
-                        download=(true)
-                    >
-                        (text.download_original)
-                    </a>
-                }
-            </div>
-            <p class="copy-status hint" role="status"></p>
-            <p class="hint">(text.replaces_marks)</p>
-            <p class="hint">(locale.diacritization_kept_for())</p>
+            if copy.is_some() {
+                result_controls::copy_status(locale: locale)
+            }
         </div>
     })
 }
@@ -289,7 +302,7 @@ pub(super) async fn submit_text(
     };
     let model = match chosen_model(cx, &input.model) {
         Ok(model) => model,
-        Err(reply) => return Ok(reply),
+        Err((status, message)) => return Ok(error(status, message)),
     };
     if input.text.trim().is_empty() {
         return Ok(error(
@@ -321,7 +334,7 @@ pub(super) async fn upload(cx: &Cx, mut form: Multipart) -> Result<(StatusCode, 
     };
     let model = match chosen_model(cx, &model) {
         Ok(model) => model,
-        Err(reply) => return Ok(reply),
+        Err((status, message)) => return Ok(error(status, message)),
     };
     let upload = match tool.validate(upload).await {
         Ok(upload) => upload,
@@ -335,16 +348,13 @@ pub(super) async fn upload(cx: &Cx, mut form: Multipart) -> Result<(StatusCode, 
     )
 }
 
-fn chosen_model(cx: &Cx, value: &str) -> Result<Model, (StatusCode, Json<Reply>)> {
+fn chosen_model(cx: &Cx, value: &str) -> Result<Model, (StatusCode, &'static str)> {
     let text = &Locale::of(cx).text().diacritization;
     let model = value
         .parse()
-        .map_err(|_| error(StatusCode::UNPROCESSABLE_ENTITY, text.choose_model))?;
+        .map_err(|_| (StatusCode::UNPROCESSABLE_ENTITY, text.choose_model))?;
     if !app_context::<Diacritization>(cx).model_available(model) {
-        return Err(error(
-            StatusCode::SERVICE_UNAVAILABLE,
-            text.model_unavailable,
-        ));
+        return Err((StatusCode::SERVICE_UNAVAILABLE, text.model_unavailable));
     }
     Ok(model)
 }
@@ -361,6 +371,7 @@ fn accepted(cx: &Cx, id: &JobId) -> (StatusCode, Json<Reply>) {
     (
         StatusCode::OK,
         Json(Reply::Next {
+            job_id: id.to_string(),
             next: href!(page, Id(id.clone())).resolve(cx),
         }),
     )
@@ -423,7 +434,7 @@ async fn save(field: &mut Field<'_>, path: &std::path::Path) -> Result<bool> {
     Ok(true)
 }
 
-fn owns_job(cx: &Cx, id: &JobId) -> bool {
+pub(in crate::app::diacritize) fn owns_job(cx: &Cx, id: &JobId) -> bool {
     signed_cookies(cx)
         .get(COOKIE)
         .and_then(|cookie| cookie.value().parse::<JobId>().ok())
@@ -432,7 +443,7 @@ fn owns_job(cx: &Cx, id: &JobId) -> bool {
 }
 
 #[route(POST "./cancel")]
-pub(super) async fn cancel(cx: &Cx) -> Result<Response> {
+pub(in crate::app::diacritize) async fn cancel(cx: &Cx) -> Result<Response> {
     let id = path_param::<Id>(cx)?;
     if !owns_job(cx, id) {
         return Err(not_found().into());
